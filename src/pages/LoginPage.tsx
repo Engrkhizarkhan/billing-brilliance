@@ -6,12 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Lock, Mail, Building2, GraduationCap, Briefcase, Shield } from 'lucide-react';
+import { Lock, Mail, Building2, GraduationCap, Briefcase, Shield, ArrowRight } from 'lucide-react';
 
-const roles: { value: UserRole; label: string; icon: React.ElementType; email: string }[] = [
-  { value: 'admin', label: 'Admin', icon: Shield, email: 'admin@example.com' },
-  { value: 'school', label: 'School', icon: GraduationCap, email: 'school@example.com' },
-  { value: 'eta', label: 'ETA / Agency', icon: Briefcase, email: 'eta@example.com' },
+const roles: { value: UserRole; label: string; desc: string; icon: React.ElementType; email: string }[] = [
+  { value: 'admin', label: 'Admin', desc: 'Platform management', icon: Shield, email: 'admin@example.com' },
+  { value: 'school', label: 'School', desc: 'Fee & student management', icon: GraduationCap, email: 'school@example.com' },
+  { value: 'eta', label: 'Agency', desc: 'Service & applicant management', icon: Briefcase, email: 'eta@example.com' },
 ];
 
 const LoginPage = () => {
@@ -28,87 +28,108 @@ const LoginPage = () => {
     const success = await login(email, password, role);
     setLoading(false);
     if (success) {
-      toast.success('Login successful!');
+      toast.success('Signed in successfully');
       navigate(`/${role}`);
     } else {
-      toast.error('Invalid credentials. Please try again.');
+      toast.error('Invalid credentials');
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md animate-fade-in">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary mb-4">
-            <Building2 className="w-7 h-7 text-primary-foreground" />
+    <div className="min-h-screen flex bg-background">
+      {/* Left - Branding */}
+      <div className="hidden lg:flex lg:w-[480px] xl:w-[540px] bg-sidebar text-sidebar-foreground flex-col justify-between p-10">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
+            <Building2 className="w-4 h-4 text-sidebar-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground">FinBill</h1>
-          <p className="text-muted-foreground mt-1">Fintech Billing System</p>
+          <span className="font-bold text-lg tracking-tight">FinBill</span>
         </div>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight leading-tight">
+            Billing infrastructure<br />
+            <span className="text-sidebar-primary">built for scale.</span>
+          </h1>
+          <p className="mt-4 text-sidebar-foreground/60 text-sm leading-relaxed max-w-sm">
+            Manage billers, automate fee collection, track payments, and generate reports — all from one platform.
+          </p>
+        </div>
+        <p className="text-[11px] text-sidebar-muted">© 2025 FinBill. All rights reserved.</p>
+      </div>
 
-        <div className="dashboard-card">
+      {/* Right - Form */}
+      <div className="flex-1 flex items-center justify-center p-6">
+        <div className="w-full max-w-[380px] animate-fade-in">
+          <div className="lg:hidden flex items-center gap-2.5 mb-8">
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+              <Building2 className="w-4 h-4 text-primary-foreground" />
+            </div>
+            <span className="font-bold text-lg tracking-tight">FinBill</span>
+          </div>
+
+          <h2 className="text-xl font-bold tracking-tight">Sign in to your account</h2>
+          <p className="text-sm text-muted-foreground mt-1 mb-6">Select your role and enter credentials</p>
+
           <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Select Role</Label>
-              <div className="grid grid-cols-3 gap-2">
-                {roles.map((r) => (
-                  <button
-                    key={r.value}
-                    type="button"
-                    onClick={() => { setRole(r.value); setEmail(r.email); }}
-                    className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 transition-all text-sm font-medium ${
-                      role === r.value
-                        ? 'border-primary bg-primary/5 text-primary'
-                        : 'border-border text-muted-foreground hover:border-primary/30'
-                    }`}
-                  >
-                    <r.icon className="w-5 h-5" />
-                    {r.label}
-                  </button>
-                ))}
-              </div>
+            <div className="grid grid-cols-3 gap-2">
+              {roles.map((r) => (
+                <button
+                  key={r.value}
+                  type="button"
+                  onClick={() => { setRole(r.value); setEmail(r.email); }}
+                  className={`flex flex-col items-center gap-1 p-3 rounded-lg border transition-all text-center ${
+                    role === r.value
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
+                      : 'border-border hover:border-primary/30'
+                  }`}
+                >
+                  <r.icon className={`w-4 h-4 ${role === r.value ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <span className={`text-xs font-medium ${role === r.value ? 'text-primary' : 'text-foreground'}`}>{r.label}</span>
+                  <span className="text-[10px] text-muted-foreground leading-tight">{r.desc}</span>
+                </button>
+              ))}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Email</Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                 <Input
-                  id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email"
-                  className="pl-10"
+                  placeholder="you@company.com"
+                  className="pl-9 h-9 text-sm"
                   required
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Password</Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                 <Input
-                  id="password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password"
-                  className="pl-10"
+                  placeholder="••••••"
+                  className="pl-9 h-9 text-sm"
                   required
                 />
               </div>
             </div>
 
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Signing in...' : 'Sign In'}
+            <Button type="submit" className="w-full h-9 text-sm font-medium" disabled={loading}>
+              {loading ? 'Signing in…' : (
+                <>Sign in <ArrowRight className="w-3.5 h-3.5 ml-1.5" /></>
+              )}
             </Button>
 
-            <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground space-y-1">
-              <p className="font-medium text-foreground">Demo Credentials</p>
-              <p>Email: admin@example.com / school@example.com / eta@example.com</p>
-              <p>Password: 123456</p>
+            <div className="rounded-md bg-muted/60 border border-border p-3">
+              <p className="text-[11px] font-medium text-foreground mb-1">Demo credentials</p>
+              <p className="text-[11px] text-muted-foreground font-mono">admin@ / school@ / eta@example.com</p>
+              <p className="text-[11px] text-muted-foreground font-mono">Password: 123456</p>
             </div>
           </form>
         </div>

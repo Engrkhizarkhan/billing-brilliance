@@ -17,6 +17,7 @@ import Scholarships from "./pages/school/Scholarships";
 import InvoiceList from "./pages/school/InvoiceList";
 import SchoolPayments from "./pages/school/SchoolPayments";
 import SchoolReports from "./pages/school/SchoolReports";
+import PaymentPrograms from "./pages/school/PaymentPrograms";
 import ETADashboard from "./pages/eta/ETADashboard";
 import ServiceList from "./pages/eta/ServiceList";
 import ApplicantList from "./pages/eta/ApplicantList";
@@ -51,6 +52,7 @@ const App = () => (
             <Route path="scholarships" element={<Scholarships />} />
             <Route path="invoices" element={<InvoiceList />} />
             <Route path="payments" element={<SchoolPayments />} />
+            <Route path="payment-programs" element={<PaymentPrograms />} />
             <Route path="reports" element={<SchoolReports />} />
           </Route>
 

@@ -1,4 +1,3 @@
-import { ReactNode } from 'react';
 import { LucideIcon } from 'lucide-react';
 
 interface StatCardProps {
@@ -11,18 +10,18 @@ interface StatCardProps {
 }
 
 export const StatCard = ({ title, value, icon: Icon, trend, trendUp, className = '' }: StatCardProps) => (
-  <div className={`dashboard-card flex items-start justify-between ${className}`}>
-    <div>
+  <div className={`dashboard-card ${className}`}>
+    <div className="flex items-center justify-between mb-3">
       <p className="stat-label">{title}</p>
-      <p className="stat-value mt-1">{value}</p>
-      {trend && (
-        <p className={`text-xs mt-2 font-medium ${trendUp ? 'text-success' : 'text-destructive'}`}>
-          {trendUp ? '↑' : '↓'} {trend}
-        </p>
-      )}
+      <div className="w-8 h-8 rounded-md bg-primary/8 flex items-center justify-center">
+        <Icon className="w-4 h-4 text-primary" />
+      </div>
     </div>
-    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-      <Icon className="w-5 h-5 text-primary" />
-    </div>
+    <p className="stat-value">{value}</p>
+    {trend && (
+      <p className={`text-[11px] mt-1.5 font-medium ${trendUp ? 'text-success' : 'text-destructive'}`}>
+        {trendUp ? '↑' : '↓'} {trend}
+      </p>
+    )}
   </div>
 );

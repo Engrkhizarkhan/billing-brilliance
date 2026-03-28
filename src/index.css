@@ -1,63 +1,63 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-
 @layer base {
   :root {
-    --background: 210 20% 98%;
-    --foreground: 222 47% 11%;
+    --background: 220 14% 96%;
+    --foreground: 220 25% 10%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 220 25% 10%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover-foreground: 220 25% 10%;
 
-    --primary: 221 83% 53%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 225 73% 57%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
+    --secondary: 220 14% 93%;
+    --secondary-foreground: 220 25% 10%;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 220 14% 93%;
+    --muted-foreground: 220 10% 46%;
 
-    --accent: 160 84% 39%;
+    --accent: 162 72% 40%;
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 221 83% 53%;
+    --border: 220 13% 90%;
+    --input: 220 13% 90%;
+    --ring: 225 73% 57%;
 
-    --radius: 0.75rem;
+    --radius: 0.5rem;
 
-    --sidebar-background: 222 47% 11%;
-    --sidebar-foreground: 210 40% 96%;
-    --sidebar-primary: 221 83% 53%;
+    --sidebar-background: 222 30% 14%;
+    --sidebar-foreground: 220 14% 93%;
+    --sidebar-primary: 225 73% 57%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 217 33% 17%;
-    --sidebar-accent-foreground: 210 40% 96%;
-    --sidebar-border: 217 33% 17%;
-    --sidebar-ring: 221 83% 53%;
-    --sidebar-muted: 215 16% 47%;
+    --sidebar-accent: 222 20% 20%;
+    --sidebar-accent-foreground: 220 14% 93%;
+    --sidebar-border: 222 20% 20%;
+    --sidebar-ring: 225 73% 57%;
+    --sidebar-muted: 220 10% 55%;
 
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
-    --success: 160 84% 39%;
+    --success: 162 72% 40%;
     --success-foreground: 0 0% 100%;
-    --info: 221 83% 53%;
+    --info: 225 73% 57%;
     --info-foreground: 0 0% 100%;
 
-    --chart-1: 221 83% 53%;
-    --chart-2: 160 84% 39%;
+    --chart-1: 225 73% 57%;
+    --chart-2: 162 72% 40%;
     --chart-3: 38 92% 50%;
-    --chart-4: 280 67% 55%;
-    --chart-5: 0 84% 60%;
+    --chart-4: 271 55% 55%;
+    --chart-5: 0 72% 51%;
   }
 }
 
@@ -67,33 +67,39 @@
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
-    font-family: 'Inter', sans-serif;
+    @apply bg-background text-foreground antialiased;
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
   }
 }
 
 @layer components {
   .dashboard-card {
-    @apply bg-card rounded-xl border shadow-sm p-6 transition-shadow hover:shadow-md;
+    @apply bg-card rounded-lg border border-border/80 p-5 transition-all duration-200;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+  }
+  .dashboard-card:hover {
+    box-shadow: 0 4px 12px 0 rgb(0 0 0 / 0.06), 0 1px 3px -1px rgb(0 0 0 / 0.06);
   }
 
   .stat-value {
     @apply text-2xl font-bold tracking-tight;
+    font-feature-settings: 'tnum';
   }
 
   .stat-label {
-    @apply text-sm font-medium text-muted-foreground;
+    @apply text-xs font-medium uppercase tracking-wider text-muted-foreground;
   }
 
   .table-container {
-    @apply bg-card rounded-xl border shadow-sm overflow-hidden;
+    @apply bg-card rounded-lg border border-border/80 overflow-hidden;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04);
   }
 
   .page-header {
-    @apply text-2xl font-bold tracking-tight text-foreground;
+    @apply text-xl font-bold tracking-tight text-foreground;
   }
 
   .page-description {
-    @apply text-muted-foreground mt-1;
+    @apply text-sm text-muted-foreground mt-0.5;
   }
 }
