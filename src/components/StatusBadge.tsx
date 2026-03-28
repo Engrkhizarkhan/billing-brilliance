@@ -4,22 +4,26 @@ interface StatusBadgeProps {
   status: string;
 }
 
-const statusStyles: Record<string, string> = {
-  active: 'bg-success/10 text-success border-success/20',
-  paid: 'bg-success/10 text-success border-success/20',
-  completed: 'bg-success/10 text-success border-success/20',
-  pending: 'bg-warning/10 text-warning border-warning/20',
-  partial: 'bg-warning/10 text-warning border-warning/20',
-  overdue: 'bg-destructive/10 text-destructive border-destructive/20',
-  failed: 'bg-destructive/10 text-destructive border-destructive/20',
-  suspended: 'bg-warning/10 text-warning border-warning/20',
-  banned: 'bg-destructive/10 text-destructive border-destructive/20',
-  expired: 'bg-muted text-muted-foreground border-border',
-  inactive: 'bg-muted text-muted-foreground border-border',
+const statusConfig: Record<string, { bg: string; text: string; dot: string }> = {
+  active: { bg: 'bg-success/10', text: 'text-success', dot: 'bg-success' },
+  paid: { bg: 'bg-success/10', text: 'text-success', dot: 'bg-success' },
+  completed: { bg: 'bg-success/10', text: 'text-success', dot: 'bg-success' },
+  pending: { bg: 'bg-warning/10', text: 'text-warning', dot: 'bg-warning' },
+  partial: { bg: 'bg-warning/10', text: 'text-warning', dot: 'bg-warning' },
+  overdue: { bg: 'bg-destructive/10', text: 'text-destructive', dot: 'bg-destructive' },
+  failed: { bg: 'bg-destructive/10', text: 'text-destructive', dot: 'bg-destructive' },
+  suspended: { bg: 'bg-warning/10', text: 'text-warning', dot: 'bg-warning' },
+  banned: { bg: 'bg-destructive/10', text: 'text-destructive', dot: 'bg-destructive' },
+  expired: { bg: 'bg-muted', text: 'text-muted-foreground', dot: 'bg-muted-foreground' },
+  inactive: { bg: 'bg-muted', text: 'text-muted-foreground', dot: 'bg-muted-foreground' },
 };
 
-export const StatusBadge = ({ status }: StatusBadgeProps) => (
-  <Badge variant="outline" className={`capitalize font-medium ${statusStyles[status] || ''}`}>
-    {status}
-  </Badge>
-);
+export const StatusBadge = ({ status }: StatusBadgeProps) => {
+  const config = statusConfig[status] || { bg: 'bg-muted', text: 'text-muted-foreground', dot: 'bg-muted-foreground' };
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium capitalize ${config.bg} ${config.text}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${config.dot}`} />
+      {status}
+    </span>
+  );
+};
