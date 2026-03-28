@@ -24,6 +24,7 @@ import ApplicantList from "./pages/eta/ApplicantList";
 import ETAInvoices from "./pages/eta/ETAInvoices";
 import ETAPayments from "./pages/eta/ETAPayments";
 import ETAReports from "./pages/eta/ETAReports";
+import ETAPaymentPrograms from "./pages/eta/ETAPaymentPrograms";
 
 const queryClient = new QueryClient();
 
@@ -60,6 +61,7 @@ const App = () => (
             <Route index element={<ETADashboard />} />
             <Route path="services" element={<ServiceList />} />
             <Route path="applicants" element={<ApplicantList />} />
+            <Route path="payment-programs" element={<ETAPaymentPrograms />} />
             <Route path="invoices" element={<ETAInvoices />} />
             <Route path="payments" element={<ETAPayments />} />
             <Route path="reports" element={<ETAReports />} />
