@@ -22,12 +22,21 @@ export interface Biller {
 export interface Student {
   id: string;
   name: string;
+  fatherName: string;
   rollNumber: string;
   class: string;
+  section: string;
   phone: string;
+  cnic: string;
   consumerNumber: string;
+  billId: string;
   status: 'active' | 'inactive';
   billerId: string;
+  balance: number;
+  admissionDate: string;
+  gender: 'male' | 'female';
+  dateOfBirth: string;
+  address: string;
 }
 
 export interface Invoice {
@@ -82,8 +91,69 @@ export interface Service {
 export interface Applicant {
   id: string;
   name: string;
+  fatherName: string;
   cnic: string;
+  phone: string;
+  email: string;
+  district: string;
+  gender: 'male' | 'female';
+  dateOfBirth: string;
+  qualification: string;
   consumerNumber: string;
+  billId: string;
   paymentStatus: 'paid' | 'pending' | 'partial';
+  applicationStatus: 'submitted' | 'fee_pending' | 'fee_paid' | 'roll_assigned' | 'test_scheduled' | 'appeared' | 'result_pending' | 'selected' | 'rejected';
   serviceId: string;
+  rollNumber?: string;
+  testCenter?: string;
+  marks?: number;
+  appliedDate: string;
+}
+
+export interface FeeHead {
+  id: string;
+  name: string;
+  amount: number;
+  frequency: 'monthly' | 'quarterly' | 'annual' | 'one-time';
+  applicableClasses: string[];
+  dueDay: number;
+}
+
+export interface LedgerEntry {
+  id: string;
+  studentId: string;
+  date: string;
+  description: string;
+  feeHeadId?: string;
+  debit: number;
+  credit: number;
+  balance: number;
+  billId: string;
+  reference?: string;
+}
+
+export interface ETEAPosting {
+  id: string;
+  title: string;
+  type: 'entry_test' | 'job_vacancy';
+  department: string;
+  totalSeats: number;
+  applicationFee: number;
+  startDate: string;
+  endDate: string;
+  testDate: string;
+  status: 'draft' | 'active' | 'closed';
+  applicationsReceived: number;
+}
+
+export interface AuditLog {
+  id: string;
+  userId: string;
+  userName: string;
+  action: string;
+  entity: string;
+  entityId: string;
+  details: string;
+  timestamp: string;
+  ip: string;
 }
