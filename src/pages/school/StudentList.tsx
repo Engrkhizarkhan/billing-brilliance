@@ -18,12 +18,13 @@ import { formatCNIC, formatPhone, formatPKR } from '@/lib/formatters';
 import { useNavigate } from 'react-router-dom';
 
 const allClasses = ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
-const sections = ['A', 'B', 'C'];
+const alphabetSections = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
 
 const StudentList = () => {
   const [studentList, setStudentList] = useState<Student[]>(initialStudents);
   const [search, setSearch] = useState('');
   const [selectedClass, setSelectedClass] = useState<string>('all');
+  const [selectedSection, setSelectedSection] = useState<string>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [page, setPage] = useState(1);
@@ -38,10 +39,28 @@ const StudentList = () => {
     return allClasses.map((c) => ({ name: c, count: map[c] || 0 }));
   }, [studentList]);
 
+  const classSectionSummary = useMemo(() => {
+    const map: Record<string, Record<string, number>> = {};
+    studentList.forEach((s) => {
+      if (!map[s.class]) map[s.class] = {};
+      map[s.class][s.section] = (map[s.class][s.section] || 0) + 1;
+    });
+    return map;
+  }, [studentList]);
+
+  const classSections = useMemo(() => {
+    if (selectedClass === 'all') return [];
+    const sectionMap = classSectionSummary[selectedClass] || {};
+    return Object.entries(sectionMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, count]) => ({ name, count }));
+  }, [classSectionSummary, selectedClass]);
+
   const filtered = studentList.filter((s) => {
     const matchSearch = s.name.toLowerCase().includes(search.toLowerCase()) || s.consumerNumber.includes(search) || s.cnic.includes(search) || s.rollNumber.toLowerCase().includes(search.toLowerCase());
     const matchClass = selectedClass === 'all' || s.class === selectedClass;
-    return matchSearch && matchClass;
+    const matchSection = selectedSection === 'all' || s.section === selectedSection;
+    return matchSearch && matchClass && matchSection;
   });
 
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
@@ -82,7 +101,7 @@ const StudentList = () => {
         fatherName: ['Hassan Ali', 'Siddiqui Sahib', 'Tariq Khan', 'Ahmed Raza', 'Ghani Muhammad'][i],
         rollNumber: `R${String(idx).padStart(4, '0')}`,
         class: allClasses[(i + 4) % 10],
-        section: sections[i % 3],
+        section: String.fromCharCode(65 + (i % 5)),
         phone: `0300-000000${i + 1}`,
         cnic: `35201-${String(9000000 + i)}-${i}`,
         consumerNumber: generateConsumerNumber('1001', String(idx)),
@@ -162,7 +181,7 @@ const StudentList = () => {
                     <Label className="text-xs font-semibold">Section</Label>
                     <Select value={form.section} onValueChange={(v) => setForm({ ...form, section: v })}>
                       <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
-                      <SelectContent>{sections.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                      <SelectContent>{alphabetSections.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                 </div>
@@ -189,13 +208,13 @@ const StudentList = () => {
       </div>
 
       <div className="grid grid-cols-3 sm:grid-cols-6 lg:grid-cols-11 gap-2">
-        <button onClick={() => { setSelectedClass('all'); setPage(1); }} className={`flex flex-col items-center gap-1 p-2.5 rounded-xl border-2 transition-all text-center ${selectedClass === 'all' ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:border-primary/30 bg-card'}`}>
+        <button onClick={() => { setSelectedClass('all'); setSelectedSection('all'); setPage(1); }} className={`flex flex-col items-center gap-1 p-2.5 rounded-xl border-2 transition-all text-center ${selectedClass === 'all' ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:border-primary/30 bg-card'}`}>
           <Users className={`w-4 h-4 ${selectedClass === 'all' ? 'text-primary' : 'text-muted-foreground'}`} />
           <span className="text-[11px] font-semibold">All</span>
           <span className="text-[10px] text-muted-foreground font-mono">{studentList.length}</span>
         </button>
         {classSummary.map((c) => (
-          <button key={c.name} onClick={() => { setSelectedClass(c.name); setPage(1); }} className={`flex flex-col items-center gap-1 p-2.5 rounded-xl border-2 transition-all text-center ${selectedClass === c.name ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:border-primary/30 bg-card'}`}>
+          <button key={c.name} onClick={() => { setSelectedClass(c.name); setSelectedSection('all'); setPage(1); }} className={`flex flex-col items-center gap-1 p-2.5 rounded-xl border-2 transition-all text-center ${selectedClass === c.name ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:border-primary/30 bg-card'}`}>
             <GraduationCap className={`w-4 h-4 ${selectedClass === c.name ? 'text-primary' : 'text-muted-foreground'}`} />
             <span className="text-[11px] font-semibold">{c.name.replace('Class ', 'C')}</span>
             <span className="text-[10px] text-muted-foreground font-mono">{c.count}</span>
@@ -203,12 +222,38 @@ const StudentList = () => {
         ))}
       </div>
 
+      {selectedClass !== 'all' && (
+        <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-10 gap-2">
+          <button
+            onClick={() => { setSelectedSection('all'); setPage(1); }}
+            className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl border transition-all text-sm ${selectedSection === 'all' ? 'border-primary bg-primary/5 text-primary shadow-sm' : 'border-border hover:border-primary/30 bg-card text-muted-foreground'}`}
+          >
+            <span className="font-semibold">All Sections</span>
+            <span className="font-mono text-xs">{classSummary.find((c) => c.name === selectedClass)?.count || 0}</span>
+          </button>
+          {classSections.map((section) => (
+            <button
+              key={section.name}
+              onClick={() => { setSelectedSection(section.name); setPage(1); }}
+              className={`flex items-center justify-between gap-2 px-3 py-2 rounded-xl border transition-all text-sm ${selectedSection === section.name ? 'border-primary bg-primary/5 text-primary shadow-sm' : 'border-border hover:border-primary/30 bg-card text-muted-foreground'}`}
+            >
+              <span className="font-semibold">{section.name}</span>
+              <span className="font-mono text-xs">{section.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       <FilterBar searchPlaceholder="Search by name, CNIC, roll number…" onSearch={(v) => { setSearch(v); setPage(1); }} />
 
       <div className="table-container">
         <div className="px-5 py-3 border-b border-border flex items-center justify-between">
           <p className="text-sm font-semibold">
-            {selectedClass === 'all' ? 'All Students' : selectedClass}
+            {selectedClass === 'all'
+              ? 'All Students'
+              : selectedSection === 'all'
+                ? `${selectedClass} • All Sections`
+                : `${selectedClass} • Section ${selectedSection}`}
             <span className="text-muted-foreground font-normal ml-2">({filtered.length})</span>
           </p>
         </div>

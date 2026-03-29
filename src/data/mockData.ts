@@ -35,7 +35,7 @@ const studentNames = [
 ];
 
 const classes = ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
-const sections = ['A', 'B', 'C'];
+const sections = ['A', 'B', 'C', 'D', 'E'];
 const kpkDistricts = ['Peshawar', 'Mardan', 'Swabi', 'Nowshera', 'Charsadda', 'Abbottabad', 'Mansehra', 'Haripur', 'Swat', 'Dir Lower', 'Dir Upper', 'Kohat', 'Bannu', 'D.I. Khan'];
 
 export const students: Student[] = studentNames.map((name, i) => ({
@@ -44,7 +44,7 @@ export const students: Student[] = studentNames.map((name, i) => ({
   fatherName: fatherNames[i % fatherNames.length],
   rollNumber: `R${String(i + 1).padStart(4, '0')}`,
   class: classes[i % classes.length],
-  section: sections[i % 3],
+  section: sections[Math.floor(i / classes.length) % sections.length],
   phone: `03${String(i % 10)}${String(i).padStart(1, '0')}-${String(1000000 + i).slice(-7)}`,
   cnic: `${35201 + i}-${String(1234567 + i)}-${(i % 10)}`,
   consumerNumber: generateConsumerNumber('1001', String(i + 1)),
@@ -89,7 +89,7 @@ export const scholarships: Scholarship[] = [
   { id: 'sch4', name: 'Academic Excellence', type: 'percentage', value: 100, startDate: '2024-01-01', endDate: '2024-12-31', status: 'expired' },
   { id: 'sch5', name: 'Sibling Discount', type: 'fixed', value: 3000, startDate: '2025-01-01', endDate: '2025-12-31', status: 'active' },
   { id: 'sch6', name: 'Early Bird Discount', type: 'percentage', value: 10, startDate: '2025-02-01', endDate: '2025-04-30', status: 'active' },
-  { id: 'sch7', name: 'Staff Child Discount', type: 'percentage', value: 75, startDate: '2025-01-01', endDate: '2025-12-31', status: 'active' },
+  { id: 'sch7', name: 'Staff Child Discount (Lifetime)', type: 'percentage', value: 75, startDate: '2025-01-01', endDate: null, isLifetime: true, status: 'active' },
   { id: 'sch8', name: 'Community Service Award', type: 'fixed', value: 8000, startDate: '2024-06-01', endDate: '2024-12-31', status: 'expired' },
   { id: 'sch9', name: 'Talent Scholarship', type: 'percentage', value: 30, startDate: '2025-01-01', endDate: '2025-12-31', status: 'active' },
   { id: 'sch10', name: 'Hardship Fund', type: 'fixed', value: 10000, startDate: '2025-01-01', endDate: '2025-06-30', status: 'active' },

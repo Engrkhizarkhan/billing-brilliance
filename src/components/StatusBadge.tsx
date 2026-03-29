@@ -14,6 +14,7 @@ const statusConfig: Record<string, { bg: string; text: string; dot: string; labe
   banned:    { bg: 'bg-destructive/10', text: 'text-destructive', dot: 'bg-destructive' },
   expired:   { bg: 'bg-muted', text: 'text-muted-foreground', dot: 'bg-muted-foreground' },
   inactive:  { bg: 'bg-muted', text: 'text-muted-foreground', dot: 'bg-muted-foreground' },
+  deactivated: { bg: 'bg-muted', text: 'text-muted-foreground', dot: 'bg-muted-foreground' },
 };
 
 export const StatusBadge = ({ status }: StatusBadgeProps) => {

@@ -67,8 +67,9 @@ export interface Scholarship {
   type: 'percentage' | 'fixed';
   value: number;
   startDate: string;
-  endDate: string;
-  status: 'active' | 'expired';
+  endDate: string | null;
+  isLifetime?: boolean;
+  status: 'active' | 'expired' | 'inactive';
 }
 
 export interface FeePlan {
