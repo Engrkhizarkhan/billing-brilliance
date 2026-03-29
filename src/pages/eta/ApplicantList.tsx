@@ -53,7 +53,7 @@ const ApplicantList = () => {
   const [pageSize, setPageSize] = useState(25);
   const [form, setForm] = useState({
     name: '', fatherName: '', cnic: '', phone: '', email: '', district: 'Peshawar',
-    gender: 'male' as const, dateOfBirth: '', qualification: 'FSc Pre-Medical', serviceId: 'srv1',
+    gender: 'male' as 'male' | 'female', dateOfBirth: '', qualification: 'FSc Pre-Medical', serviceId: 'srv1',
   });
 
   const filtered = applicantList.filter(a => {

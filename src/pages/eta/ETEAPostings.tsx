@@ -24,7 +24,7 @@ const ETEAPostings = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [form, setForm] = useState({
-    title: '', type: 'entry_test' as const, department: '', totalSeats: '', applicationFee: '',
+    title: '', type: 'entry_test' as 'entry_test' | 'job_vacancy', department: '', totalSeats: '', applicationFee: '',
     startDate: '', endDate: '', testDate: '',
   });
 

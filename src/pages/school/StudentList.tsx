@@ -28,7 +28,7 @@ const StudentList = () => {
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [form, setForm] = useState({ name: '', fatherName: '', rollNumber: '', class: 'Class 1', section: 'A', phone: '', cnic: '', gender: 'male' as const, dateOfBirth: '', address: '' });
+  const [form, setForm] = useState({ name: '', fatherName: '', rollNumber: '', class: 'Class 1', section: 'A', phone: '', cnic: '', gender: 'male' as 'male' | 'female', dateOfBirth: '', address: '' });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
