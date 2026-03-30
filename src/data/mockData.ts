@@ -1,4 +1,20 @@
-import { Biller, Student, Invoice, Transaction, Scholarship, FeePlan, Service, Applicant, FeeHead, LedgerEntry, ETEAPosting, AuditLog } from '@/types';
+import {
+  AuditLog,
+  Applicant,
+  Biller,
+  ETEAPosting,
+  FeeHead,
+  FeePlan,
+  Invoice,
+  LedgerEntry,
+  Scholarship,
+  Service,
+  Student,
+  StudentFinancialSnapshot,
+  StudentRiskTier,
+  StudentScholarshipAssignment,
+  Transaction,
+} from '@/types';
 
 const FINTECH_PREFIX = '123456';
 
@@ -37,6 +53,8 @@ const studentNames = [
 const classes = ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
 const sections = ['A', 'B', 'C', 'D', 'E'];
 const kpkDistricts = ['Peshawar', 'Mardan', 'Swabi', 'Nowshera', 'Charsadda', 'Abbottabad', 'Mansehra', 'Haripur', 'Swat', 'Dir Lower', 'Dir Upper', 'Kohat', 'Bannu', 'D.I. Khan'];
+const busStartMonthPattern = ['2025-01', '2025-02', '2025-03'];
+const busFeePattern = [1200, 1500, 1800, 1400, 1600];
 
 export const students: Student[] = studentNames.map((name, i) => ({
   id: `s${i + 1}`,
@@ -56,16 +74,34 @@ export const students: Student[] = studentNames.map((name, i) => ({
   gender: i % 3 === 1 ? 'female' as const : 'male' as const,
   dateOfBirth: `20${10 + (i % 8)}-0${(i % 9) + 1}-${String((i % 28) + 1).padStart(2, '0')}`,
   address: `House ${i + 1}, Street ${(i % 20) + 1}, ${kpkDistricts[i % kpkDistricts.length]}`,
+  usesBusService: i % 3 !== 0,
+  busServiceStartMonth: i % 3 !== 0 ? busStartMonthPattern[i % busStartMonthPattern.length] : null,
+  busServiceEndMonth: null,
+  busMonthlyFee: i % 3 !== 0 ? busFeePattern[i % busFeePattern.length] : 0,
 }));
 
-const months = ['Jan 2025', 'Feb 2025', 'Mar 2025'];
+type StudentBusServiceUpdate = Pick<Student, 'usesBusService' | 'busServiceStartMonth' | 'busServiceEndMonth' | 'busMonthlyFee'>;
+
+export const updateStudentBusService = (studentId: string, updates: StudentBusServiceUpdate): Student | null => {
+  const index = students.findIndex((student) => student.id === studentId);
+  if (index === -1) return null;
+
+  students[index] = {
+    ...students[index],
+    ...updates,
+  };
+
+  return students[index];
+};
+
+const invoiceMonths = ['Jan 2025', 'Feb 2025', 'Mar 2025'];
 
 export const invoices: Invoice[] = Array.from({ length: 30 }, (_, i) => ({
   id: `inv${i + 1}`,
   invoiceNumber: `INV-${String(10001 + i)}`,
   studentName: students[i % students.length].name,
   consumerNumber: students[i % students.length].consumerNumber,
-  month: months[i % 3],
+  month: invoiceMonths[i % 3],
   amount: [15000, 18000, 20000, 25000, 12000][i % 5],
   status: (['pending', 'paid', 'overdue'] as const)[i % 3],
   dueDate: `2025-0${(i % 3) + 1}-10`,
@@ -95,6 +131,21 @@ export const scholarships: Scholarship[] = [
   { id: 'sch10', name: 'Hardship Fund', type: 'fixed', value: 10000, startDate: '2025-01-01', endDate: '2025-06-30', status: 'active' },
 ];
 
+export const studentScholarshipAssignments: StudentScholarshipAssignment[] = [
+  { id: 'ssa1', studentId: 's1', scholarshipId: 'sch1', effectiveFrom: '2025-01-01', assignedAt: '2025-01-03', status: 'active' },
+  { id: 'ssa2', studentId: 's2', scholarshipId: 'sch2', effectiveFrom: '2025-01-01', assignedAt: '2025-01-03', status: 'active' },
+  { id: 'ssa3', studentId: 's4', scholarshipId: 'sch7', effectiveFrom: '2025-01-01', assignedAt: '2025-01-05', status: 'active' },
+  { id: 'ssa4', studentId: 's8', scholarshipId: 'sch3', effectiveFrom: '2025-03-01', assignedAt: '2025-03-02', status: 'active' },
+  { id: 'ssa5', studentId: 's10', scholarshipId: 'sch5', effectiveFrom: '2025-01-01', assignedAt: '2025-01-08', status: 'active' },
+  { id: 'ssa6', studentId: 's13', scholarshipId: 'sch1', effectiveFrom: '2025-01-01', assignedAt: '2025-01-09', status: 'active' },
+  { id: 'ssa7', studentId: 's17', scholarshipId: 'sch9', effectiveFrom: '2025-01-01', assignedAt: '2025-01-09', status: 'active' },
+  { id: 'ssa8', studentId: 's20', scholarshipId: 'sch10', effectiveFrom: '2025-01-01', assignedAt: '2025-01-11', status: 'active' },
+  { id: 'ssa9', studentId: 's24', scholarshipId: 'sch6', effectiveFrom: '2025-02-01', assignedAt: '2025-02-01', status: 'active' },
+  { id: 'ssa10', studentId: 's31', scholarshipId: 'sch5', effectiveFrom: '2025-01-01', assignedAt: '2025-01-13', status: 'active' },
+  { id: 'ssa11', studentId: 's37', scholarshipId: 'sch1', effectiveFrom: '2025-01-01', assignedAt: '2025-01-15', status: 'active' },
+  { id: 'ssa12', studentId: 's42', scholarshipId: 'sch9', effectiveFrom: '2025-01-01', assignedAt: '2025-01-15', status: 'active' },
+];
+
 export const feePlans: FeePlan[] = [
   { id: 'fp1', name: 'Standard Monthly', amount: 15000, frequency: 'monthly', dueDay: 10, lateFee: 500 },
   { id: 'fp2', name: 'Premium Monthly', amount: 25000, frequency: 'monthly', dueDay: 5, lateFee: 1000 },
@@ -112,36 +163,235 @@ export const feeHeads: FeeHead[] = [
   { id: 'fh7', name: 'Admission Fee', amount: 15000, frequency: 'one-time', applicableClasses: classes, dueDay: 15 },
 ];
 
-// Generate ledger for first few students
-export const generateLedger = (studentId: string): LedgerEntry[] => {
-  const student = students.find(s => s.id === studentId);
-  if (!student) return [];
+const ledgerMonthKeys = ['2025-01', '2025-02', '2025-03', '2025-04', '2025-05', '2025-06'];
+
+const paymentMultiplierPatterns: number[][] = [
+  [1, 1, 1, 1, 1, 1],
+  [1, 0, 2, 0, 2, 1],
+  [0, 0, 0, 3, 1, 1],
+  [0, 0, 0, 0, 2, 1],
+  [1, 1, 0, 0, 3, 1],
+];
+
+const monthLabelFromKey = (monthKey: string) => {
+  const [year, month] = monthKey.split('-').map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+};
+
+const studentOrdinal = (studentId: string) => {
+  const numeric = Number(studentId.replace(/\D/g, ''));
+  return Number.isFinite(numeric) && numeric > 0 ? numeric - 1 : 0;
+};
+
+const roundCurrency = (value: number) => Math.round(value);
+
+const isScholarshipActiveForMonth = (scholarship: Scholarship, monthKey: string) => {
+  const monthStart = `${monthKey}-01`;
+  const monthEnd = `${monthKey}-31`;
+  if (scholarship.status !== 'active') return false;
+  if (scholarship.startDate > monthEnd) return false;
+  if (scholarship.endDate && scholarship.endDate < monthStart) return false;
+  return true;
+};
+
+export const getActiveScholarshipsForStudent = (studentId: string, monthKey?: string): Scholarship[] => {
+  const activeAssignments = studentScholarshipAssignments.filter((assignment) => assignment.studentId === studentId && assignment.status === 'active');
+  if (activeAssignments.length === 0) return [];
+
+  const assignmentIds = new Set(activeAssignments.map((assignment) => assignment.scholarshipId));
+  const linkedScholarships = scholarships.filter((scholarship) => assignmentIds.has(scholarship.id));
+
+  if (!monthKey) {
+    return linkedScholarships.filter((scholarship) => scholarship.status === 'active');
+  }
+
+  return linkedScholarships.filter((scholarship) => isScholarshipActiveForMonth(scholarship, monthKey));
+};
+
+const applyScholarshipDiscount = (baseTuition: number, activeScholarships: Scholarship[]) => {
+  if (activeScholarships.length === 0) {
+    return { netTuition: baseTuition, discountApplied: 0, labels: [] as string[] };
+  }
+
+  const percentageDiscount = activeScholarships
+    .filter((scholarship) => scholarship.type === 'percentage')
+    .reduce((sum, scholarship) => sum + scholarship.value, 0);
+  const fixedDiscount = activeScholarships
+    .filter((scholarship) => scholarship.type === 'fixed')
+    .reduce((sum, scholarship) => sum + scholarship.value, 0);
+
+  const percentageAmount = (Math.min(percentageDiscount, 100) / 100) * baseTuition;
+  const totalDiscount = Math.min(baseTuition, percentageAmount + fixedDiscount);
+  return {
+    netTuition: roundCurrency(baseTuition - totalDiscount),
+    discountApplied: roundCurrency(totalDiscount),
+    labels: activeScholarships.map((scholarship) => scholarship.name),
+  };
+};
+
+const riskTierFromOverdueMonths = (overdueMonths: number): StudentRiskTier => {
+  if (overdueMonths >= 5) return 'critical';
+  if (overdueMonths >= 3) return 'high-risk';
+  if (overdueMonths >= 1) return 'watch';
+  return 'current';
+};
+
+type GeneratedLedgerState = {
+  entries: LedgerEntry[];
+  monthBalances: Record<string, number>;
+  lastPaymentDate: string | null;
+};
+
+const generateLedgerState = (studentId: string): GeneratedLedgerState => {
+  const student = students.find((candidate) => candidate.id === studentId);
+  const emptyBalances = Object.fromEntries(ledgerMonthKeys.map((monthKey) => [monthKey, 0])) as Record<string, number>;
+
+  if (!student) {
+    return { entries: [], monthBalances: emptyBalances, lastPaymentDate: null };
+  }
+
   const entries: LedgerEntry[] = [];
-  let balance = 0;
-  const months = ['Jan', 'Feb', 'Mar'];
-  let counter = 0;
+  const monthBalances = { ...emptyBalances };
+  const monthBuckets = ledgerMonthKeys.map((monthKey) => ({ monthKey, outstanding: 0 }));
+  const paymentPattern = paymentMultiplierPatterns[studentOrdinal(studentId) % paymentMultiplierPatterns.length];
+  const normalizedBusStartMonth = student.busServiceStartMonth && /^\d{4}-\d{2}$/.test(student.busServiceStartMonth)
+    ? student.busServiceStartMonth
+    : null;
+  const normalizedBusEndMonth = student.busServiceEndMonth && /^\d{4}-\d{2}$/.test(student.busServiceEndMonth)
+    ? student.busServiceEndMonth
+    : null;
+  const configuredBusMonthlyFee = student.busMonthlyFee > 0 ? student.busMonthlyFee : 1500;
 
-  months.forEach((month, mi) => {
-    // Tuition
-    balance += 5000;
-    entries.push({ id: `le-${studentId}-${counter++}`, studentId, date: `2025-0${mi + 1}-01`, description: `Tuition Fee ${month}`, feeHeadId: 'fh1', debit: 5000, credit: 0, balance, billId: student.billId });
-    // Transport
-    balance += 1500;
-    entries.push({ id: `le-${studentId}-${counter++}`, studentId, date: `2025-0${mi + 1}-01`, description: `Transport Fee ${month}`, feeHeadId: 'fh2', debit: 1500, credit: 0, balance, billId: student.billId });
+  let runningBalance = 0;
+  let sequence = 0;
+  let lastPaymentDate: string | null = null;
 
-    if (mi === 0) {
-      // Late fine
-      balance += 200;
-      entries.push({ id: `le-${studentId}-${counter++}`, studentId, date: `2025-01-15`, description: `Late Fine (${month})`, debit: 200, credit: 0, balance, billId: student.billId });
+  ledgerMonthKeys.forEach((monthKey, monthIndex) => {
+    const activeScholarships = getActiveScholarshipsForStudent(studentId, monthKey);
+    const { netTuition, discountApplied, labels } = applyScholarshipDiscount(5000, activeScholarships);
+    const isBusBillingActive = normalizedBusStartMonth
+      ? monthKey >= normalizedBusStartMonth && (!normalizedBusEndMonth || monthKey <= normalizedBusEndMonth)
+      : false;
+    const transportCharge = isBusBillingActive ? configuredBusMonthlyFee : 0;
+
+    runningBalance += netTuition;
+    monthBuckets[monthIndex].outstanding += netTuition;
+    monthBalances[monthKey] += netTuition;
+    entries.push({
+      id: `le-${studentId}-${sequence++}`,
+      studentId,
+      date: `${monthKey}-01`,
+      description: discountApplied > 0
+        ? `Tuition Fee ${monthLabelFromKey(monthKey)} (after scholarship: ${labels.join(', ')})`
+        : `Tuition Fee ${monthLabelFromKey(monthKey)}`,
+      feeHeadId: 'fh1',
+      debit: netTuition,
+      credit: 0,
+      balance: runningBalance,
+      billId: student.billId,
+      entryType: 'charge',
+      grossTuition: 5000,
+      scholarshipDiscount: discountApplied,
+      netTuition,
+    });
+
+    if (transportCharge > 0) {
+      runningBalance += transportCharge;
+      monthBuckets[monthIndex].outstanding += transportCharge;
+      monthBalances[monthKey] += transportCharge;
+      entries.push({
+        id: `le-${studentId}-${sequence++}`,
+        studentId,
+        date: `${monthKey}-01`,
+        description: `Bus Service Fee ${monthLabelFromKey(monthKey)}`,
+        feeHeadId: 'fh2',
+        debit: transportCharge,
+        credit: 0,
+        balance: runningBalance,
+        billId: student.billId,
+        entryType: 'charge',
+      });
     }
-    if (mi === 1) {
-      // Payment
-      const payment = 6700;
-      balance -= payment;
-      entries.push({ id: `le-${studentId}-${counter++}`, studentId, date: `2025-02-10`, description: `Payment via 1Bill`, debit: 0, credit: payment, balance, billId: student.billId, reference: `TXN-${100001 + parseInt(studentId.replace('s', ''))}` });
+
+    if (monthIndex > 0 && monthBuckets[monthIndex - 1].outstanding > 0) {
+      const lateFine = 300;
+      runningBalance += lateFine;
+      monthBuckets[monthIndex].outstanding += lateFine;
+      monthBalances[monthKey] += lateFine;
+      entries.push({
+        id: `le-${studentId}-${sequence++}`,
+        studentId,
+        date: `${monthKey}-05`,
+        description: `Late Fine ${monthLabelFromKey(monthKey)}`,
+        debit: lateFine,
+        credit: 0,
+        balance: runningBalance,
+        billId: student.billId,
+        entryType: 'adjustment',
+      });
     }
+
+    const multiplier = paymentPattern[monthIndex] || 0;
+    const plannedPayment = roundCurrency((netTuition + transportCharge) * multiplier);
+    if (plannedPayment <= 0) return;
+
+    let remaining = plannedPayment;
+    const allocations: { monthKey: string; amount: number }[] = [];
+
+    monthBuckets.forEach((bucket) => {
+      if (remaining <= 0 || bucket.outstanding <= 0) return;
+      const allocation = Math.min(bucket.outstanding, remaining);
+      bucket.outstanding -= allocation;
+      remaining -= allocation;
+      monthBalances[bucket.monthKey] = Math.max(0, monthBalances[bucket.monthKey] - allocation);
+      allocations.push({ monthKey: bucket.monthKey, amount: allocation });
+    });
+
+    const appliedAmount = plannedPayment - remaining;
+    if (appliedAmount <= 0) return;
+
+    runningBalance = Math.max(0, runningBalance - appliedAmount);
+    lastPaymentDate = `${monthKey}-10`;
+    const allocationSummary = allocations
+      .map((allocation) => `${monthLabelFromKey(allocation.monthKey)} ${allocation.amount.toLocaleString()}`)
+      .join(', ');
+
+    entries.push({
+      id: `le-${studentId}-${sequence++}`,
+      studentId,
+      date: `${monthKey}-10`,
+      description: `Payment via 1Bill (${allocationSummary})`,
+      debit: 0,
+      credit: appliedAmount,
+      balance: runningBalance,
+      billId: student.billId,
+      reference: `TXN-${100001 + studentOrdinal(studentId) + monthIndex}`,
+      entryType: 'payment',
+      allocations,
+    });
   });
-  return entries;
+
+  return { entries, monthBalances, lastPaymentDate };
+};
+
+export const generateLedger = (studentId: string): LedgerEntry[] => {
+  return generateLedgerState(studentId).entries;
+};
+
+export const getStudentFinancialSnapshot = (studentId: string): StudentFinancialSnapshot => {
+  const { monthBalances, lastPaymentDate } = generateLedgerState(studentId);
+  const monthlyOutstanding = Object.values(monthBalances);
+  const totalDue = monthlyOutstanding.reduce((sum, amount) => sum + amount, 0);
+  const overdueMonths = monthlyOutstanding.filter((amount) => amount > 0).length;
+
+  return {
+    studentId,
+    overdueMonths,
+    totalDue,
+    lastPaymentDate,
+    scholarshipCount: getActiveScholarshipsForStudent(studentId).length,
+    riskTier: riskTierFromOverdueMonths(overdueMonths),
+  };
 };
 
 export const services: Service[] = [

@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { students, generateLedger } from '@/data/mockData';
+import { students, generateLedger, getActiveScholarshipsForStudent, getStudentFinancialSnapshot, updateStudentBusService } from '@/data/mockData';
 import { LedgerEntry } from '@/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -8,8 +8,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ExportButton } from '@/components/ExportButton';
 import { EmptyState } from '@/components/EmptyState';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { formatPKR } from '@/lib/formatters';
-import { FileText, CreditCard, AlertTriangle, CheckCircle2, BusFront, School, Search } from 'lucide-react';
+import { FileText, AlertTriangle, CheckCircle2, BusFront, School, Search } from 'lucide-react';
+import { toast } from 'sonner';
 
 const monthKeyFromDate = (date: string) => date.slice(0, 7);
 
@@ -20,6 +25,11 @@ const monthLabelFromKey = (monthKey: string) => {
 
 const isTuitionEntry = (entry: LedgerEntry) => entry.feeHeadId === 'fh1' || /tuition/i.test(entry.description);
 const isBusEntry = (entry: LedgerEntry) => entry.feeHeadId === 'fh2' || /transport|bus/i.test(entry.description);
+
+const grossTuitionForEntry = (entry: LedgerEntry) => entry.grossTuition ?? (isTuitionEntry(entry) ? entry.debit : 0);
+const scholarshipDiscountForEntry = (entry: LedgerEntry) => entry.scholarshipDiscount ?? 0;
+const netTuitionForEntry = (entry: LedgerEntry) => entry.netTuition ?? (isTuitionEntry(entry) ? entry.debit : 0);
+const currentMonthKey = () => new Date().toISOString().slice(0, 7);
 
 const feeHeadLabel = (entry: LedgerEntry) => {
   if (entry.credit > 0) return 'Payment';
@@ -33,13 +43,33 @@ const FeeLedger = () => {
   const [searchParams] = useSearchParams();
   const defaultStudent = searchParams.get('student') || students[0]?.id || '';
   const [selectedStudent, setSelectedStudent] = useState(defaultStudent);
+  const [ledgerVersion, setLedgerVersion] = useState(0);
+  const [busDialogOpen, setBusDialogOpen] = useState(false);
+  const [busForm, setBusForm] = useState({
+    enabled: false,
+    startMonth: currentMonthKey(),
+    stopMonth: currentMonthKey(),
+    monthlyFee: '1500',
+  });
   const defaultStudentInfo = students.find((s) => s.id === defaultStudent);
   const [studentQuery, setStudentQuery] = useState(defaultStudentInfo ? `${defaultStudentInfo.name} — ${defaultStudentInfo.class} ${defaultStudentInfo.section} (${defaultStudentInfo.rollNumber})` : '');
   const [showStudentResults, setShowStudentResults] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState('all');
 
-  const student = students.find(s => s.id === selectedStudent);
-  const ledger = useMemo(() => selectedStudent ? generateLedger(selectedStudent) : [], [selectedStudent]);
+  const student = useMemo(() => students.find(s => s.id === selectedStudent), [selectedStudent, ledgerVersion]);
+  const ledger = useMemo(() => selectedStudent ? generateLedger(selectedStudent) : [], [selectedStudent, ledgerVersion]);
+  const financialSnapshot = useMemo(() => selectedStudent ? getStudentFinancialSnapshot(selectedStudent) : null, [selectedStudent, ledgerVersion]);
+  const activeScholarships = useMemo(() => selectedStudent ? getActiveScholarshipsForStudent(selectedStudent) : [], [selectedStudent, ledgerVersion]);
+
+  useEffect(() => {
+    if (!student) return;
+    setBusForm({
+      enabled: student.usesBusService,
+      startMonth: student.busServiceStartMonth || currentMonthKey(),
+      stopMonth: student.busServiceEndMonth || currentMonthKey(),
+      monthlyFee: String(student.busMonthlyFee > 0 ? student.busMonthlyFee : 1500),
+    });
+  }, [student]);
 
   const studentMatches = useMemo(() => {
     const query = studentQuery.trim().toLowerCase();
@@ -63,9 +93,12 @@ const FeeLedger = () => {
 
   const totalDebit = filteredLedger.reduce((sum, e) => sum + e.debit, 0);
   const totalCredit = filteredLedger.reduce((sum, e) => sum + e.credit, 0);
-  const tuitionTotal = filteredLedger.reduce((sum, e) => sum + (isTuitionEntry(e) ? e.debit : 0), 0);
+  const grossTuitionTotal = filteredLedger.reduce((sum, e) => sum + grossTuitionForEntry(e), 0);
+  const scholarshipDiscountTotal = filteredLedger.reduce((sum, e) => sum + scholarshipDiscountForEntry(e), 0);
+  const netTuitionTotal = filteredLedger.reduce((sum, e) => sum + netTuitionForEntry(e), 0);
   const busTotal = filteredLedger.reduce((sum, e) => sum + (isBusEntry(e) ? e.debit : 0), 0);
-  const periodBalance = totalDebit - totalCredit;
+  const outstandingAllMonths = financialSnapshot?.totalDue || 0;
+  const overdueMonths = financialSnapshot?.overdueMonths || 0;
 
   const selectStudent = (studentId: string) => {
     const chosen = students.find((s) => s.id === studentId);
@@ -76,21 +109,151 @@ const FeeLedger = () => {
     setShowStudentResults(false);
   };
 
+  const saveBusService = () => {
+    if (!student) return;
+
+    if (busForm.enabled) {
+      const monthlyFee = Number(busForm.monthlyFee);
+      if (!busForm.startMonth) {
+        toast.error('Please set bus service start month');
+        return;
+      }
+      if (!Number.isFinite(monthlyFee) || monthlyFee <= 0) {
+        toast.error('Please enter a valid bus monthly fee');
+        return;
+      }
+
+      const updated = updateStudentBusService(student.id, {
+        usesBusService: true,
+        busServiceStartMonth: busForm.startMonth,
+        busServiceEndMonth: null,
+        busMonthlyFee: Math.round(monthlyFee),
+      });
+
+      if (!updated) {
+        toast.error('Unable to update bus service');
+        return;
+      }
+
+      setLedgerVersion((prev) => prev + 1);
+      setBusDialogOpen(false);
+      toast.success(`Bus service enabled from ${busForm.startMonth}`);
+      return;
+    }
+
+    if (!student.busServiceStartMonth) {
+      const updated = updateStudentBusService(student.id, {
+        usesBusService: false,
+        busServiceStartMonth: null,
+        busServiceEndMonth: null,
+        busMonthlyFee: 0,
+      });
+      if (!updated) {
+        toast.error('Unable to update bus service');
+        return;
+      }
+      setLedgerVersion((prev) => prev + 1);
+      setBusDialogOpen(false);
+      toast.success('Bus service is not active for this student');
+      return;
+    }
+
+    const stopMonth = busForm.stopMonth || currentMonthKey();
+    if (stopMonth < student.busServiceStartMonth) {
+      toast.error('Stop month cannot be before bus start month');
+      return;
+    }
+
+    const updated = updateStudentBusService(student.id, {
+      usesBusService: false,
+      busServiceStartMonth: student.busServiceStartMonth,
+      busServiceEndMonth: stopMonth,
+      busMonthlyFee: student.busMonthlyFee > 0 ? student.busMonthlyFee : 1500,
+    });
+
+    if (!updated) {
+      toast.error('Unable to update bus service');
+      return;
+    }
+
+    setLedgerVersion((prev) => prev + 1);
+    setBusDialogOpen(false);
+    toast.success(`Bus service stopped after ${stopMonth}`);
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-header">Student Fee Ledger</h1>
-          <p className="page-description">Running balance for each student — FIFO payment allocation</p>
+          <p className="page-description">Running balance with clear fee breakdown: gross tuition, scholarship discount, net tuition, and bus fees</p>
         </div>
         <div className="flex gap-2 items-center">
+          <Dialog open={busDialogOpen} onOpenChange={setBusDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="rounded-lg">Update Bus Service</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Bus Service for Existing Student</DialogTitle></DialogHeader>
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center gap-2 rounded-lg border border-border p-3">
+                  <Checkbox
+                    id="bus-active-toggle"
+                    checked={busForm.enabled}
+                    onCheckedChange={(checked) => setBusForm({ ...busForm, enabled: checked === true })}
+                  />
+                  <Label htmlFor="bus-active-toggle" className="text-sm">Student currently uses bus service</Label>
+                </div>
+
+                {busForm.enabled ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Start Month</Label>
+                      <Input
+                        type="month"
+                        className="h-10 rounded-xl"
+                        value={busForm.startMonth}
+                        onChange={(e) => setBusForm({ ...busForm, startMonth: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold">Monthly Fee (Rs)</Label>
+                      <Input
+                        type="number"
+                        min={0}
+                        className="h-10 rounded-xl"
+                        value={busForm.monthlyFee}
+                        onChange={(e) => setBusForm({ ...busForm, monthlyFee: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold">Stop Month (last charged month)</Label>
+                    <Input
+                      type="month"
+                      className="h-10 rounded-xl"
+                      value={busForm.stopMonth}
+                      disabled={!student?.busServiceStartMonth}
+                      onChange={(e) => setBusForm({ ...busForm, stopMonth: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground">Use this when a student was using bus service but does not need it now.</p>
+                  </div>
+                )}
+
+                <Button onClick={saveBusService} className="w-full">Save Bus Service Settings</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
           <ExportButton
             data={filteredLedger.map((e) => ({
               Date: e.date,
               Month: monthLabelFromKey(monthKeyFromDate(e.date)),
               Head: feeHeadLabel(e),
               Description: e.description,
-              Tuition: isTuitionEntry(e) ? e.debit : 0,
+              GrossTuition: grossTuitionForEntry(e),
+              ScholarshipDiscount: scholarshipDiscountForEntry(e),
+              NetTuition: netTuitionForEntry(e),
               BusFee: isBusEntry(e) ? e.debit : 0,
               OtherCharges: !isTuitionEntry(e) && !isBusEntry(e) ? e.debit : 0,
               Paid: e.credit,
@@ -165,13 +328,19 @@ const FeeLedger = () => {
               <div><span className="text-xs text-muted-foreground block">Father</span><span className="font-medium">{student.fatherName}</span></div>
               <div><span className="text-xs text-muted-foreground block">CNIC</span><span className="font-mono text-xs">{student.cnic}</span></div>
               <div><span className="text-xs text-muted-foreground block">Section</span><span className="font-medium">{student.class} {student.section}</span></div>
+              <div><span className="text-xs text-muted-foreground block">Bus Service</span><span className="font-medium">{student.usesBusService ? 'Enabled' : 'Not Enabled'}</span></div>
+              <div><span className="text-xs text-muted-foreground block">Bus Start Month</span><span className="font-medium">{student.usesBusService ? (student.busServiceStartMonth || '-') : '-'}</span></div>
+              <div><span className="text-xs text-muted-foreground block">Bus End Month</span><span className="font-medium">{student.busServiceEndMonth || '-'}</span></div>
+              <div><span className="text-xs text-muted-foreground block">Bus Monthly Fee</span><span className="font-medium">{student.usesBusService ? formatPKR(student.busMonthlyFee) : '-'}</span></div>
+              <div><span className="text-xs text-muted-foreground block">Risk</span><span className="font-semibold capitalize">{financialSnapshot?.riskTier || 'current'}</span></div>
+              <div><span className="text-xs text-muted-foreground block">Scholarships</span><span className="font-medium">{activeScholarships.length > 0 ? activeScholarships.map((scholarship) => scholarship.name).join(', ') : '-'}</span></div>
             </div>
           )}
         </CardContent>
       </Card>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 xl:grid-cols-7 gap-3">
         <div className="dashboard-card flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-destructive/10 flex items-center justify-center"><AlertTriangle className="w-5 h-5 text-destructive" /></div>
           <div><p className="stat-label">Total Charged</p><p className="text-lg font-bold">{formatPKR(totalDebit)}</p></div>
@@ -182,15 +351,27 @@ const FeeLedger = () => {
         </div>
         <div className="dashboard-card flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><School className="w-5 h-5 text-primary" /></div>
-          <div><p className="stat-label">Tuition Charges</p><p className="text-lg font-bold">{formatPKR(tuitionTotal)}</p></div>
+          <div><p className="stat-label">Tuition (Gross)</p><p className="text-lg font-bold">{formatPKR(grossTuitionTotal)}</p></div>
+        </div>
+        <div className="dashboard-card flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center"><CheckCircle2 className="w-5 h-5 text-success" /></div>
+          <div><p className="stat-label">Scholarship Discount</p><p className="text-lg font-bold text-success">-{formatPKR(scholarshipDiscountTotal)}</p></div>
+        </div>
+        <div className="dashboard-card flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><School className="w-5 h-5 text-primary" /></div>
+          <div><p className="stat-label">Tuition (Net)</p><p className="text-lg font-bold">{formatPKR(netTuitionTotal)}</p></div>
         </div>
         <div className="dashboard-card flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-info/10 flex items-center justify-center"><BusFront className="w-5 h-5 text-info" /></div>
-          <div><p className="stat-label">Bus Fee Charges</p><p className="text-lg font-bold">{formatPKR(busTotal)}</p></div>
+          <div><p className="stat-label">Bus Charges</p><p className="text-lg font-bold">{formatPKR(busTotal)}</p></div>
         </div>
         <div className="dashboard-card flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center"><CreditCard className="w-5 h-5 text-warning" /></div>
-          <div><p className="stat-label">Period Balance</p><p className={`text-lg font-bold ${periodBalance > 0 ? 'text-destructive' : 'text-success'}`}>{formatPKR(periodBalance)}</p></div>
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><AlertTriangle className="w-5 h-5 text-primary" /></div>
+          <div>
+            <p className="stat-label">Outstanding (All Months)</p>
+            <p className={`text-lg font-bold ${outstandingAllMonths > 0 ? 'text-destructive' : 'text-success'}`}>{formatPKR(outstandingAllMonths)}</p>
+            <p className="text-[11px] text-muted-foreground">{overdueMonths} overdue month(s)</p>
+          </div>
         </div>
       </div>
 
@@ -211,7 +392,9 @@ const FeeLedger = () => {
                 <TableHead className="text-xs font-semibold">Date</TableHead>
                 <TableHead className="text-xs font-semibold">Month</TableHead>
                 <TableHead className="text-xs font-semibold">Fee Head</TableHead>
-                <TableHead className="text-xs font-semibold text-right">Tuition</TableHead>
+                <TableHead className="text-xs font-semibold text-right">Tuition (Gross)</TableHead>
+                <TableHead className="text-xs font-semibold text-right">Discount</TableHead>
+                <TableHead className="text-xs font-semibold text-right">Tuition (Net)</TableHead>
                 <TableHead className="text-xs font-semibold text-right">Bus Fee</TableHead>
                 <TableHead className="text-xs font-semibold text-right">Other Charges</TableHead>
                 <TableHead className="text-xs font-semibold text-right">Payment</TableHead>
@@ -221,9 +404,13 @@ const FeeLedger = () => {
             </TableHeader>
             <TableBody>
               {filteredLedger.map((entry) => {
-                const tuition = isTuitionEntry(entry) ? entry.debit : 0;
+                const grossTuition = grossTuitionForEntry(entry);
+                const scholarshipDiscount = scholarshipDiscountForEntry(entry);
+                const netTuition = netTuitionForEntry(entry);
                 const busFee = isBusEntry(entry) ? entry.debit : 0;
-                const otherCharges = entry.debit > 0 ? Math.max(0, entry.debit - tuition - busFee) : 0;
+                const otherCharges = entry.debit > 0
+                  ? Math.max(0, entry.debit - (isTuitionEntry(entry) ? netTuition : 0) - busFee)
+                  : 0;
 
                 return (
                   <TableRow key={entry.id} className="hover:bg-muted/30">
@@ -235,7 +422,9 @@ const FeeLedger = () => {
                         <p className="text-[11px] text-muted-foreground">{entry.description}</p>
                       </div>
                     </TableCell>
-                    <TableCell className="text-right font-mono text-sm">{tuition > 0 ? <span>{formatPKR(tuition)}</span> : '—'}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{grossTuition > 0 ? <span>{formatPKR(grossTuition)}</span> : '—'}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{scholarshipDiscount > 0 ? <span className="text-success">-{formatPKR(scholarshipDiscount)}</span> : '—'}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{netTuition > 0 ? <span>{formatPKR(netTuition)}</span> : '—'}</TableCell>
                     <TableCell className="text-right font-mono text-sm">{busFee > 0 ? <span>{formatPKR(busFee)}</span> : '—'}</TableCell>
                     <TableCell className="text-right font-mono text-sm">{otherCharges > 0 ? <span className="text-destructive">{formatPKR(otherCharges)}</span> : '—'}</TableCell>
                     <TableCell className="text-right font-mono text-sm">{entry.credit > 0 ? <span className="text-success">{formatPKR(entry.credit)}</span> : '—'}</TableCell>

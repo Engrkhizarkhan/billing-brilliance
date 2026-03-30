@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { applicants, services } from '@/data/mockData';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -6,10 +6,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/StatusBadge';
 import { FilterBar } from '@/components/FilterBar';
 import { toast } from 'sonner';
-import { Plus, Users, CheckCircle2 } from 'lucide-react';
+import { Plus, Users, CheckCircle2, Search } from 'lucide-react';
 
 interface ServiceAssignment {
   id: string;
@@ -38,10 +39,36 @@ const ETAPaymentPrograms = () => {
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [selectedService, setSelectedService] = useState('');
   const [selectedApplicants, setSelectedApplicants] = useState<string[]>([]);
+  const [bulkApplicantSearch, setBulkApplicantSearch] = useState('');
+  const [singleApplicantSearch, setSingleApplicantSearch] = useState('');
 
   const filtered = assignments.filter((a) =>
     a.applicantName.toLowerCase().includes(search.toLowerCase()) || a.serviceName.toLowerCase().includes(search.toLowerCase())
   );
+
+  const filteredBulkApplicants = useMemo(() => {
+    const query = bulkApplicantSearch.trim().toLowerCase();
+    const source = !query
+      ? applicants
+      : applicants.filter((applicant) =>
+          applicant.name.toLowerCase().includes(query) ||
+          applicant.cnic.includes(bulkApplicantSearch) ||
+          applicant.consumerNumber.includes(bulkApplicantSearch)
+        );
+    return source.slice(0, 150);
+  }, [bulkApplicantSearch]);
+
+  const filteredSingleApplicants = useMemo(() => {
+    const query = singleApplicantSearch.trim().toLowerCase();
+    const source = !query
+      ? applicants
+      : applicants.filter((applicant) =>
+          applicant.name.toLowerCase().includes(query) ||
+          applicant.cnic.includes(singleApplicantSearch) ||
+          applicant.consumerNumber.includes(singleApplicantSearch)
+        );
+    return source.slice(0, 150);
+  }, [singleApplicantSearch]);
 
   const handleAssign = () => {
     if (!selectedService || selectedApplicants.length === 0) {
@@ -72,6 +99,8 @@ const ETAPaymentPrograms = () => {
     setBulkAssignOpen(false);
     setSelectedService('');
     setSelectedApplicants([]);
+    setBulkApplicantSearch('');
+    setSingleApplicantSearch('');
     toast.success(`${service.name} assigned to ${newAssignments.length} applicant(s)`);
   };
 
@@ -79,12 +108,14 @@ const ETAPaymentPrograms = () => {
     setSelectedApplicants((prev) => prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]);
   };
 
-  const selectAllApplicants = () => {
-    if (selectedApplicants.length === applicants.length) {
-      setSelectedApplicants([]);
-    } else {
-      setSelectedApplicants(applicants.map((a) => a.id));
+  const selectAllApplicants = (candidateApplicantIds: string[]) => {
+    const allSelected = candidateApplicantIds.length > 0 && candidateApplicantIds.every((id) => selectedApplicants.includes(id));
+    if (allSelected) {
+      setSelectedApplicants((prev) => prev.filter((id) => !candidateApplicantIds.includes(id)));
+      return;
     }
+
+    setSelectedApplicants((prev) => Array.from(new Set([...prev, ...candidateApplicantIds])));
   };
 
   return (
@@ -95,7 +126,15 @@ const ETAPaymentPrograms = () => {
           <p className="page-description">Assign services to applicants and manage payment schedules</p>
         </div>
         <div className="flex gap-2">
-          <Dialog open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
+          <Dialog
+            open={bulkAssignOpen}
+            onOpenChange={(open) => {
+              setBulkAssignOpen(open);
+              if (!open) {
+                setBulkApplicantSearch('');
+              }
+            }}
+          >
             <DialogTrigger asChild>
               <Button size="sm" className="rounded-lg">
                 <Users className="w-4 h-4 mr-1.5" />Bulk Assign
@@ -122,12 +161,28 @@ const ETAPaymentPrograms = () => {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs font-semibold">Select Applicants ({selectedApplicants.length})</Label>
-                    <Button variant="ghost" size="sm" className="h-6 text-[11px]" onClick={selectAllApplicants}>
-                      {selectedApplicants.length === applicants.length ? 'Deselect all' : 'Select all'}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-[11px]"
+                      onClick={() => selectAllApplicants(filteredBulkApplicants.map((applicant) => applicant.id))}
+                    >
+                      {filteredBulkApplicants.length > 0 && filteredBulkApplicants.every((applicant) => selectedApplicants.includes(applicant.id)) ? 'Deselect filtered' : 'Select filtered'}
                     </Button>
                   </div>
+                  <div className="relative">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      value={bulkApplicantSearch}
+                      className="pl-10 h-10 rounded-xl"
+                      placeholder="Search applicants by name, CNIC, or consumer #"
+                      onChange={(e) => setBulkApplicantSearch(e.target.value)}
+                    />
+                  </div>
                   <div className="max-h-52 overflow-y-auto border rounded-xl p-2 space-y-0.5">
-                    {applicants.map((a) => (
+                    {filteredBulkApplicants.length === 0 ? (
+                      <p className="text-sm text-muted-foreground p-3">No applicants match your search.</p>
+                    ) : filteredBulkApplicants.map((a) => (
                       <label key={a.id} className={`flex items-center gap-2.5 py-2.5 px-3 rounded-lg cursor-pointer transition-colors ${selectedApplicants.includes(a.id) ? 'bg-primary/5' : 'hover:bg-muted'}`}>
                         <Checkbox
                           checked={selectedApplicants.includes(a.id)}
@@ -138,6 +193,7 @@ const ETAPaymentPrograms = () => {
                       </label>
                     ))}
                   </div>
+                  <p className="text-[11px] text-muted-foreground">Showing up to 150 applicants. Use search to narrow down large lists.</p>
                 </div>
 
                 {selectedApplicants.length > 0 && selectedService && (
@@ -159,7 +215,15 @@ const ETAPaymentPrograms = () => {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
+          <Dialog
+            open={assignOpen}
+            onOpenChange={(open) => {
+              setAssignOpen(open);
+              if (!open) {
+                setSingleApplicantSearch('');
+              }
+            }}
+          >
             <DialogTrigger asChild>
               <Button variant="outline" size="sm" className="rounded-lg">
                 <Plus className="w-4 h-4 mr-1.5" />Assign Service
@@ -184,8 +248,19 @@ const ETAPaymentPrograms = () => {
 
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold">Applicant</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      value={singleApplicantSearch}
+                      className="pl-10 h-10 rounded-xl"
+                      placeholder="Search applicants by name, CNIC, or consumer #"
+                      onChange={(e) => setSingleApplicantSearch(e.target.value)}
+                    />
+                  </div>
                   <div className="max-h-52 overflow-y-auto border rounded-xl p-2 space-y-0.5">
-                    {applicants.map((a) => (
+                    {filteredSingleApplicants.length === 0 ? (
+                      <p className="text-sm text-muted-foreground p-3">No applicants match your search.</p>
+                    ) : filteredSingleApplicants.map((a) => (
                       <label key={a.id} className="flex items-center gap-2.5 py-2 px-2.5 rounded-lg hover:bg-muted cursor-pointer">
                         <Checkbox
                           checked={selectedApplicants.includes(a.id)}
@@ -195,6 +270,7 @@ const ETAPaymentPrograms = () => {
                       </label>
                     ))}
                   </div>
+                  <p className="text-[11px] text-muted-foreground">Showing up to 150 applicants. Use search to narrow down large lists.</p>
                 </div>
 
                 <Button onClick={handleAssign} className="w-full h-10 rounded-xl">Assign Service</Button>

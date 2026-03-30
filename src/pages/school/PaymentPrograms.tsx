@@ -7,10 +7,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/StatusBadge';
 import { FilterBar } from '@/components/FilterBar';
 import { toast } from 'sonner';
-import { CreditCard, Plus, Users, GraduationCap, CheckCircle2 } from 'lucide-react';
+import { Plus, GraduationCap, CheckCircle2, Search } from 'lucide-react';
 
 const allClasses = ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
 
@@ -40,9 +41,13 @@ const PaymentPrograms = () => {
   const [search, setSearch] = useState('');
   const [classAssignOpen, setClassAssignOpen] = useState(false);
   const [singleAssignOpen, setSingleAssignOpen] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState('');
+  const [selectedClassPlan, setSelectedClassPlan] = useState('');
+  const [selectedIndividualPlan, setSelectedIndividualPlan] = useState('');
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [studentSearch, setStudentSearch] = useState('');
+  const [studentClassFilter, setStudentClassFilter] = useState('all');
+  const [studentSectionFilter, setStudentSectionFilter] = useState('all');
 
   const filtered = assignments.filter((a) =>
     a.studentName.toLowerCase().includes(search.toLowerCase()) || a.planName.toLowerCase().includes(search.toLowerCase()) || a.className.toLowerCase().includes(search.toLowerCase())
@@ -55,12 +60,31 @@ const PaymentPrograms = () => {
     return map;
   }, []);
 
+  const individualSections = useMemo(() => {
+    const pool = studentClassFilter === 'all' ? students : students.filter((student) => student.class === studentClassFilter);
+    return Array.from(new Set(pool.map((student) => student.section))).sort((a, b) => a.localeCompare(b));
+  }, [studentClassFilter]);
+
+  const filteredStudentDirectory = useMemo(() => {
+    const query = studentSearch.trim().toLowerCase();
+    return students.filter((student) => {
+      const classMatch = studentClassFilter === 'all' || student.class === studentClassFilter;
+      const sectionMatch = studentSectionFilter === 'all' || student.section === studentSectionFilter;
+      const searchMatch = !query ||
+        student.name.toLowerCase().includes(query) ||
+        student.rollNumber.toLowerCase().includes(query) ||
+        student.cnic.includes(studentSearch) ||
+        student.consumerNumber.includes(studentSearch);
+      return classMatch && sectionMatch && searchMatch;
+    });
+  }, [studentSearch, studentClassFilter, studentSectionFilter]);
+
   const handleClassAssign = () => {
-    if (!selectedPlan || selectedClasses.length === 0) {
+    if (!selectedClassPlan || selectedClasses.length === 0) {
       toast.error('Select a plan and at least one class');
       return;
     }
-    const plan = feePlans.find((p) => p.id === selectedPlan);
+    const plan = feePlans.find((p) => p.id === selectedClassPlan);
     if (!plan) return;
 
     const classStudents = students.filter((s) => selectedClasses.includes(s.class));
@@ -79,17 +103,17 @@ const PaymentPrograms = () => {
 
     setAssignments([...assignments, ...newAssignments]);
     setClassAssignOpen(false);
-    setSelectedPlan('');
+    setSelectedClassPlan('');
     setSelectedClasses([]);
     toast.success(`${plan.name} assigned to ${classStudents.length} students across ${selectedClasses.length} class(es)`);
   };
 
   const handleSingleAssign = () => {
-    if (!selectedPlan || selectedStudents.length === 0) {
+    if (!selectedIndividualPlan || selectedStudents.length === 0) {
       toast.error('Select a plan and at least one student');
       return;
     }
-    const plan = feePlans.find((p) => p.id === selectedPlan);
+    const plan = feePlans.find((p) => p.id === selectedIndividualPlan);
     if (!plan) return;
 
     const newAssignments: PaymentAssignment[] = selectedStudents.map((sid, i) => {
@@ -110,8 +134,11 @@ const PaymentPrograms = () => {
 
     setAssignments([...assignments, ...newAssignments]);
     setSingleAssignOpen(false);
-    setSelectedPlan('');
+    setSelectedIndividualPlan('');
     setSelectedStudents([]);
+    setStudentSearch('');
+    setStudentClassFilter('all');
+    setStudentSectionFilter('all');
     toast.success(`Payment plan assigned to ${newAssignments.length} student(s)`);
   };
 
@@ -121,6 +148,11 @@ const PaymentPrograms = () => {
 
   const toggleStudent = (id: string) => {
     setSelectedStudents((prev) => prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]);
+  };
+
+  const selectFilteredStudents = () => {
+    const ids = filteredStudentDirectory.map((student) => student.id);
+    setSelectedStudents((prev) => Array.from(new Set([...prev, ...ids])));
   };
 
   const totalStudentsSelected = selectedClasses.reduce((acc, cls) => acc + (classCounts[cls] || 0), 0);
@@ -146,7 +178,7 @@ const PaymentPrograms = () => {
               <div className="space-y-4 pt-2">
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold">Select Fee Plan</Label>
-                  <Select value={selectedPlan} onValueChange={setSelectedPlan}>
+                  <Select value={selectedClassPlan} onValueChange={setSelectedClassPlan}>
                     <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Choose a plan" /></SelectTrigger>
                     <SelectContent>
                       {feePlans.map((p) => (
@@ -176,13 +208,13 @@ const PaymentPrograms = () => {
                   </div>
                 </div>
 
-                {selectedClasses.length > 0 && selectedPlan && (
+                {selectedClasses.length > 0 && selectedClassPlan && (
                   <div className="rounded-xl bg-primary/5 border border-primary/20 p-3 flex items-start gap-2">
                     <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 shrink-0" />
                     <div>
                       <p className="text-xs font-semibold text-primary">Ready to assign</p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {feePlans.find(p => p.id === selectedPlan)?.name} will be assigned to {totalStudentsSelected} students in {selectedClasses.length} class(es)
+                        {feePlans.find(p => p.id === selectedClassPlan)?.name} will be assigned to {totalStudentsSelected} students in {selectedClasses.length} class(es)
                       </p>
                     </div>
                   </div>
@@ -196,43 +228,105 @@ const PaymentPrograms = () => {
           </Dialog>
 
           {/* Individual assignment */}
-          <Dialog open={singleAssignOpen} onOpenChange={setSingleAssignOpen}>
+          <Dialog
+            open={singleAssignOpen}
+            onOpenChange={(open) => {
+              setSingleAssignOpen(open);
+              if (!open) {
+                setSelectedStudents([]);
+                setSelectedIndividualPlan('');
+                setStudentSearch('');
+                setStudentClassFilter('all');
+                setStudentSectionFilter('all');
+              }
+            }}
+          >
             <DialogTrigger asChild>
               <Button variant="outline" size="sm" className="rounded-lg">
                 <Plus className="w-4 h-4 mr-1.5" />Individual Assign
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-3xl">
               <DialogHeader><DialogTitle>Assign Plan to Students</DialogTitle></DialogHeader>
               <div className="space-y-4 pt-2">
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold">Fee Plan</Label>
-                  <Select value={selectedPlan} onValueChange={setSelectedPlan}>
-                    <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Choose a plan" /></SelectTrigger>
-                    <SelectContent>
-                      {feePlans.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {p.name} — ₨ {p.amount.toLocaleString()}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_160px_160px] gap-3">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold">Fee Plan</Label>
+                    <Select value={selectedIndividualPlan} onValueChange={setSelectedIndividualPlan}>
+                      <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Choose a plan" /></SelectTrigger>
+                      <SelectContent>
+                        {feePlans.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name} — ₨ {p.amount.toLocaleString()}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold">Class</Label>
+                    <Select value={studentClassFilter} onValueChange={(value) => { setStudentClassFilter(value); setStudentSectionFilter('all'); }}>
+                      <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Classes</SelectItem>
+                        {allClasses.map((className) => <SelectItem key={className} value={className}>{className}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold">Section</Label>
+                    <Select value={studentSectionFilter} onValueChange={setStudentSectionFilter}>
+                      <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Sections</SelectItem>
+                        {individualSections.map((section) => <SelectItem key={section} value={section}>{section}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-xs font-semibold">Select Students ({selectedStudents.length} selected)</Label>
-                  <div className="max-h-52 overflow-y-auto border rounded-xl p-2 space-y-0.5">
-                    {students.slice(0, 20).map((s) => (
-                      <label key={s.id} className="flex items-center gap-2.5 py-2 px-2.5 rounded-lg hover:bg-muted cursor-pointer">
-                        <Checkbox
-                          checked={selectedStudents.includes(s.id)}
-                          onCheckedChange={() => toggleStudent(s.id)}
-                        />
-                        <span className="text-sm flex-1">{s.name}</span>
-                        <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">{s.class}</span>
-                      </label>
-                    ))}
+                  <Label className="text-xs font-semibold">Search Students</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      value={studentSearch}
+                      className="pl-10 h-10 rounded-xl"
+                      placeholder="Search by name, roll #, CNIC, or consumer #"
+                      onChange={(e) => setStudentSearch(e.target.value)}
+                    />
                   </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-border px-3 py-2">
+                  <p className="text-xs text-muted-foreground">Showing {filteredStudentDirectory.length} students • {selectedStudents.length} selected</p>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" className="h-8" onClick={selectFilteredStudents} disabled={filteredStudentDirectory.length === 0}>
+                      Select Filtered
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" className="h-8" onClick={() => setSelectedStudents([])} disabled={selectedStudents.length === 0}>
+                      Clear Selection
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="max-h-80 overflow-y-auto border rounded-xl p-2 space-y-1">
+                  {filteredStudentDirectory.length === 0 ? (
+                    <p className="text-sm text-muted-foreground p-3">No students match your current search/filter.</p>
+                  ) : (
+                    filteredStudentDirectory.map((student) => (
+                      <label key={student.id} className="flex items-start gap-2.5 py-2 px-2.5 rounded-lg hover:bg-muted cursor-pointer">
+                        <Checkbox
+                          checked={selectedStudents.includes(student.id)}
+                          onCheckedChange={() => toggleStudent(student.id)}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{student.name}</p>
+                          <p className="text-[11px] text-muted-foreground truncate">{student.class} {student.section} • {student.rollNumber} • {student.consumerNumber}</p>
+                        </div>
+                      </label>
+                    ))
+                  )}
                 </div>
 
                 <Button onClick={handleSingleAssign} className="w-full h-10 rounded-xl">

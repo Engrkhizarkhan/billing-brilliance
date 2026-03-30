@@ -37,6 +37,10 @@ export interface Student {
   gender: 'male' | 'female';
   dateOfBirth: string;
   address: string;
+  usesBusService: boolean;
+  busServiceStartMonth: string | null;
+  busServiceEndMonth: string | null;
+  busMonthlyFee: number;
 }
 
 export interface Invoice {
@@ -70,6 +74,31 @@ export interface Scholarship {
   endDate: string | null;
   isLifetime?: boolean;
   status: 'active' | 'expired' | 'inactive';
+}
+
+export interface StudentScholarshipAssignment {
+  id: string;
+  studentId: string;
+  scholarshipId: string;
+  effectiveFrom: string;
+  assignedAt: string;
+  status: 'active' | 'inactive';
+}
+
+export type StudentRiskTier = 'current' | 'watch' | 'high-risk' | 'critical';
+
+export interface StudentFinancialSnapshot {
+  studentId: string;
+  overdueMonths: number;
+  totalDue: number;
+  lastPaymentDate: string | null;
+  scholarshipCount: number;
+  riskTier: StudentRiskTier;
+}
+
+export interface LedgerAllocation {
+  monthKey: string;
+  amount: number;
 }
 
 export interface FeePlan {
@@ -131,6 +160,11 @@ export interface LedgerEntry {
   balance: number;
   billId: string;
   reference?: string;
+  entryType?: 'charge' | 'payment' | 'adjustment';
+  allocations?: LedgerAllocation[];
+  grossTuition?: number;
+  scholarshipDiscount?: number;
+  netTuition?: number;
 }
 
 export interface ETEAPosting {
