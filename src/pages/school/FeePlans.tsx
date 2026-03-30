@@ -39,24 +39,26 @@ const FeePlans = () => {
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild><Button><Plus className="w-4 h-4 mr-2" />Create Plan</Button></DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-xl">
             <DialogHeader><DialogTitle>Create Fee Plan</DialogTitle></DialogHeader>
             <div className="space-y-4 pt-2">
               <div><Label>Plan Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-              <div><Label>Fee Amount (₨)</Label><Input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></div>
-              <div>
-                <Label>Frequency</Label>
-                <Select value={form.frequency} onValueChange={(v) => setForm({ ...form, frequency: v as FeePlan['frequency'] })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                    <SelectItem value="quarterly">Quarterly</SelectItem>
-                    <SelectItem value="yearly">Yearly</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div><Label>Fee Amount (₨)</Label><Input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></div>
+                <div>
+                  <Label>Frequency</Label>
+                  <Select value={form.frequency} onValueChange={(v) => setForm({ ...form, frequency: v as FeePlan['frequency'] })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="quarterly">Quarterly</SelectItem>
+                      <SelectItem value="yearly">Yearly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div><Label>Due Day</Label><Input type="number" value={form.dueDay} onChange={(e) => setForm({ ...form, dueDay: e.target.value })} /></div>
+                <div><Label>Late Fee (₨)</Label><Input type="number" value={form.lateFee} onChange={(e) => setForm({ ...form, lateFee: e.target.value })} /></div>
               </div>
-              <div><Label>Due Day</Label><Input type="number" value={form.dueDay} onChange={(e) => setForm({ ...form, dueDay: e.target.value })} /></div>
-              <div><Label>Late Fee (₨)</Label><Input type="number" value={form.lateFee} onChange={(e) => setForm({ ...form, lateFee: e.target.value })} /></div>
               <Button onClick={handleCreate} className="w-full">Create Plan</Button>
             </div>
           </DialogContent>

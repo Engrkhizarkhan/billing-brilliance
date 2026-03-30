@@ -228,7 +228,7 @@ const Scholarships = () => {
             }}
           >
             <DialogTrigger asChild><Button variant="outline"><UserPlus className="w-4 h-4 mr-2" />Assign Scholarship</Button></DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-3xl">
               <DialogHeader><DialogTitle>Assign Scholarship</DialogTitle></DialogHeader>
               <div className="space-y-4 pt-2">
                 <div>
@@ -339,7 +339,7 @@ const Scholarships = () => {
 
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild><Button><Plus className="w-4 h-4 mr-2" />Create Scholarship</Button></DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-xl">
               <DialogHeader><DialogTitle>Create Scholarship</DialogTitle></DialogHeader>
               <div className="space-y-4 pt-2">
                 <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>

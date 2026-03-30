@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { StatCard } from '@/components/StatCard';
-import { revenueData, monthlyCollectionTarget, feeCollectionByHead, invoices, students } from '@/data/mockData';
+import { revenueData, monthlyCollectionTarget, feeCollectionByHead, invoices, students, getStudentFinancialSnapshot } from '@/data/mockData';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from 'recharts';
 import { Wallet, Target, AlertTriangle, BarChart3 } from 'lucide-react';
 import { formatPKR } from '@/lib/formatters';
@@ -21,7 +21,7 @@ const SchoolReports = () => {
 
   const defaultersByClass = useMemo(() => {
     const classMap: Record<string, number> = {};
-    students.filter((student) => student.balance > 0).forEach((student) => {
+    students.filter((student) => getStudentFinancialSnapshot(student.id).totalDue > 0).forEach((student) => {
       classMap[student.class] = (classMap[student.class] || 0) + 1;
     });
 

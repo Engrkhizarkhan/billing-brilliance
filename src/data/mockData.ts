@@ -394,6 +394,32 @@ export const getStudentFinancialSnapshot = (studentId: string): StudentFinancial
   };
 };
 
+export const getSchoolPaymentHistory = () => {
+  return students
+    .flatMap((student) =>
+      generateLedger(student.id)
+        .filter((entry) => entry.credit > 0)
+        .map((entry) => ({
+          id: `${student.id}-${entry.id}`,
+          studentId: student.id,
+          studentName: student.name,
+          className: student.class,
+          section: student.section,
+          rollNumber: student.rollNumber,
+          consumerNumber: student.consumerNumber,
+          billId: student.billId,
+          amount: entry.credit,
+          date: entry.date,
+          reference: entry.reference || '-',
+          note: entry.description,
+        }))
+    )
+    .sort((a, b) => {
+      if (a.date === b.date) return b.amount - a.amount;
+      return b.date.localeCompare(a.date);
+    });
+};
+
 export const services: Service[] = [
   { id: 'srv1', name: 'MDCAT 2025', paymentType: 'one-time', amount: 3500, status: 'active' },
   { id: 'srv2', name: 'ECAT Engineering', paymentType: 'one-time', amount: 3500, status: 'active' },

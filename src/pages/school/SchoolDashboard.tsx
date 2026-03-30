@@ -1,6 +1,6 @@
 import { StatCard } from '@/components/StatCard';
 import { GraduationCap, Receipt, Wallet, Award, Users, AlertTriangle, Calendar, TrendingUp } from 'lucide-react';
-import { students, invoices, feeCollectionByHead, monthlyCollectionTarget } from '@/data/mockData';
+import { students, feeCollectionByHead, monthlyCollectionTarget, getSchoolPaymentHistory, getStudentFinancialSnapshot } from '@/data/mockData';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 import { useMemo } from 'react';
 import { formatPKR } from '@/lib/formatters';
@@ -17,17 +17,22 @@ const SchoolDashboard = () => {
     return Object.entries(map).map(([name, count]) => ({ name: name.replace('Class ', 'C'), count })).sort((a, b) => a.name.localeCompare(b.name));
   }, []);
 
-  const totalOutstanding = students.reduce((sum, s) => sum + s.balance, 0);
-  const defaultersCount = students.filter(s => s.balance > 0).length;
-  const todayPayments = 12;
+  const studentSnapshots = useMemo(
+    () => students.map((student) => ({ student, snapshot: getStudentFinancialSnapshot(student.id) })),
+    []
+  );
 
-  const recentPayments = [
-    { name: 'Ahmed Khan', amount: 5000, type: 'Tuition Fee', time: '2 min ago' },
-    { name: 'Sara Ali', amount: 15000, type: 'Monthly Fee', time: '15 min ago' },
-    { name: 'Hassan Raza', amount: 6700, type: 'Tuition + Transport', time: '1 hour ago' },
-    { name: 'Fatima Noor', amount: 3000, type: 'Exam Fee', time: '2 hours ago' },
-    { name: 'Bilal Ahmed', amount: 5000, type: 'Tuition Fee', time: '3 hours ago' },
-  ];
+  const paymentHistory = useMemo(() => getSchoolPaymentHistory(), []);
+
+  const latestPaymentDate = paymentHistory[0]?.date || null;
+  const latestDayPayments = latestPaymentDate ? paymentHistory.filter((payment) => payment.date === latestPaymentDate) : [];
+
+  const totalOutstanding = studentSnapshots.reduce((sum, item) => sum + item.snapshot.totalDue, 0);
+  const defaultersCount = studentSnapshots.filter((item) => item.snapshot.totalDue > 0).length;
+  const todayPayments = latestDayPayments.length;
+  const latestDayAmount = latestDayPayments.reduce((sum, payment) => sum + payment.amount, 0);
+
+  const recentPayments = paymentHistory.slice(0, 5);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -41,7 +46,7 @@ const SchoolDashboard = () => {
         <StatCard title="Collected This Month" value={formatPKR(920000)} icon={Wallet} trend="10% vs last month" trendUp />
         <div className="cursor-pointer" onClick={() => navigate('/school/defaulters')}><StatCard title="Outstanding" value={formatPKR(totalOutstanding)} icon={AlertTriangle} trend={`${defaultersCount} defaulters`} trendUp={false} /></div>
         <StatCard title="Defaulters" value={defaultersCount} icon={Users} />
-        <StatCard title="Today's Payments" value={todayPayments} icon={Calendar} trend="₨ 34,700" trendUp />
+        <StatCard title="Latest Day Payments" value={todayPayments} icon={Calendar} trend={latestPaymentDate ? `${formatPKR(latestDayAmount)} on ${latestPaymentDate}` : 'No payments yet'} trendUp={todayPayments > 0} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -83,15 +88,24 @@ const SchoolDashboard = () => {
         <div className="dashboard-card">
           <h3 className="section-title mb-4">Recent Payments</h3>
           <div className="space-y-3">
-            {recentPayments.map((p, i) => (
-              <div key={i} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
+            {recentPayments.map((payment) => (
+              <div key={payment.id} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-lg bg-success/10 flex items-center justify-center"><Wallet className="w-4 h-4 text-success" /></div>
-                  <div><p className="text-sm font-medium">{p.name}</p><p className="text-[11px] text-muted-foreground">{p.type}</p></div>
+                  <div>
+                    <p className="text-sm font-medium">{payment.studentName}</p>
+                    <p className="text-[11px] text-muted-foreground">{payment.note}</p>
+                  </div>
                 </div>
-                <div className="text-right"><p className="text-sm font-mono font-semibold text-success">{formatPKR(p.amount)}</p><p className="text-[10px] text-muted-foreground">{p.time}</p></div>
+                <div className="text-right">
+                  <p className="text-sm font-mono font-semibold text-success">{formatPKR(payment.amount)}</p>
+                  <p className="text-[10px] text-muted-foreground">{payment.date}</p>
+                </div>
               </div>
             ))}
+            {recentPayments.length === 0 && (
+              <p className="text-sm text-muted-foreground">No completed payments available yet.</p>
+            )}
           </div>
         </div>
 
@@ -101,7 +115,7 @@ const SchoolDashboard = () => {
           <div className="space-y-3">
             <div className="rounded-xl bg-destructive/5 border border-destructive/10 p-4 flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-destructive mt-0.5 shrink-0" />
-              <div><p className="text-sm font-medium text-destructive">23 students have dues older than 30 days</p><p className="text-xs text-muted-foreground mt-1">Total outstanding: {formatPKR(totalOutstanding)}</p></div>
+              <div><p className="text-sm font-medium text-destructive">{defaultersCount} students currently have outstanding dues</p><p className="text-xs text-muted-foreground mt-1">Total outstanding: {formatPKR(totalOutstanding)}</p></div>
             </div>
             <div className="rounded-xl bg-warning/5 border border-warning/10 p-4 flex items-start gap-3">
               <Receipt className="w-5 h-5 text-warning mt-0.5 shrink-0" />

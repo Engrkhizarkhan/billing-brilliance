@@ -20,20 +20,22 @@ interface PaymentAssignment {
   studentName: string;
   consumerNumber: string;
   className: string;
+  sectionName: string;
   planName: string;
   amount: number;
   frequency: string;
   status: 'active' | 'pending' | 'completed';
+  assignedVia: 'class' | 'individual';
   assignedDate: string;
   nextDue: string;
 }
 
 const initialAssignments: PaymentAssignment[] = [
-  { id: 'pa1', studentName: 'Ahmed Khan', consumerNumber: students[0].consumerNumber, className: students[0].class, planName: 'Standard Monthly', amount: 15000, frequency: 'monthly', status: 'active', assignedDate: '2025-01-15', nextDue: '2025-04-10' },
-  { id: 'pa2', studentName: 'Sara Ali', consumerNumber: students[1].consumerNumber, className: students[1].class, planName: 'Premium Monthly', amount: 25000, frequency: 'monthly', status: 'active', assignedDate: '2025-01-15', nextDue: '2025-04-05' },
-  { id: 'pa3', studentName: 'Hassan Raza', consumerNumber: students[2].consumerNumber, className: students[2].class, planName: 'Quarterly Plan', amount: 42000, frequency: 'quarterly', status: 'pending', assignedDate: '2025-02-01', nextDue: '2025-04-01' },
-  { id: 'pa4', studentName: 'Fatima Noor', consumerNumber: students[3].consumerNumber, className: students[3].class, planName: 'Standard Monthly', amount: 15000, frequency: 'monthly', status: 'active', assignedDate: '2025-01-15', nextDue: '2025-04-10' },
-  { id: 'pa5', studentName: 'Bilal Ahmed', consumerNumber: students[4].consumerNumber, className: students[4].class, planName: 'Annual Plan', amount: 150000, frequency: 'yearly', status: 'completed', assignedDate: '2025-01-01', nextDue: '2026-01-15' },
+  { id: 'pa1', studentName: 'Ahmed Khan', consumerNumber: students[0].consumerNumber, className: students[0].class, sectionName: students[0].section, planName: 'Standard Monthly', amount: 15000, frequency: 'monthly', status: 'active', assignedVia: 'class', assignedDate: '2025-01-15', nextDue: '2025-04-10' },
+  { id: 'pa2', studentName: 'Sara Ali', consumerNumber: students[1].consumerNumber, className: students[1].class, sectionName: students[1].section, planName: 'Premium Monthly', amount: 25000, frequency: 'monthly', status: 'active', assignedVia: 'class', assignedDate: '2025-01-15', nextDue: '2025-04-05' },
+  { id: 'pa3', studentName: 'Hassan Raza', consumerNumber: students[2].consumerNumber, className: students[2].class, sectionName: students[2].section, planName: 'Quarterly Plan', amount: 42000, frequency: 'quarterly', status: 'pending', assignedVia: 'individual', assignedDate: '2025-02-01', nextDue: '2025-04-01' },
+  { id: 'pa4', studentName: 'Fatima Noor', consumerNumber: students[3].consumerNumber, className: students[3].class, sectionName: students[3].section, planName: 'Standard Monthly', amount: 15000, frequency: 'monthly', status: 'active', assignedVia: 'class', assignedDate: '2025-01-15', nextDue: '2025-04-10' },
+  { id: 'pa5', studentName: 'Bilal Ahmed', consumerNumber: students[4].consumerNumber, className: students[4].class, sectionName: students[4].section, planName: 'Annual Plan', amount: 150000, frequency: 'yearly', status: 'completed', assignedVia: 'individual', assignedDate: '2025-01-01', nextDue: '2026-01-15' },
 ];
 
 const PaymentPrograms = () => {
@@ -48,10 +50,22 @@ const PaymentPrograms = () => {
   const [studentSearch, setStudentSearch] = useState('');
   const [studentClassFilter, setStudentClassFilter] = useState('all');
   const [studentSectionFilter, setStudentSectionFilter] = useState('all');
+  const [assignmentClassFilter, setAssignmentClassFilter] = useState('all');
+  const [assignmentStatusFilter, setAssignmentStatusFilter] = useState('all');
+  const [assignmentFrequencyFilter, setAssignmentFrequencyFilter] = useState('all');
 
-  const filtered = assignments.filter((a) =>
-    a.studentName.toLowerCase().includes(search.toLowerCase()) || a.planName.toLowerCase().includes(search.toLowerCase()) || a.className.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = assignments.filter((a) => {
+    const query = search.toLowerCase();
+    const matchSearch =
+      a.studentName.toLowerCase().includes(query) ||
+      a.planName.toLowerCase().includes(query) ||
+      a.className.toLowerCase().includes(query) ||
+      a.consumerNumber.includes(search);
+    const matchClass = assignmentClassFilter === 'all' || a.className === assignmentClassFilter;
+    const matchStatus = assignmentStatusFilter === 'all' || a.status === assignmentStatusFilter;
+    const matchFrequency = assignmentFrequencyFilter === 'all' || a.frequency === assignmentFrequencyFilter;
+    return matchSearch && matchClass && matchStatus && matchFrequency;
+  });
 
   // Class summary
   const classCounts = useMemo(() => {
@@ -67,7 +81,7 @@ const PaymentPrograms = () => {
 
   const filteredStudentDirectory = useMemo(() => {
     const query = studentSearch.trim().toLowerCase();
-    return students.filter((student) => {
+    const source = students.filter((student) => {
       const classMatch = studentClassFilter === 'all' || student.class === studentClassFilter;
       const sectionMatch = studentSectionFilter === 'all' || student.section === studentSectionFilter;
       const searchMatch = !query ||
@@ -77,7 +91,13 @@ const PaymentPrograms = () => {
         student.consumerNumber.includes(studentSearch);
       return classMatch && sectionMatch && searchMatch;
     });
+    return source.slice(0, 200);
   }, [studentSearch, studentClassFilter, studentSectionFilter]);
+
+  const existingAssignmentKeys = useMemo(
+    () => new Set(assignments.map((assignment) => `${assignment.consumerNumber}::${assignment.planName}`)),
+    [assignments]
+  );
 
   const handleClassAssign = () => {
     if (!selectedClassPlan || selectedClasses.length === 0) {
@@ -88,15 +108,24 @@ const PaymentPrograms = () => {
     if (!plan) return;
 
     const classStudents = students.filter((s) => selectedClasses.includes(s.class));
-    const newAssignments: PaymentAssignment[] = classStudents.map((student, i) => ({
+    const eligibleStudents = classStudents.filter((student) => !existingAssignmentKeys.has(`${student.consumerNumber}::${plan.name}`));
+
+    if (eligibleStudents.length === 0) {
+      toast.info('Selected classes already have this plan assigned for all students');
+      return;
+    }
+
+    const newAssignments: PaymentAssignment[] = eligibleStudents.map((student, i) => ({
       id: `pa-class-${Date.now()}-${i}`,
       studentName: student.name,
       consumerNumber: student.consumerNumber,
       className: student.class,
+      sectionName: student.section,
       planName: plan.name,
       amount: plan.amount,
       frequency: plan.frequency,
       status: 'active' as const,
+      assignedVia: 'class' as const,
       assignedDate: new Date().toISOString().split('T')[0],
       nextDue: `2025-04-${String(plan.dueDay).padStart(2, '0')}`,
     }));
@@ -105,7 +134,7 @@ const PaymentPrograms = () => {
     setClassAssignOpen(false);
     setSelectedClassPlan('');
     setSelectedClasses([]);
-    toast.success(`${plan.name} assigned to ${classStudents.length} students across ${selectedClasses.length} class(es)`);
+    toast.success(`${plan.name} assigned to ${newAssignments.length} students across ${selectedClasses.length} class(es)`);
   };
 
   const handleSingleAssign = () => {
@@ -116,17 +145,29 @@ const PaymentPrograms = () => {
     const plan = feePlans.find((p) => p.id === selectedIndividualPlan);
     if (!plan) return;
 
-    const newAssignments: PaymentAssignment[] = selectedStudents.map((sid, i) => {
-      const student = students.find((s) => s.id === sid);
+    const chosenStudents = selectedStudents
+      .map((sid) => students.find((student) => student.id === sid))
+      .filter((student): student is (typeof students)[number] => Boolean(student));
+
+    const eligibleStudents = chosenStudents.filter((student) => !existingAssignmentKeys.has(`${student.consumerNumber}::${plan.name}`));
+
+    if (eligibleStudents.length === 0) {
+      toast.info('Selected students already have this payment plan');
+      return;
+    }
+
+    const newAssignments: PaymentAssignment[] = eligibleStudents.map((student, i) => {
       return {
         id: `pa-single-${Date.now()}-${i}`,
-        studentName: student?.name || 'Unknown',
-        consumerNumber: student?.consumerNumber || '',
-        className: student?.class || '',
+        studentName: student.name,
+        consumerNumber: student.consumerNumber,
+        className: student.class,
+        sectionName: student.section,
         planName: plan.name,
         amount: plan.amount,
         frequency: plan.frequency,
         status: 'active' as const,
+        assignedVia: 'individual' as const,
         assignedDate: new Date().toISOString().split('T')[0],
         nextDue: `2025-04-${String(plan.dueDay).padStart(2, '0')}`,
       };
@@ -162,7 +203,8 @@ const PaymentPrograms = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-header">Payment Programs</h1>
-          <p className="page-description">Assign fee plans to classes or individual students</p>
+          <p className="page-description">Define expected dues by assigning fee plans to classes or individual students</p>
+          <p className="text-xs text-muted-foreground mt-1">Need actual paid records? Use the Payments page.</p>
         </div>
         <div className="flex gap-2">
           {/* Class-level assignment (primary action) */}
@@ -172,11 +214,11 @@ const PaymentPrograms = () => {
                 <GraduationCap className="w-4 h-4 mr-1.5" />Assign to Class
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg">
+            <DialogContent className="max-w-3xl">
               <DialogHeader><DialogTitle>Assign Plan to Entire Class</DialogTitle></DialogHeader>
               <p className="text-xs text-muted-foreground -mt-1">Select one or more classes to apply a fee plan to all students at once.</p>
-              <div className="space-y-4 pt-2">
-                <div className="space-y-2">
+              <div className="grid grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] gap-4 pt-2">
+                <div className="space-y-2 lg:pr-2">
                   <Label className="text-xs font-semibold">Select Fee Plan</Label>
                   <Select value={selectedClassPlan} onValueChange={setSelectedClassPlan}>
                     <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Choose a plan" /></SelectTrigger>
@@ -188,11 +230,27 @@ const PaymentPrograms = () => {
                       ))}
                     </SelectContent>
                   </Select>
+
+                  {selectedClasses.length > 0 && selectedClassPlan && (
+                    <div className="rounded-xl bg-primary/5 border border-primary/20 p-3 flex items-start gap-2 mt-3">
+                      <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-xs font-semibold text-primary">Ready to assign</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {feePlans.find(p => p.id === selectedClassPlan)?.name} will be assigned to {totalStudentsSelected} students in {selectedClasses.length} class(es)
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <Button onClick={handleClassAssign} className="w-full h-10 rounded-xl mt-3">
+                    Assign to {totalStudentsSelected} Students
+                  </Button>
                 </div>
 
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold">Select Classes ({selectedClasses.length} selected • {totalStudentsSelected} students)</Label>
-                  <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto border rounded-xl p-3">
+                  <div className="grid grid-cols-2 xl:grid-cols-3 gap-2 max-h-64 overflow-y-auto border rounded-xl p-3">
                     {allClasses.map((cls) => (
                       <label key={cls} className={`flex items-center gap-2.5 py-2.5 px-3 rounded-lg cursor-pointer transition-colors ${selectedClasses.includes(cls) ? 'bg-primary/5 border border-primary/20' : 'hover:bg-muted border border-transparent'}`}>
                         <Checkbox
@@ -207,22 +265,6 @@ const PaymentPrograms = () => {
                     ))}
                   </div>
                 </div>
-
-                {selectedClasses.length > 0 && selectedClassPlan && (
-                  <div className="rounded-xl bg-primary/5 border border-primary/20 p-3 flex items-start gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-                    <div>
-                      <p className="text-xs font-semibold text-primary">Ready to assign</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {feePlans.find(p => p.id === selectedClassPlan)?.name} will be assigned to {totalStudentsSelected} students in {selectedClasses.length} class(es)
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                <Button onClick={handleClassAssign} className="w-full h-10 rounded-xl">
-                  Assign to {totalStudentsSelected} Students
-                </Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -310,6 +352,8 @@ const PaymentPrograms = () => {
                   </div>
                 </div>
 
+                <p className="text-[11px] text-muted-foreground">Showing up to 200 students. Use class/section/search to narrow very large directories.</p>
+
                 <div className="max-h-80 overflow-y-auto border rounded-xl p-2 space-y-1">
                   {filteredStudentDirectory.length === 0 ? (
                     <p className="text-sm text-muted-foreground p-3">No students match your current search/filter.</p>
@@ -338,7 +382,40 @@ const PaymentPrograms = () => {
         </div>
       </div>
 
-      <FilterBar searchPlaceholder="Search by student, class, or plan…" onSearch={setSearch} />
+      <FilterBar
+        searchPlaceholder="Search by student, consumer #, class, or plan..."
+        onSearch={setSearch}
+        filters={[
+          {
+            key: 'class',
+            label: 'Class',
+            options: allClasses.map((className) => ({ value: className, label: className })),
+          },
+          {
+            key: 'status',
+            label: 'Status',
+            options: [
+              { value: 'active', label: 'Active' },
+              { value: 'pending', label: 'Pending' },
+              { value: 'completed', label: 'Completed' },
+            ],
+          },
+          {
+            key: 'frequency',
+            label: 'Frequency',
+            options: [
+              { value: 'monthly', label: 'Monthly' },
+              { value: 'quarterly', label: 'Quarterly' },
+              { value: 'yearly', label: 'Yearly' },
+            ],
+          },
+        ]}
+        onFilterChange={(key, value) => {
+          if (key === 'class') setAssignmentClassFilter(value);
+          if (key === 'status') setAssignmentStatusFilter(value);
+          if (key === 'frequency') setAssignmentFrequencyFilter(value);
+        }}
+      />
 
       <div className="table-container">
         <div className="px-5 py-3 border-b border-border flex items-center justify-between">
@@ -352,6 +429,7 @@ const PaymentPrograms = () => {
             <TableRow>
               <TableHead className="text-xs font-semibold">Student</TableHead>
               <TableHead className="text-xs font-semibold">Class</TableHead>
+              <TableHead className="text-xs font-semibold">Assigned Via</TableHead>
               <TableHead className="text-xs font-semibold">Consumer #</TableHead>
               <TableHead className="text-xs font-semibold">Plan</TableHead>
               <TableHead className="text-xs font-semibold">Amount</TableHead>
@@ -365,8 +443,9 @@ const PaymentPrograms = () => {
               <TableRow key={a.id} className="hover:bg-muted/30">
                 <TableCell className="font-medium text-sm">{a.studentName}</TableCell>
                 <TableCell>
-                  <span className="text-xs font-medium bg-primary/8 text-primary px-2 py-0.5 rounded-md">{a.className}</span>
+                  <span className="text-xs font-medium bg-primary/8 text-primary px-2 py-0.5 rounded-md">{a.className} {a.sectionName}</span>
                 </TableCell>
+                <TableCell><span className="text-xs capitalize bg-muted px-2 py-0.5 rounded-md">{a.assignedVia}</span></TableCell>
                 <TableCell className="font-mono text-[11px] text-muted-foreground">{a.consumerNumber}</TableCell>
                 <TableCell className="text-sm">{a.planName}</TableCell>
                 <TableCell className="text-sm font-mono">₨ {a.amount.toLocaleString()}</TableCell>
