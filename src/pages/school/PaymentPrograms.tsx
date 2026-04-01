@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/StatusBadge';
 import { FilterBar } from '@/components/FilterBar';
 import { toast } from 'sonner';
-import { Plus, GraduationCap, CheckCircle2, Search } from 'lucide-react';
+import { Plus, GraduationCap, CheckCircle2, Search, Pencil, Trash2 } from 'lucide-react';
 
 const allClasses = ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
 
@@ -43,6 +43,9 @@ const PaymentPrograms = () => {
   const [search, setSearch] = useState('');
   const [classAssignOpen, setClassAssignOpen] = useState(false);
   const [singleAssignOpen, setSingleAssignOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editAssignment, setEditAssignment] = useState<PaymentAssignment | null>(null);
+  const [editForm, setEditForm] = useState({ planId: '' });
   const [selectedClassPlan, setSelectedClassPlan] = useState('');
   const [selectedIndividualPlan, setSelectedIndividualPlan] = useState('');
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
@@ -197,6 +200,38 @@ const PaymentPrograms = () => {
   };
 
   const totalStudentsSelected = selectedClasses.reduce((acc, cls) => acc + (classCounts[cls] || 0), 0);
+
+  const openEdit = (assignment: PaymentAssignment) => {
+    setEditAssignment(assignment);
+    const planMatch = feePlans.find((p) => p.name === assignment.planName);
+    setEditForm({ planId: planMatch?.id || '' });
+    setEditOpen(true);
+  };
+
+  const saveEdit = () => {
+    if (!editAssignment) return;
+    const plan = feePlans.find((p) => p.id === editForm.planId);
+    if (!plan) {
+      toast.error('Choose a fee plan');
+      return;
+    }
+    setAssignments((prev) => prev.map((a) => (a.id === editAssignment.id ? {
+      ...a,
+      planName: plan.name,
+      amount: plan.amount,
+      frequency: plan.frequency,
+      status: a.status,
+      nextDue: a.nextDue,
+    } : a)));
+    toast.success('Assignment updated');
+    setEditOpen(false);
+    setEditAssignment(null);
+  };
+
+  const deleteAssignment = (id: string) => {
+    setAssignments((prev) => prev.filter((a) => a.id !== id));
+    toast.success('Assignment removed');
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -436,6 +471,7 @@ const PaymentPrograms = () => {
               <TableHead className="text-xs font-semibold">Frequency</TableHead>
               <TableHead className="text-xs font-semibold">Status</TableHead>
               <TableHead className="text-xs font-semibold">Next Due</TableHead>
+              <TableHead className="text-xs font-semibold text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -452,11 +488,46 @@ const PaymentPrograms = () => {
                 <TableCell className="text-sm capitalize">{a.frequency}</TableCell>
                 <TableCell><StatusBadge status={a.status} /></TableCell>
                 <TableCell className="text-sm text-muted-foreground">{a.nextDue}</TableCell>
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => openEdit(a)}>
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-destructive" onClick={() => deleteAssignment(a.id)}>
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Edit Assignment</DialogTitle></DialogHeader>
+          {editAssignment && (
+            <div className="space-y-3">
+              <div>
+                <Label className="text-xs font-semibold">Fee Plan</Label>
+                <Select value={editForm.planId} onValueChange={(value) => setEditForm({ ...editForm, planId: value })}>
+                  <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Choose a plan" /></SelectTrigger>
+                  <SelectContent>
+                    {feePlans.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name} — ₨ {p.amount.toLocaleString()} / {p.frequency}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="ghost" className="rounded-lg" onClick={() => { setEditOpen(false); setEditAssignment(null); }}>Cancel</Button>
+                <Button className="rounded-lg" onClick={saveEdit} disabled={!editForm.planId}>Save</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

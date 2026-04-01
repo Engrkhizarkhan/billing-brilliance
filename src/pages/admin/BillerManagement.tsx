@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { billers as initialBillers } from '@/data/mockData';
+import { useEffect, useState } from 'react';
 import { Biller } from '@/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { FilterBar } from '@/components/FilterBar';
@@ -10,42 +9,57 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Plus, Eye, Pencil, PauseCircle, Ban } from 'lucide-react';
+import { Plus, Eye, Pencil, PauseCircle, Ban, RefreshCcw } from 'lucide-react';
+import { mockApi } from '@/lib/mockApi';
 
 const BillerManagement = () => {
-  const [billerList, setBillerList] = useState<Biller[]>(initialBillers);
+  const [billerList, setBillerList] = useState<Biller[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({ name: '', type: 'school' as Biller['type'], email: '', phone: '' });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      const response = await mockApi.fetchBillers({});
+      setBillerList(response.data);
+      setLoading(false);
+    };
+    load();
+  }, []);
 
   const filtered = billerList.filter((b) => {
     const matchSearch = b.name.toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === 'all' || b.status === statusFilter;
-    return matchSearch && matchStatus;
+    const matchType = typeFilter === 'all' || b.type === typeFilter;
+    return matchSearch && matchStatus && matchType;
   });
 
-  const handleCreate = () => {
-    const code = String(1000 + billerList.length + 1);
-    const newBiller: Biller = {
-      id: String(billerList.length + 1),
-      name: form.name,
-      type: form.type,
-      billerCode: code,
-      email: form.email,
-      phone: form.phone,
-      status: 'active',
-      createdAt: new Date().toISOString().split('T')[0],
-    };
-    setBillerList([...billerList, newBiller]);
+  const handleCreate = async () => {
+    if (!form.name || !form.email || !form.phone) {
+      toast.error('Name, email, and phone are required');
+      return;
+    }
+    setLoading(true);
+    const response = await mockApi.createBiller({ name: form.name, email: form.email, phone: form.phone, type: form.type });
+    setBillerList((prev) => [...prev, response.data]);
     setDialogOpen(false);
     setForm({ name: '', type: 'school', email: '', phone: '' });
-    toast.success(`Biller "${form.name}" created with code ${code}`);
+    toast.success(`Biller "${response.data.name}" created with code ${response.data.billerCode}`);
+    setLoading(false);
   };
 
-  const updateStatus = (id: string, status: Biller['status']) => {
-    setBillerList(billerList.map((b) => (b.id === id ? { ...b, status } : b)));
-    toast.success(`Biller status updated to ${status}`);
+  const updateStatus = async (id: string, status: Biller['status']) => {
+    setLoading(true);
+    const updated = await mockApi.updateBillerStatus(id, status);
+    if (updated.data) {
+      setBillerList((prev) => prev.map((b) => (b.id === id ? updated.data : b)));
+      toast.success(`Biller status updated to ${status}`);
+    }
+    setLoading(false);
   };
 
   return (
@@ -53,11 +67,11 @@ const BillerManagement = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-header">Biller Management</h1>
-          <p className="page-description">Manage billers and organizations</p>
+          <p className="page-description">Manage billers and organizations. New schools get auto-generated biller codes.</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button><Plus className="w-4 h-4 mr-2" />Create New Biller</Button>
+            <Button disabled={loading}><Plus className="w-4 h-4 mr-2" />Create New Biller</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Create New Biller</DialogTitle></DialogHeader>
@@ -76,7 +90,7 @@ const BillerManagement = () => {
               </div>
               <div><Label>Email</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
               <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
-              <Button onClick={handleCreate} className="w-full">Create Biller</Button>
+              <Button onClick={handleCreate} className="w-full" disabled={loading}>Create Biller</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -85,17 +99,35 @@ const BillerManagement = () => {
       <FilterBar
         searchPlaceholder="Search billers..."
         onSearch={setSearch}
-        filters={[{
-          key: 'status',
-          label: 'Status',
-          options: [
-            { value: 'active', label: 'Active' },
-            { value: 'suspended', label: 'Suspended' },
-            { value: 'banned', label: 'Banned' },
-          ],
-        }]}
-        onFilterChange={(_, v) => setStatusFilter(v)}
+        filters={[
+          {
+            key: 'status',
+            label: 'Status',
+            options: [
+              { value: 'active', label: 'Active' },
+              { value: 'suspended', label: 'Suspended' },
+              { value: 'banned', label: 'Banned' },
+            ],
+          },
+          {
+            key: 'type',
+            label: 'Type',
+            options: [
+              { value: 'school', label: 'School' },
+              { value: 'eta', label: 'ETA' },
+              { value: 'private_agency', label: 'Private Agency' },
+            ],
+          },
+        ]}
+        onFilterChange={(key, v) => {
+          if (key === 'status') setStatusFilter(v);
+          if (key === 'type') setTypeFilter(v);
+        }}
       />
+
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <RefreshCcw className="w-3.5 h-3.5" /> Data is session-only mock. Codes auto-increment and statuses persist in-memory.
+      </div>
 
       <div className="table-container">
         <Table>
@@ -104,6 +136,9 @@ const BillerManagement = () => {
               <TableHead>Biller Name</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Code</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead>Phone</TableHead>
+              <TableHead>Created</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
@@ -114,6 +149,9 @@ const BillerManagement = () => {
                 <TableCell className="font-medium">{b.name}</TableCell>
                 <TableCell className="capitalize">{b.type.replace('_', ' ')}</TableCell>
                 <TableCell className="font-mono">{b.billerCode}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{b.email}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{b.phone}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{b.createdAt}</TableCell>
                 <TableCell><StatusBadge status={b.status} /></TableCell>
                 <TableCell>
                   <div className="flex gap-1">
@@ -127,6 +165,11 @@ const BillerManagement = () => {
                     {b.status !== 'banned' && (
                       <Button variant="ghost" size="sm" onClick={() => updateStatus(b.id, 'banned')}>
                         <Ban className="w-4 h-4 text-destructive" />
+                      </Button>
+                    )}
+                    {b.status !== 'active' && (
+                      <Button variant="ghost" size="sm" onClick={() => updateStatus(b.id, 'active')}>
+                        <RefreshCcw className="w-4 h-4" />
                       </Button>
                     )}
                   </div>

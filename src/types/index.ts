@@ -192,3 +192,72 @@ export interface AuditLog {
   timestamp: string;
   ip: string;
 }
+
+export type BillStatus = 'paid' | 'unpaid' | 'partial' | 'overdue';
+
+export type PaymentChannel = 'jazzcash' | 'easypaisa' | 'bank_app' | 'atm' | 'counter' | 'cash_offline';
+
+export interface BillInquiryRequest {
+  consumerNumber: string;
+  studentRef?: string;
+  voucherNumber?: string;
+  billerCode?: string;
+}
+
+export interface BillInquiryResponse {
+  found: boolean;
+  studentId?: string;
+  studentName?: string;
+  className?: string;
+  section?: string;
+  billId?: string;
+  consumerNumber?: string;
+  invoiceNumber?: string;
+  amount?: number;
+  dueDate?: string;
+  status?: BillStatus | 'not_found';
+  billerCode?: string;
+  billerName?: string;
+  currency?: string;
+  message?: string;
+}
+
+export interface BillPaymentRequest {
+  consumerNumber: string;
+  amount: number;
+  transactionId: string;
+  paidAt: string;
+  channel: PaymentChannel;
+  voucherNumber?: string;
+  billerCode?: string;
+  notes?: string;
+}
+
+export interface BillPaymentResult {
+  receiptNumber: string;
+  status: BillStatus;
+  amount: number;
+  paidAt: string;
+  consumerNumber: string;
+  reference: string;
+  invoiceNumber?: string;
+  studentId?: string;
+  billId?: string;
+  billerName?: string;
+  notes?: string;
+}
+
+export interface BundlePackage {
+  code: string;
+  name: string;
+  amount: number;
+  frequency: 'monthly' | 'quarterly' | 'yearly' | 'one-time';
+  description: string;
+  dueDay?: number;
+  lateFee?: number;
+}
+
+export interface FetchBundleResponse {
+  bundles: BundlePackage[];
+  fetchedAt: string;
+}

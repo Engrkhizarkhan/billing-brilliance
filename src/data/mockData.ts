@@ -14,6 +14,8 @@ import {
   StudentRiskTier,
   StudentScholarshipAssignment,
   Transaction,
+  BillStatus,
+  BundlePackage,
 } from '@/types';
 
 const FINTECH_PREFIX = '123456';
@@ -94,6 +96,30 @@ export const updateStudentBusService = (studentId: string, updates: StudentBusSe
   return students[index];
 };
 
+export type RuntimeBillPayment = {
+  id: string;
+  studentId: string;
+  consumerNumber: string;
+  amount: number;
+  date: string;
+  reference: string;
+  voucherNumber?: string;
+  channel?: string;
+  note?: string;
+};
+
+const runtimeBillPayments: RuntimeBillPayment[] = [];
+
+export const recordRuntimeBillPayment = (payment: RuntimeBillPayment) => {
+  runtimeBillPayments.push(payment);
+  return payment;
+};
+
+export const getRuntimeBillPayments = () => runtimeBillPayments;
+
+export const findStudentByConsumerNumber = (consumerNumber: string) =>
+  students.find((student) => student.consumerNumber === consumerNumber);
+
 const invoiceMonths = ['Jan 2025', 'Feb 2025', 'Mar 2025'];
 
 export const invoices: Invoice[] = Array.from({ length: 30 }, (_, i) => ({
@@ -107,6 +133,27 @@ export const invoices: Invoice[] = Array.from({ length: 30 }, (_, i) => ({
   dueDate: `2025-0${(i % 3) + 1}-10`,
   billerId: students[i % students.length].billerId,
 }));
+
+export const findInvoiceForConsumer = (consumerNumber: string, voucherNumber?: string): Invoice | undefined => {
+  if (voucherNumber) {
+    const byVoucher = invoices.find((invoice) => invoice.invoiceNumber === voucherNumber || invoice.id === voucherNumber);
+    if (byVoucher) return byVoucher;
+  }
+  return invoices.find((invoice) => invoice.consumerNumber === consumerNumber);
+};
+
+export const markInvoiceStatus = (invoice: Invoice, status: BillStatus) => {
+  if (status === 'paid') {
+    invoice.status = 'paid';
+    return invoice;
+  }
+  if (status === 'overdue') {
+    invoice.status = 'overdue';
+    return invoice;
+  }
+  invoice.status = 'pending';
+  return invoice;
+};
 
 export const transactions: Transaction[] = Array.from({ length: 20 }, (_, i) => ({
   id: `t${i + 1}`,
@@ -151,6 +198,14 @@ export const feePlans: FeePlan[] = [
   { id: 'fp2', name: 'Premium Monthly', amount: 25000, frequency: 'monthly', dueDay: 5, lateFee: 1000 },
   { id: 'fp3', name: 'Quarterly Plan', amount: 42000, frequency: 'quarterly', dueDay: 1, lateFee: 1500 },
   { id: 'fp4', name: 'Annual Plan', amount: 150000, frequency: 'yearly', dueDay: 15, lateFee: 5000 },
+];
+
+export const billBundles: BundlePackage[] = [
+  { code: 'BASIC_MONTHLY', name: 'Monthly Tuition', amount: 15000, frequency: 'monthly', description: 'Standard monthly tuition with 10th due date', dueDay: 10, lateFee: 500 },
+  { code: 'TRANSPORT_ADDON', name: 'Transport Fee', amount: 1500, frequency: 'monthly', description: 'Bus/van service add-on', dueDay: 10 },
+  { code: 'EXAM_FEE', name: 'Exam Fee (Quarterly)', amount: 3000, frequency: 'quarterly', description: 'Quarterly exam fee', dueDay: 1, lateFee: 300 },
+  { code: 'HOSTEL_MONTHLY', name: 'Hostel Fee', amount: 12000, frequency: 'monthly', description: 'Hostel accommodation monthly fee', dueDay: 5, lateFee: 800 },
+  { code: 'ANNUAL_PLAN', name: 'Annual Plan', amount: 150000, frequency: 'yearly', description: 'Yearly lump sum plan with bundled discount', dueDay: 15, lateFee: 5000 },
 ];
 
 export const feeHeads: FeeHead[] = [
@@ -366,6 +421,42 @@ const generateLedgerState = (studentId: string): GeneratedLedgerState => {
       balance: runningBalance,
       billId: student.billId,
       reference: `TXN-${100001 + studentOrdinal(studentId) + monthIndex}`,
+      entryType: 'payment',
+      allocations,
+    });
+  });
+
+  const postedPayments = runtimeBillPayments.filter((payment) => payment.studentId === studentId).sort((a, b) => b.date.localeCompare(a.date));
+  postedPayments.forEach((payment) => {
+    let remaining = payment.amount;
+    const allocations: { monthKey: string; amount: number }[] = [];
+
+    ledgerMonthKeys.forEach((monthKey) => {
+      if (remaining <= 0) return;
+      const outstanding = monthBalances[monthKey] || 0;
+      if (outstanding <= 0) return;
+      const applied = Math.min(outstanding, remaining);
+      monthBalances[monthKey] = Math.max(0, outstanding - applied);
+      remaining -= applied;
+      allocations.push({ monthKey, amount: applied });
+    });
+
+    const appliedAmount = payment.amount - remaining;
+    if (appliedAmount <= 0) return;
+
+    runningBalance = Math.max(0, runningBalance - appliedAmount);
+    lastPaymentDate = payment.date;
+
+    entries.push({
+      id: `le-runtime-${payment.id}`,
+      studentId,
+      date: payment.date,
+      description: payment.note || 'Payment via 1Bill (posted)',
+      debit: 0,
+      credit: appliedAmount,
+      balance: runningBalance,
+      billId: student.billId,
+      reference: payment.reference,
       entryType: 'payment',
       allocations,
     });

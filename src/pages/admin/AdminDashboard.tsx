@@ -1,17 +1,39 @@
 import { StatCard } from '@/components/StatCard';
 import { StatusBadge } from '@/components/StatusBadge';
-import { DollarSign, CreditCard, Clock, AlertTriangle, Building2, Ban, TrendingUp, Activity } from 'lucide-react';
-import { billers, revenueData, paymentSuccessData, transactionVolumeData, transactions } from '@/data/mockData';
+import { DollarSign, CreditCard, Clock, AlertTriangle, Building2, TrendingUp, Activity, Shield, FileText } from 'lucide-react';
+import { billers, revenueData, paymentSuccessData, transactionVolumeData, transactions, students, invoices } from '@/data/mockData';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { usePaymentStore } from '@/store/paymentStore';
+import { useMemo } from 'react';
 
 const AdminDashboard = () => {
+  const paymentVersion = usePaymentStore((state) => state.version);
+  const recentTransactions = useMemo(() => transactions.slice(0, 5), [paymentVersion]);
+  const tenantSummary = useMemo(() => {
+    return billers.map((biller) => {
+      const studentCount = students.filter((s) => s.billerId === biller.id).length;
+      const invoiceCount = invoices.filter((inv) => inv.billerId === biller.id).length;
+      const txnCount = transactions.filter((t) => t.billerName === biller.name).length;
+      const revenue = invoices
+        .filter((inv) => inv.billerId === biller.id && inv.status === 'paid')
+        .reduce((sum, inv) => sum + inv.amount, 0);
+      return { ...biller, studentCount, invoiceCount, txnCount, revenue };
+    });
+  }, []);
+
+  const totals = useMemo(() => ({
+    tenants: billers.length,
+    activeTenants: billers.filter((b) => b.status === 'active').length,
+    students: students.length,
+    invoices: invoices.length,
+  }), []);
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-header">Dashboard</h1>
-          <p className="page-description">Overview of your fintech billing platform</p>
+          <p className="page-description">Multi-tenant control plane for schools on the platform</p>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Activity className="w-3.5 h-3.5 text-success" />
@@ -22,12 +44,47 @@ const AdminDashboard = () => {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+        <StatCard title="Tenants" value={totals.tenants.toString()} icon={Building2} trend={`${totals.activeTenants} active`} trendUp />
+        <StatCard title="Students" value={totals.students.toString()} icon={Shield} trend="Across all tenants" trendUp />
+        <StatCard title="Invoices" value={totals.invoices.toString()} icon={FileText} trend="Cross-tenant" trendUp />
         <StatCard title="Total Revenue" value="₨ 7.9M" icon={DollarSign} trend="12% vs last month" trendUp />
         <StatCard title="Total Payments" value="3,410" icon={CreditCard} trend="8% vs last month" trendUp />
-        <StatCard title="Pending" value="₨ 1.2M" icon={Clock} />
         <StatCard title="Overdue" value="₨ 450K" icon={AlertTriangle} trend="3% increase" trendUp={false} />
-        <StatCard title="Active Billers" value={billers.filter(b => b.status === 'active').length} icon={Building2} />
-        <StatCard title="Banned Users" value="2" icon={Ban} />
+      </div>
+
+      <div className="dashboard-card">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="section-title">Tenant health</h3>
+          <span className="text-[11px] text-muted-foreground">{totals.tenants} tenants • {totals.students} students</span>
+        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="text-xs">Tenant</TableHead>
+              <TableHead className="text-xs">Type</TableHead>
+              <TableHead className="text-xs">Code</TableHead>
+              <TableHead className="text-xs">Students</TableHead>
+              <TableHead className="text-xs">Invoices</TableHead>
+              <TableHead className="text-xs">Txns</TableHead>
+              <TableHead className="text-xs">Paid Revenue</TableHead>
+              <TableHead className="text-xs">Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {tenantSummary.map((tenant) => (
+              <TableRow key={tenant.id}>
+                <TableCell className="font-medium">{tenant.name}</TableCell>
+                <TableCell className="capitalize text-sm">{tenant.type.replace('_', ' ')}</TableCell>
+                <TableCell className="font-mono text-xs">{tenant.billerCode}</TableCell>
+                <TableCell className="font-mono text-sm">{tenant.studentCount}</TableCell>
+                <TableCell className="font-mono text-sm">{tenant.invoiceCount}</TableCell>
+                <TableCell className="font-mono text-sm">{tenant.txnCount}</TableCell>
+                <TableCell className="font-mono text-sm">₨ {tenant.revenue.toLocaleString()}</TableCell>
+                <TableCell><StatusBadge status={tenant.status} /></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -104,7 +161,7 @@ const AdminDashboard = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {transactions.slice(0, 5).map((t) => (
+            {recentTransactions.map((t) => (
               <TableRow key={t.id} className="hover:bg-muted/30">
                 <TableCell className="font-mono text-xs">{t.transactionId}</TableCell>
                 <TableCell className="font-mono text-[11px] text-muted-foreground">{t.consumerNumber}</TableCell>

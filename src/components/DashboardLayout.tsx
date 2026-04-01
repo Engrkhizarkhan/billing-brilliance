@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Users, CreditCard, BarChart3, Building2,
   GraduationCap, BookOpen, Award, Receipt, Wallet, Briefcase, UserPlus,
   LogOut, Menu, X, DollarSign, ChevronRight, Settings, Sun, Moon,
-  AlertTriangle, FileText, Shield, ClipboardList, Megaphone, UserCheck,
+  AlertTriangle, FileText, Shield, ClipboardList, Megaphone, UserCheck, Activity,
   Ticket, Trophy, MapPin
 } from 'lucide-react';
 import { useState } from 'react';
@@ -33,7 +33,7 @@ const navItems: Record<UserRole, NavItem[]> = {
     { label: 'Cash Flow', path: '/admin/cashflow', icon: DollarSign, group: 'Finance' },
     { label: 'Reports', path: '/admin/reports', icon: BarChart3, group: 'Analytics' },
     { label: 'Audit Trail', path: '/admin/audit', icon: ClipboardList, group: 'Analytics' },
-    { label: 'Settings', path: '/admin/settings', icon: Settings, group: 'System' },
+    { label: 'API Health', path: '/admin/api-health', icon: Shield, group: 'System' },
   ],
   school: [
     { label: 'Dashboard', path: '/school', icon: LayoutDashboard, group: 'Overview' },
@@ -45,7 +45,9 @@ const navItems: Record<UserRole, NavItem[]> = {
     { label: 'Defaulters', path: '/school/defaulters', icon: AlertTriangle, group: 'Finance' },
     { label: 'Payment Programs', path: '/school/payment-programs', icon: CreditCard, group: 'Finance' },
     { label: 'Payments', path: '/school/payments', icon: Wallet, group: 'Finance' },
+    { label: 'Real-Time Payments', path: '/school/realtime-payments', icon: Activity, group: 'Finance' },
     { label: 'Reports', path: '/school/reports', icon: BarChart3, group: 'Analytics' },
+    { label: 'Login Activity', path: '/school/login-activity', icon: Shield, group: 'System' },
     { label: 'Settings', path: '/school/settings', icon: Settings, group: 'System' },
   ],
   eta: [
@@ -98,7 +100,7 @@ const DashboardLayout = () => {
   }, {});
 
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="h-screen overflow-hidden flex bg-background">
       {/* Session timeout warning */}
       <Dialog open={showWarning} onOpenChange={() => {}}>
         <DialogContent className="max-w-sm">
@@ -115,7 +117,7 @@ const DashboardLayout = () => {
         <div className="fixed inset-0 bg-foreground/20 backdrop-blur-sm z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
-      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-[260px] bg-sidebar text-sidebar-foreground flex flex-col transition-transform duration-300 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <aside className={`fixed lg:static inset-y-0 left-0 z-50 h-screen w-[260px] bg-sidebar text-sidebar-foreground flex flex-col transition-transform duration-300 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="h-16 px-5 flex items-center gap-3 border-b border-sidebar-border">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
             <Building2 className="w-4 h-4 text-primary-foreground" />
@@ -129,7 +131,7 @@ const DashboardLayout = () => {
           </button>
         </div>
 
-        <nav className="flex-1 py-2 px-3 overflow-y-auto">
+        <nav className="thin-scrollbar flex-1 py-2 px-3 overflow-y-auto">
           {Object.entries(groups).map(([group, groupItems]) => (
             <div key={group} className="mb-1">
               <p className="text-[10px] font-semibold text-sidebar-muted uppercase tracking-[0.1em] px-3 mb-1 mt-3 first:mt-1">{group}</p>
@@ -174,7 +176,7 @@ const DashboardLayout = () => {
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 h-screen flex flex-col min-w-0 overflow-hidden">
         <header className="h-14 border-b bg-card flex items-center px-4 md:px-6 gap-3 sticky top-0 z-30 shadow-sm shadow-foreground/[0.02]">
           <button className="lg:hidden p-2 hover:bg-muted rounded-lg" onClick={() => setSidebarOpen(true)}>
             <Menu className="w-5 h-5 text-foreground" />
@@ -203,7 +205,7 @@ const DashboardLayout = () => {
             {user.name.charAt(0)}
           </div>
         </header>
-        <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-auto">
+        <main className="thin-scrollbar flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto">
           <Outlet />
         </main>
       </div>

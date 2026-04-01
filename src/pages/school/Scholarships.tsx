@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { scholarships as initialScholarships, studentScholarshipAssignments as initialAssignments, students as studentDirectory } from '@/data/mockData';
 import { Scholarship, StudentScholarshipAssignment } from '@/types';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { Plus, Power, RotateCcw, UserPlus, X, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Power, UserPlus, X, Search } from 'lucide-react';
 
 const Scholarships = () => {
   const [list, setList] = useState<Scholarship[]>(initialScholarships);
@@ -18,6 +18,9 @@ const Scholarships = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [studentLookup, setStudentLookup] = useState('');
+  const [expandedScholarshipId, setExpandedScholarshipId] = useState<string | null>(null);
+  const [assignmentSearchTerm, setAssignmentSearchTerm] = useState('');
+  const [assignmentClassFilter, setAssignmentClassFilter] = useState('all');
   const [form, setForm] = useState({ name: '', type: 'percentage' as Scholarship['type'], value: '', startDate: '', endDate: '', isLifetime: false });
   const [assignmentForm, setAssignmentForm] = useState({
     scholarshipId: '',
@@ -83,6 +86,31 @@ const Scholarships = () => {
       .sort((a, b) => a.student.class.localeCompare(b.student.class) || a.student.name.localeCompare(b.student.name));
   }, [activeAssignments, list]);
 
+  const assignmentRowsByScholarship = useMemo(() => {
+    const map: Record<string, typeof assignmentRows> = {};
+    assignmentRows.forEach((row) => {
+      if (!map[row.scholarship.id]) map[row.scholarship.id] = [];
+      map[row.scholarship.id].push(row);
+    });
+    return map;
+  }, [assignmentRows]);
+
+  const activeScholarshipsWithAssignments = useMemo(() => {
+    return list
+      .filter((scholarship) => scholarship.status === 'active')
+      .map((scholarship) => ({
+        scholarship,
+        assignedCount: assignmentCountByScholarship[scholarship.id] || 0,
+      }));
+  }, [list, assignmentCountByScholarship]);
+
+  const expandedScholarshipClassOptions = useMemo(() => {
+    if (!expandedScholarshipId) return [];
+    return Array.from(
+      new Set((assignmentRowsByScholarship[expandedScholarshipId] || []).map((row) => row.student.class))
+    ).sort((a, b) => Number(a.replace(/\D/g, '')) - Number(b.replace(/\D/g, '')));
+  }, [assignmentRowsByScholarship, expandedScholarshipId]);
+
   const assignmentTargetPreview = useMemo(() => {
     if (assignmentForm.scope === 'student') return assignmentForm.studentId ? 1 : 0;
     return studentDirectory.filter((student) =>
@@ -138,12 +166,6 @@ const Scholarships = () => {
     });
     syncScholarships(next);
     toast.success('Scholarship deactivated');
-  };
-
-  const reactivateScholarship = (id: string) => {
-    const next = list.map((s) => s.id === id ? { ...s, status: 'active' } : s);
-    syncScholarships(next);
-    toast.success('Scholarship reactivated');
   };
 
   const assignScholarship = () => {
@@ -207,6 +229,33 @@ const Scholarships = () => {
     );
     syncAssignments(next);
     toast.success('Scholarship assignment removed');
+  };
+
+  const toggleScholarshipAssignments = (scholarshipId: string) => {
+    setExpandedScholarshipId((current) => {
+      const next = current === scholarshipId ? null : scholarshipId;
+      setAssignmentSearchTerm('');
+      setAssignmentClassFilter('all');
+      return next;
+    });
+  };
+
+  const getFilteredScholarshipStudents = (scholarshipId: string) => {
+    const baseRows = assignmentRowsByScholarship[scholarshipId] || [];
+    const query = assignmentSearchTerm.trim().toLowerCase();
+
+    return baseRows.filter((row) => {
+      const matchesSearch =
+        !query ||
+        row.student.name.toLowerCase().includes(query) ||
+        row.student.rollNumber.toLowerCase().includes(query) ||
+        row.student.cnic.includes(assignmentSearchTerm) ||
+        row.student.consumerNumber.includes(assignmentSearchTerm);
+
+      const matchesClass = assignmentClassFilter === 'all' || row.student.class === assignmentClassFilter;
+
+      return matchesSearch && matchesClass;
+    });
   };
 
   return (
@@ -380,6 +429,10 @@ const Scholarships = () => {
       </div>
 
       <div className="table-container">
+        <div className="px-5 py-3 border-b border-border flex items-center justify-between">
+          <p className="text-sm font-semibold">Active Scholarship Assignments</p>
+          <p className="text-xs text-muted-foreground">{assignmentRows.length} mapped students</p>
+        </div>
         <Table>
           <TableHeader>
             <TableRow>
@@ -393,67 +446,113 @@ const Scholarships = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {list.map((s) => (
-              <TableRow key={s.id}>
-                <TableCell className="font-medium">{s.name}</TableCell>
-                <TableCell className="capitalize">{s.type}</TableCell>
-                <TableCell>{s.type === 'percentage' ? `${s.value}%` : `₨ ${s.value.toLocaleString()}`}</TableCell>
-                <TableCell className="text-sm">{s.isLifetime ? 'Lifetime (until deactivated)' : `${s.startDate} to ${s.endDate || '-'}`}</TableCell>
-                <TableCell className="font-mono text-sm">{assignmentCountByScholarship[s.id] || 0}</TableCell>
-                <TableCell><StatusBadge status={s.status} /></TableCell>
-                <TableCell>
-                  {s.status === 'active' ? (
-                    <Button variant="outline" size="sm" className="h-8" onClick={() => deactivateScholarship(s.id)}>
-                      <Power className="w-3.5 h-3.5 mr-1.5" />Deactivate
-                    </Button>
-                  ) : (
-                    <Button variant="ghost" size="sm" className="h-8" onClick={() => reactivateScholarship(s.id)}>
-                      <RotateCcw className="w-3.5 h-3.5 mr-1.5" />Reactivate
-                    </Button>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-
-      <div className="table-container">
-        <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-          <p className="text-sm font-semibold">Active Scholarship Assignments</p>
-          <p className="text-xs text-muted-foreground">{assignmentRows.length} mapped students</p>
-        </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Student</TableHead>
-              <TableHead>Class</TableHead>
-              <TableHead>Scholarship</TableHead>
-              <TableHead>Effective From</TableHead>
-              <TableHead>Action</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {assignmentRows.length === 0 ? (
+            {activeScholarshipsWithAssignments.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-8">
-                  No active scholarship assignments yet.
+                <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-8">
+                  No active scholarships available.
                 </TableCell>
               </TableRow>
             ) : (
-              assignmentRows.map((row) => (
-                <TableRow key={row.assignment.id}>
-                  <TableCell className="font-medium">{row.student.name}</TableCell>
-                  <TableCell>{row.student.class} {row.student.section}</TableCell>
-                  <TableCell>{row.scholarship.name}</TableCell>
-                  <TableCell>{row.assignment.effectiveFrom}</TableCell>
-                  <TableCell>
-                    <Button variant="ghost" size="sm" className="h-8 text-destructive" onClick={() => unassignScholarship(row.assignment.id)}>
-                      <X className="w-3.5 h-3.5 mr-1.5" />Unassign
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
+              activeScholarshipsWithAssignments.map(({ scholarship, assignedCount }) => {
+                const isExpanded = expandedScholarshipId === scholarship.id;
+                const filteredRows = isExpanded ? getFilteredScholarshipStudents(scholarship.id) : [];
+                return (
+                  <Fragment key={scholarship.id}>
+                    <TableRow>
+                      <TableCell className="font-medium">{scholarship.name}</TableCell>
+                      <TableCell className="capitalize">{scholarship.type}</TableCell>
+                      <TableCell>{scholarship.type === 'percentage' ? `${scholarship.value}%` : `₨ ${scholarship.value.toLocaleString()}`}</TableCell>
+                      <TableCell className="text-sm">{scholarship.isLifetime ? 'Lifetime (until deactivated)' : `${scholarship.startDate} to ${scholarship.endDate || '-'}`}</TableCell>
+                      <TableCell className="font-mono text-sm">{assignedCount}</TableCell>
+                      <TableCell><StatusBadge status={scholarship.status} /></TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2 justify-end">
+                          <Button variant="outline" size="sm" className="h-8" onClick={() => deactivateScholarship(scholarship.id)}>
+                            <Power className="w-3.5 h-3.5 mr-1.5" />Deactivate
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => toggleScholarshipAssignments(scholarship.id)}
+                            aria-label={isExpanded ? 'Collapse assigned students' : 'Expand assigned students'}
+                          >
+                            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+
+                    {isExpanded && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="bg-muted/30 py-4">
+                          <div className="space-y-4 px-1">
+                            <div className="flex flex-col md:flex-row gap-2">
+                              <div className="relative flex-1">
+                                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                <Input
+                                  value={assignmentSearchTerm}
+                                  className="pl-10 h-10 rounded-xl bg-background"
+                                  placeholder="Search assigned students by name, roll #, CNIC, or consumer #"
+                                  onChange={(e) => setAssignmentSearchTerm(e.target.value)}
+                                />
+                              </div>
+                              <div className="w-full md:w-56">
+                                <Select value={assignmentClassFilter} onValueChange={setAssignmentClassFilter}>
+                                  <SelectTrigger className="h-10 rounded-xl bg-background"><SelectValue placeholder="Filter class" /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="all">All Classes</SelectItem>
+                                    {expandedScholarshipClassOptions.map((className) => (
+                                      <SelectItem key={className} value={className}>{className}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Student</TableHead>
+                                  <TableHead>Class</TableHead>
+                                  <TableHead>Roll #</TableHead>
+                                  <TableHead>Effective From</TableHead>
+                                  <TableHead>Status</TableHead>
+                                  <TableHead className="text-right">Action</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {filteredRows.length === 0 ? (
+                                  <TableRow>
+                                    <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-6">
+                                      No assigned students match your filters.
+                                    </TableCell>
+                                  </TableRow>
+                                ) : (
+                                  filteredRows.map((row) => (
+                                    <TableRow key={row.assignment.id}>
+                                      <TableCell className="font-medium">{row.student.name}</TableCell>
+                                      <TableCell>{row.student.class} {row.student.section}</TableCell>
+                                      <TableCell>{row.student.rollNumber}</TableCell>
+                                      <TableCell>{row.assignment.effectiveFrom}</TableCell>
+                                      <TableCell><StatusBadge status={row.assignment.status} /></TableCell>
+                                      <TableCell className="text-right">
+                                        <Button variant="ghost" size="sm" className="h-8 text-destructive" onClick={() => unassignScholarship(row.assignment.id)}>
+                                          <X className="w-3.5 h-3.5 mr-1.5" />Unassign
+                                        </Button>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))
+                                )}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
+                );
+              })
             )}
           </TableBody>
         </Table>

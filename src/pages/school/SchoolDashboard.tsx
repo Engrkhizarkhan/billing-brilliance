@@ -5,11 +5,13 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { useMemo } from 'react';
 import { formatPKR } from '@/lib/formatters';
 import { useNavigate } from 'react-router-dom';
+import { usePaymentStore } from '@/store/paymentStore';
 
 const CHART_COLORS = ['hsl(221, 83%, 53%)', 'hsl(160, 84%, 39%)', 'hsl(38, 92%, 50%)', 'hsl(271, 55%, 55%)', 'hsl(0, 72%, 51%)'];
 
 const SchoolDashboard = () => {
   const navigate = useNavigate();
+  const paymentVersion = usePaymentStore((state) => state.version);
 
   const classSummary = useMemo(() => {
     const map: Record<string, number> = {};
@@ -19,10 +21,10 @@ const SchoolDashboard = () => {
 
   const studentSnapshots = useMemo(
     () => students.map((student) => ({ student, snapshot: getStudentFinancialSnapshot(student.id) })),
-    []
+    [paymentVersion]
   );
 
-  const paymentHistory = useMemo(() => getSchoolPaymentHistory(), []);
+  const paymentHistory = useMemo(() => getSchoolPaymentHistory(), [paymentVersion]);
 
   const latestPaymentDate = paymentHistory[0]?.date || null;
   const latestDayPayments = latestPaymentDate ? paymentHistory.filter((payment) => payment.date === latestPaymentDate) : [];
@@ -50,10 +52,10 @@ const SchoolDashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Collection vs Target */}
+        {/* Monthly Collection */}
         <div className="dashboard-card lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="section-title">Monthly Collection vs Target</h3>
+            <h3 className="section-title">Monthly Collection Trend</h3>
             <span className="metric-change-up">↑ 10%</span>
           </div>
           <ResponsiveContainer width="100%" height={280}>
@@ -63,7 +65,6 @@ const SchoolDashboard = () => {
               <YAxis fontSize={11} tickFormatter={(v) => `${v / 1000}K`} tick={{ fill: 'hsl(220, 9%, 46%)' }} />
               <Tooltip formatter={(v: number) => formatPKR(v)} contentStyle={{ borderRadius: '10px', fontSize: '12px', border: '1px solid hsl(220, 13%, 91%)' }} />
               <Bar dataKey="collected" fill="hsl(160, 84%, 39%)" radius={[4, 4, 0, 0]} name="Collected" />
-              <Bar dataKey="target" fill="hsl(220, 13%, 91%)" radius={[4, 4, 0, 0]} name="Target" />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -123,7 +124,7 @@ const SchoolDashboard = () => {
             </div>
             <div className="rounded-xl bg-primary/5 border border-primary/10 p-4 flex items-start gap-3">
               <TrendingUp className="w-5 h-5 text-primary mt-0.5 shrink-0" />
-              <div><p className="text-sm font-medium">Collection rate improved by 10%</p><p className="text-xs text-muted-foreground mt-1">March collections exceeded target</p></div>
+              <div><p className="text-sm font-medium">Collection rate improved by 10%</p><p className="text-xs text-muted-foreground mt-1">Collections are trending up this month</p></div>
             </div>
           </div>
         </div>

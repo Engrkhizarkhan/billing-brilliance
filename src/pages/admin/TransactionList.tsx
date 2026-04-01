@@ -3,10 +3,14 @@ import { transactions } from '@/data/mockData';
 import { StatusBadge } from '@/components/StatusBadge';
 import { FilterBar } from '@/components/FilterBar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { usePaymentStore } from '@/store/paymentStore';
 
 const TransactionList = () => {
+  const paymentVersion = usePaymentStore((state) => state.version);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  void paymentVersion;
 
   const filtered = transactions.filter((t) => {
     const matchSearch = t.transactionId.toLowerCase().includes(search.toLowerCase()) || t.consumerNumber.includes(search);

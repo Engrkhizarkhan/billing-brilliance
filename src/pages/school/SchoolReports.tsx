@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import { StatCard } from '@/components/StatCard';
 import { revenueData, monthlyCollectionTarget, feeCollectionByHead, invoices, students, getStudentFinancialSnapshot } from '@/data/mockData';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from 'recharts';
-import { Wallet, Target, AlertTriangle, BarChart3 } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
+import { Wallet, AlertTriangle, BarChart3, Receipt } from 'lucide-react';
 import { formatPKR } from '@/lib/formatters';
 
 const CHART_COLORS = ['hsl(221, 83%, 53%)', 'hsl(160, 84%, 39%)', 'hsl(38, 92%, 50%)', 'hsl(271, 55%, 55%)', 'hsl(0, 72%, 51%)'];
@@ -15,8 +15,8 @@ const invoiceStatusData = [
 
 const SchoolReports = () => {
   const totalCollected = monthlyCollectionTarget.reduce((sum, month) => sum + month.collected, 0);
-  const totalTarget = monthlyCollectionTarget.reduce((sum, month) => sum + month.target, 0);
-  const targetGap = totalTarget - totalCollected;
+  const paidInvoiceCount = invoices.filter((invoice) => invoice.status === 'paid').length;
+  const pendingInvoiceCount = invoices.filter((invoice) => invoice.status === 'pending').length;
   const overdueCount = invoices.filter((invoice) => invoice.status === 'overdue').length;
 
   const defaultersByClass = useMemo(() => {
@@ -39,23 +39,21 @@ const SchoolReports = () => {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard title="Total Collected" value={formatPKR(totalCollected)} icon={Wallet} trend="Across selected report period" trendUp />
-        <StatCard title="Collection Target" value={formatPKR(totalTarget)} icon={Target} />
-        <StatCard title="Target Gap" value={formatPKR(Math.max(targetGap, 0))} icon={BarChart3} trend={targetGap > 0 ? 'Needs improvement' : 'Target exceeded'} trendUp={targetGap <= 0} />
+        <StatCard title="Paid Invoices" value={paidInvoiceCount} icon={BarChart3} trend="Invoices settled" trendUp />
+        <StatCard title="Pending Invoices" value={pendingInvoiceCount} icon={Receipt} trend="Awaiting payment" />
         <StatCard title="Overdue Invoices" value={overdueCount} icon={AlertTriangle} trend="Requires follow-up" trendUp={false} />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <div className="dashboard-card">
-          <h3 className="font-semibold mb-4">Monthly Collection vs Target</h3>
+          <h3 className="font-semibold mb-4">Monthly Collection Trend</h3>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={monthlyCollectionTarget}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(214, 32%, 91%)" />
               <XAxis dataKey="month" fontSize={12} />
               <YAxis fontSize={12} tickFormatter={(v) => `${v / 1000}K`} />
               <Tooltip formatter={(v: number) => [formatPKR(v), 'Amount']} />
-              <Legend />
               <Bar dataKey="collected" fill="hsl(160, 84%, 39%)" radius={[4, 4, 0, 0]} name="Collected" />
-              <Bar dataKey="target" fill="hsl(221, 83%, 53%)" radius={[4, 4, 0, 0]} name="Target" />
             </BarChart>
           </ResponsiveContainer>
         </div>

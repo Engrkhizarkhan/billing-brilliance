@@ -5,14 +5,18 @@ import { ExportButton } from '@/components/ExportButton';
 import { TablePagination } from '@/components/TablePagination';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ClipboardList, Plus, Pencil, Trash2, CreditCard } from 'lucide-react';
+import { usePaymentStore } from '@/store/paymentStore';
 
 const actionIcons: Record<string, React.ElementType> = { create: Plus, update: Pencil, delete: Trash2, payment: CreditCard };
 const actionColors: Record<string, string> = { create: 'bg-success/10 text-success', update: 'bg-primary/10 text-primary', delete: 'bg-destructive/10 text-destructive', payment: 'bg-warning/10 text-warning' };
 
 const AuditTrail = () => {
+  const paymentVersion = usePaymentStore((state) => state.version);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+
+  void paymentVersion;
 
   const filtered = auditLogs.filter(l => l.details.toLowerCase().includes(search.toLowerCase()) || l.userName.toLowerCase().includes(search.toLowerCase()));
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);

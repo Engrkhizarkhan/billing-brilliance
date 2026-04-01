@@ -17,9 +17,12 @@ import FeeLedger from "./pages/school/FeeLedger";
 import Scholarships from "./pages/school/Scholarships";
 import InvoiceList from "./pages/school/InvoiceList";
 import SchoolPayments from "./pages/school/SchoolPayments";
+import RealTimePayments from "./pages/school/RealTimePayments";
 import SchoolReports from "./pages/school/SchoolReports";
 import PaymentPrograms from "./pages/school/PaymentPrograms";
 import Defaulters from "./pages/school/Defaulters";
+import SchoolSettings from "./pages/school/SchoolSettings";
+import LoginActivity from "./pages/school/LoginActivity";
 import ETADashboard from "./pages/eta/ETADashboard";
 import ServiceList from "./pages/eta/ServiceList";
 import ApplicantList from "./pages/eta/ApplicantList";
@@ -28,7 +31,12 @@ import ETAInvoices from "./pages/eta/ETAInvoices";
 import ETAPayments from "./pages/eta/ETAPayments";
 import ETAReports from "./pages/eta/ETAReports";
 import ETAPaymentPrograms from "./pages/eta/ETAPaymentPrograms";
+import RollAssignment from "./pages/eta/RollAssignment";
+import AdmitCards from "./pages/eta/AdmitCards";
+import Results from "./pages/eta/Results";
+import ETASettings from "./pages/eta/ETASettings";
 import AuditTrail from "./pages/admin/AuditTrail";
+import ApiHealth from "./pages/admin/ApiHealth";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -50,6 +58,7 @@ const App = () => (
             <Route path="cashflow" element={<CashFlow />} />
             <Route path="reports" element={<Reports />} />
             <Route path="audit" element={<AuditTrail />} />
+            <Route path="api-health" element={<ApiHealth />} />
           </Route>
 
           <Route path="/school" element={<DashboardLayout />}>
@@ -62,8 +71,11 @@ const App = () => (
             <Route path="invoices" element={<InvoiceList />} />
             <Route path="defaulters" element={<Defaulters />} />
             <Route path="payments" element={<SchoolPayments />} />
+            <Route path="realtime-payments" element={<RealTimePayments />} />
             <Route path="payment-programs" element={<PaymentPrograms />} />
             <Route path="reports" element={<SchoolReports />} />
+            <Route path="login-activity" element={<LoginActivity />} />
+            <Route path="settings" element={<SchoolSettings />} />
           </Route>
 
           <Route path="/eta" element={<DashboardLayout />}>
@@ -75,6 +87,10 @@ const App = () => (
             <Route path="invoices" element={<ETAInvoices />} />
             <Route path="payments" element={<ETAPayments />} />
             <Route path="reports" element={<ETAReports />} />
+            <Route path="roll-assignment" element={<RollAssignment />} />
+            <Route path="admit-cards" element={<AdmitCards />} />
+            <Route path="results" element={<Results />} />
+            <Route path="settings" element={<ETASettings />} />
           </Route>
 
           <Route path="*" element={<NotFound />} />

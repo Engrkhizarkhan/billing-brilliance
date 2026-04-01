@@ -6,8 +6,10 @@ import { TablePagination } from '@/components/TablePagination';
 import { EmptyState } from '@/components/EmptyState';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Receipt } from 'lucide-react';
+import { usePaymentStore } from '@/store/paymentStore';
 
 const InvoiceList = () => {
+  const paymentVersion = usePaymentStore((state) => state.version);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [classFilter, setClassFilter] = useState('all');
@@ -16,12 +18,12 @@ const InvoiceList = () => {
 
   const classOptions = useMemo(
     () => Array.from(new Set(students.map((student) => student.class))).sort((a, b) => Number(a.replace(/\D/g, '')) - Number(b.replace(/\D/g, ''))),
-    []
+    [paymentVersion]
   );
 
   const classByConsumerNumber = useMemo(
     () => new Map(students.map((student) => [student.consumerNumber, student.class])),
-    []
+    [paymentVersion]
   );
 
   const filtered = invoices.filter((inv) => {
