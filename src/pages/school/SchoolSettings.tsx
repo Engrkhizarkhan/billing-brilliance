@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -18,49 +18,64 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
+import { mockApi } from '@/lib/mockApi';
+import { SchoolAccessRole, User } from '@/types';
+import { useAuthStore } from '@/store/authStore';
 
-type SchoolUser = {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  verified: boolean;
-  password: string;
-};
+type SchoolUser = User & { role: 'school' };
 
 type EditUserForm = {
   id: string;
   name: string;
   email: string;
-  role: string;
+  schoolAccessRole: SchoolAccessRole;
   verified: boolean;
   nextPassword: string;
+};
+
+type NewUserForm = {
+  name: string;
+  email: string;
+  password: string;
+  schoolAccessRole: SchoolAccessRole;
+  verified: boolean;
 };
 
 const emptyEditUserForm: EditUserForm = {
   id: '',
   name: '',
   email: '',
-  role: 'staff',
+  schoolAccessRole: 'staff',
   verified: false,
   nextPassword: '',
 };
+
+const emptyNewUserForm: NewUserForm = {
+  name: '',
+  email: '',
+  password: '',
+  schoolAccessRole: 'staff',
+  verified: false,
+};
+
+const schoolRoleOptions: SchoolAccessRole[] = ['admin', 'finance', 'staff', 'viewer'];
 
 type FeeGenerationMode = 'auto' | 'manual' | 'hybrid';
 type SchedulerHealth = 'healthy' | 'warning' | 'failed';
 
 const SchoolSettings = () => {
-  const [users, setUsers] = useState<SchoolUser[]>([
-    { id: 'u1', name: 'Admin User', email: 'admin@school.edu', role: 'admin', verified: true, password: 'admin123!' },
-    { id: 'u2', name: 'Finance Team', email: 'finance@school.edu', role: 'finance', verified: false, password: 'finance123!' },
-  ]);
+  const authUser = useAuthStore((state) => state.user);
+  const schoolRef = authUser?.schoolRef;
+  const mainSchoolUserId = authUser?.mainSchoolUserId || authUser?.id || '';
 
-  const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'staff', verified: false });
+  const [users, setUsers] = useState<SchoolUser[]>([]);
+  const [newUser, setNewUser] = useState<NewUserForm>(emptyNewUserForm);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editUser, setEditUser] = useState<EditUserForm>(emptyEditUserForm);
   const [userBeingDeleted, setUserBeingDeleted] = useState<SchoolUser | null>(null);
   const [adminPassword, setAdminPassword] = useState({ previous: '', next: '' });
+  const [loadingUsers, setLoadingUsers] = useState(false);
   const [feeGenerationMode, setFeeGenerationMode] = useState<FeeGenerationMode>('hybrid');
   const [schedulerHealth] = useState<SchedulerHealth>('healthy');
   const [schedulerLastRun, setSchedulerLastRun] = useState('2026-04-02 02:00');
@@ -68,23 +83,68 @@ const SchoolSettings = () => {
   const [autoApplyLateFee, setAutoApplyLateFee] = useState(true);
   const [lastManualRunAt, setLastManualRunAt] = useState<string | null>(null);
 
-  const handleAddUser = () => {
+  const loadSchoolUsers = useCallback(async () => {
+    if (!schoolRef) {
+      setUsers([]);
+      return;
+    }
+
+    setLoadingUsers(true);
+    try {
+      const response = await mockApi.fetchSchoolUsers(schoolRef);
+      setUsers(response.data.filter((u): u is SchoolUser => u.role === 'school'));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to load school users');
+    } finally {
+      setLoadingUsers(false);
+    }
+  }, [schoolRef]);
+
+  useEffect(() => {
+    void loadSchoolUsers();
+  }, [loadSchoolUsers]);
+
+  const handleAddUser = async () => {
+    if (!schoolRef || !mainSchoolUserId) {
+      toast.error('School reference is missing. Ask platform admin to create your main school account first.');
+      return;
+    }
+
     if (!newUser.name || !newUser.email || !newUser.password) {
       toast.error('Name, email, and password are required');
       return;
     }
-    if (users.some((u) => u.email.toLowerCase() === newUser.email.toLowerCase())) {
-      toast.error('User already exists');
-      return;
+
+    try {
+      const response = await mockApi.createSchoolSubUser({
+        name: newUser.name.trim(),
+        email: newUser.email.trim(),
+        password: newUser.password,
+        schoolRef,
+        mainSchoolUserId,
+        schoolAccessRole: newUser.schoolAccessRole,
+        verified: newUser.verified,
+      });
+      if (response.data.role === 'school') {
+        setUsers((prev) => [...prev, response.data]);
+      }
+      toast.success('Sub-user linked to school reference');
+      setNewUser(emptyNewUserForm);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to add user');
     }
-    setUsers((prev) => [...prev, { id: `u-${Date.now()}`, name: newUser.name, email: newUser.email, role: newUser.role, verified: newUser.verified, password: newUser.password }]);
-    toast.success('User added (mock)');
-    setNewUser({ name: '', email: '', password: '', role: 'staff', verified: false });
   };
 
-  const handleVerify = (email: string) => {
-    setUsers((prev) => prev.map((u) => (u.email === email ? { ...u, verified: true } : u)));
-    toast.success('Email marked verified (mock)');
+  const handleVerify = async (id: string) => {
+    try {
+      const updated = await mockApi.setUserVerified(id, true);
+      if (updated.data && updated.data.role === 'school') {
+        setUsers((prev) => prev.map((u) => (u.id === id ? updated.data : u)));
+      }
+      toast.success('Email marked verified (mock)');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to verify user');
+    }
   };
 
   const handleEditUser = (user: SchoolUser) => {
@@ -92,46 +152,43 @@ const SchoolSettings = () => {
       id: user.id,
       name: user.name,
       email: user.email,
-      role: user.role,
-      verified: user.verified,
+      schoolAccessRole: user.schoolAccessRole || 'staff',
+      verified: user.verified === true,
       nextPassword: '',
     });
     setEditDialogOpen(true);
   };
 
-  const handleSaveEditUser = () => {
+  const handleSaveEditUser = async () => {
     if (!editUser.id || !editUser.name.trim() || !editUser.email.trim()) {
       toast.error('Name and email are required');
       return;
     }
 
-    const duplicateEmail = users.find(
-      (u) => u.id !== editUser.id && u.email.toLowerCase() === editUser.email.trim().toLowerCase(),
-    );
-    if (duplicateEmail) {
-      toast.error('Another user already has this email');
-      return;
+    try {
+      const updated = await mockApi.updateSchoolUser(editUser.id, {
+        name: editUser.name.trim(),
+        email: editUser.email.trim(),
+        schoolAccessRole: editUser.schoolAccessRole,
+        verified: editUser.verified,
+      });
+
+      if (!updated.data || updated.data.role !== 'school') {
+        toast.error('User not found');
+        return;
+      }
+
+      if (editUser.nextPassword.trim()) {
+        await mockApi.resetUserPassword(editUser.id, editUser.nextPassword.trim());
+      }
+
+      setUsers((prev) => prev.map((u) => (u.id === editUser.id ? updated.data : u)));
+      toast.success('User updated (mock)');
+      setEditDialogOpen(false);
+      setEditUser(emptyEditUserForm);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to update user');
     }
-
-    setUsers((prev) =>
-      prev.map((u) => {
-        if (u.id !== editUser.id) {
-          return u;
-        }
-        return {
-          ...u,
-          name: editUser.name.trim(),
-          email: editUser.email.trim(),
-          role: editUser.role,
-          verified: editUser.verified,
-          password: editUser.nextPassword.trim() ? editUser.nextPassword : u.password,
-        };
-      }),
-    );
-
-    toast.success('User updated (mock)');
-    setEditDialogOpen(false);
-    setEditUser(emptyEditUserForm);
   };
 
   const handleAskDeleteUser = (user: SchoolUser) => {
@@ -139,40 +196,48 @@ const SchoolSettings = () => {
     setDeleteDialogOpen(true);
   };
 
-  const handleDeleteUser = () => {
+  const handleDeleteUser = async () => {
     if (!userBeingDeleted) {
       return;
     }
 
-    const adminCount = users.filter((u) => u.role === 'admin').length;
-    if (userBeingDeleted.role === 'admin' && adminCount <= 1) {
-      toast.error('At least one admin user is required');
+    if (!schoolRef) {
+      toast.error('School reference is missing');
       return;
     }
 
-    setUsers((prev) => prev.filter((u) => u.id !== userBeingDeleted.id));
-    toast.success('User deleted (mock)');
-    setDeleteDialogOpen(false);
-    setUserBeingDeleted(null);
+    try {
+      const deleted = await mockApi.deleteSchoolUser(userBeingDeleted.id, schoolRef);
+      if (!deleted.data) {
+        toast.error('User not found');
+        return;
+      }
+      setUsers((prev) => prev.filter((u) => u.id !== userBeingDeleted.id));
+      toast.success('User deleted (mock)');
+      setDeleteDialogOpen(false);
+      setUserBeingDeleted(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to delete user');
+    }
   };
 
-  const handleUpdateAdminPassword = () => {
-    const adminUser = users.find((u) => u.role === 'admin');
-    if (!adminUser) {
-      toast.error('Admin user not found');
+  const handleUpdateAdminPassword = async () => {
+    if (!mainSchoolUserId) {
+      toast.error('Main school admin reference is missing');
       return;
     }
     if (!adminPassword.previous || !adminPassword.next) {
       toast.error('Previous and new admin password are required');
       return;
     }
-    if (adminUser.password !== adminPassword.previous) {
-      toast.error('Previous admin password is incorrect');
-      return;
+
+    try {
+      await mockApi.updateUserPassword(mainSchoolUserId, adminPassword.previous, adminPassword.next);
+      toast.success('Main school admin password updated (mock)');
+      setAdminPassword({ previous: '', next: '' });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to update admin password');
     }
-    setUsers((prev) => prev.map((u) => (u.id === adminUser.id ? { ...u, password: adminPassword.next } : u)));
-    toast.success('Admin password updated (mock)');
-    setAdminPassword({ previous: '', next: '' });
   };
 
   const handleRunManualGeneration = () => {
@@ -210,7 +275,8 @@ const SchoolSettings = () => {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">School Settings</h1>
-          <p className="text-sm text-muted-foreground">Manage staff accounts: invite users, verify emails, edit user details, and control passwords.</p>
+          <p className="text-sm text-muted-foreground">Manage staff accounts linked to your main school reference, verify emails, and control passwords.</p>
+          <p className="text-xs text-muted-foreground mt-1">School reference: {schoolRef || 'Not linked by platform admin yet'}</p>
         </div>
       </div>
 
@@ -294,7 +360,9 @@ const SchoolSettings = () => {
         <Card className="lg:col-span-2">
           <CardHeader className="pb-4">
             <CardTitle>Add user</CardTitle>
-            <CardDescription>Create a portal user with role and optional verified flag.</CardDescription>
+            <CardDescription>
+              Create a sub-user under the same school reference so access stays scoped to this school dashboard.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -314,13 +382,14 @@ const SchoolSettings = () => {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Role</Label>
-                <Select value={newUser.role} onValueChange={(value) => setNewUser({ ...newUser, role: value })}>
+                <Select value={newUser.schoolAccessRole} onValueChange={(value) => setNewUser({ ...newUser, schoolAccessRole: value as SchoolAccessRole })}>
                   <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="finance">Finance</SelectItem>
-                    <SelectItem value="staff">Staff</SelectItem>
-                    <SelectItem value="viewer">Viewer</SelectItem>
+                    {schoolRoleOptions.map((roleOption) => (
+                      <SelectItem key={roleOption} value={roleOption}>
+                        {roleOption.charAt(0).toUpperCase() + roleOption.slice(1)}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -329,16 +398,19 @@ const SchoolSettings = () => {
                 <Label htmlFor="verified">Mark email as verified</Label>
               </div>
             </div>
+            {!schoolRef && (
+              <p className="text-xs text-destructive">No school reference found. Ask platform admin to create your main school account first.</p>
+            )}
             <div className="flex justify-end">
-              <Button onClick={handleAddUser} className="rounded-lg">Add user</Button>
+              <Button onClick={handleAddUser} className="rounded-lg" disabled={!schoolRef || loadingUsers}>Add user</Button>
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-4">
-            <CardTitle>Update admin password</CardTitle>
-            <CardDescription>Set a new password for the admin account.</CardDescription>
+            <CardTitle>Update main admin password</CardTitle>
+            <CardDescription>Set a new password for the main school account linked to this reference.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-2">
@@ -349,7 +421,7 @@ const SchoolSettings = () => {
               <Label>New admin password</Label>
               <Input type="password" value={adminPassword.next} onChange={(e) => setAdminPassword({ ...adminPassword, next: e.target.value })} placeholder="New admin password" />
             </div>
-            <Button onClick={handleUpdateAdminPassword} className="w-full rounded-lg">Update admin password</Button>
+            <Button onClick={handleUpdateAdminPassword} className="w-full rounded-lg" disabled={!mainSchoolUserId}>Update admin password</Button>
           </CardContent>
         </Card>
       </div>
@@ -371,27 +443,37 @@ const SchoolSettings = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium">{user.name}</TableCell>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell className="capitalize">{user.role}</TableCell>
-                  <TableCell>{user.verified ? 'Verified' : 'Pending verification'}</TableCell>
-                  <TableCell className="text-right space-x-2">
-                    <Button size="sm" variant="outline" className="rounded-lg" onClick={() => handleEditUser(user)}>
-                      Edit user
-                    </Button>
-                    {!user.verified && (
-                      <Button size="sm" variant="outline" className="rounded-lg" onClick={() => handleVerify(user.email)}>
-                        Mark verified
-                      </Button>
-                    )}
-                    <Button size="sm" variant="destructive" className="rounded-lg" onClick={() => handleAskDeleteUser(user)}>
-                      Delete user
-                    </Button>
-                  </TableCell>
+              {loadingUsers ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-6">Loading users...</TableCell>
                 </TableRow>
-              ))}
+              ) : users.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-6">No users linked to this school reference yet.</TableCell>
+                </TableRow>
+              ) : (
+                users.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">{user.name}</TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell className="capitalize">{user.schoolAccessRole || 'staff'}</TableCell>
+                    <TableCell>{user.verified ? 'Verified' : 'Pending verification'}</TableCell>
+                    <TableCell className="text-right space-x-2">
+                      <Button size="sm" variant="outline" className="rounded-lg" onClick={() => handleEditUser(user)}>
+                        Edit user
+                      </Button>
+                      {!user.verified && (
+                        <Button size="sm" variant="outline" className="rounded-lg" onClick={() => handleVerify(user.id)}>
+                          Mark verified
+                        </Button>
+                      )}
+                      <Button size="sm" variant="destructive" className="rounded-lg" onClick={() => handleAskDeleteUser(user)}>
+                        Delete user
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -425,13 +507,14 @@ const SchoolSettings = () => {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Role</Label>
-                <Select value={editUser.role} onValueChange={(value) => setEditUser({ ...editUser, role: value })}>
+                <Select value={editUser.schoolAccessRole} onValueChange={(value) => setEditUser({ ...editUser, schoolAccessRole: value as SchoolAccessRole })}>
                   <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="finance">Finance</SelectItem>
-                    <SelectItem value="staff">Staff</SelectItem>
-                    <SelectItem value="viewer">Viewer</SelectItem>
+                    {schoolRoleOptions.map((roleOption) => (
+                      <SelectItem key={roleOption} value={roleOption}>
+                        {roleOption.charAt(0).toUpperCase() + roleOption.slice(1)}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

@@ -9,8 +9,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Plus, Eye, Pencil, PauseCircle, Ban, RefreshCcw } from 'lucide-react';
+import { Plus, Pencil, PauseCircle, Ban, RefreshCcw } from 'lucide-react';
 import { mockApi } from '@/lib/mockApi';
+
+const billerTypeLabels: Record<Biller['type'], string> = {
+  school: 'School',
+  eta: 'ETA',
+  private_agency: 'Private Agency',
+};
+
+const emptyBillerForm = {
+  name: '',
+  type: 'school' as Biller['type'],
+  email: '',
+  phone: '',
+};
 
 const BillerManagement = () => {
   const [billerList, setBillerList] = useState<Biller[]>([]);
@@ -18,7 +31,9 @@ const BillerManagement = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', type: 'school' as Biller['type'], email: '', phone: '' });
+  const [form, setForm] = useState(emptyBillerForm);
+  const [editBiller, setEditBiller] = useState<Biller | null>(null);
+  const [editForm, setEditForm] = useState(emptyBillerForm);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -47,8 +62,45 @@ const BillerManagement = () => {
     const response = await mockApi.createBiller({ name: form.name, email: form.email, phone: form.phone, type: form.type });
     setBillerList((prev) => [...prev, response.data]);
     setDialogOpen(false);
-    setForm({ name: '', type: 'school', email: '', phone: '' });
+    setForm(emptyBillerForm);
     toast.success(`Biller "${response.data.name}" created with code ${response.data.billerCode}`);
+    setLoading(false);
+  };
+
+  const openEditBiller = (biller: Biller) => {
+    setEditBiller(biller);
+    setEditForm({
+      name: biller.name,
+      type: biller.type,
+      email: biller.email,
+      phone: biller.phone,
+    });
+  };
+
+  const saveBillerEdit = async () => {
+    if (!editBiller) return;
+
+    if (!editForm.name || !editForm.email || !editForm.phone) {
+      toast.error('Name, email, and phone are required');
+      return;
+    }
+
+    setLoading(true);
+    const updated = await mockApi.updateBiller(editBiller.id, {
+      name: editForm.name,
+      type: editForm.type,
+      email: editForm.email,
+      phone: editForm.phone,
+    });
+
+    if (updated.data) {
+      setBillerList((prev) => prev.map((b) => (b.id === editBiller.id ? updated.data : b)));
+      setEditBiller(null);
+      setEditForm(emptyBillerForm);
+      toast.success(`Biller "${updated.data.name}" updated`);
+    } else {
+      toast.error('Unable to update biller');
+    }
     setLoading(false);
   };
 
@@ -57,6 +109,9 @@ const BillerManagement = () => {
     const updated = await mockApi.updateBillerStatus(id, status);
     if (updated.data) {
       setBillerList((prev) => prev.map((b) => (b.id === id ? updated.data : b)));
+      if (editBiller?.id === id) {
+        setEditBiller(updated.data);
+      }
       toast.success(`Biller status updated to ${status}`);
     }
     setLoading(false);
@@ -92,6 +147,40 @@ const BillerManagement = () => {
               <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
               <Button onClick={handleCreate} className="w-full" disabled={loading}>Create Biller</Button>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={Boolean(editBiller)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setEditBiller(null);
+              setEditForm(emptyBillerForm);
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader><DialogTitle>Edit Biller</DialogTitle></DialogHeader>
+            {editBiller && (
+              <div className="space-y-4 pt-2">
+                <div><Label>Organization Name</Label><Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></div>
+                <div>
+                  <Label>Type</Label>
+                  <Select value={editForm.type} onValueChange={(v) => setEditForm({ ...editForm, type: v as Biller['type'] })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="school">School</SelectItem>
+                      <SelectItem value="eta">ETA</SelectItem>
+                      <SelectItem value="private_agency">Private Agency</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div><Label>Biller Code</Label><Input value={editBiller.billerCode} disabled /></div>
+                <div><Label>Email</Label><Input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} /></div>
+                <div><Label>Phone</Label><Input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} /></div>
+                <Button onClick={saveBillerEdit} className="w-full" disabled={loading}>Save Changes</Button>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       </div>
@@ -147,7 +236,7 @@ const BillerManagement = () => {
             {filtered.map((b) => (
               <TableRow key={b.id}>
                 <TableCell className="font-medium">{b.name}</TableCell>
-                <TableCell className="capitalize">{b.type.replace('_', ' ')}</TableCell>
+                <TableCell>{billerTypeLabels[b.type]}</TableCell>
                 <TableCell className="font-mono">{b.billerCode}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{b.email}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{b.phone}</TableCell>
@@ -155,20 +244,21 @@ const BillerManagement = () => {
                 <TableCell><StatusBadge status={b.status} /></TableCell>
                 <TableCell>
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="sm"><Eye className="w-4 h-4" /></Button>
-                    <Button variant="ghost" size="sm"><Pencil className="w-4 h-4" /></Button>
+                    <Button variant="ghost" size="sm" onClick={() => openEditBiller(b)} disabled={loading} aria-label={`Edit ${b.name}`}>
+                      <Pencil className="w-4 h-4" />
+                    </Button>
                     {b.status !== 'suspended' && (
-                      <Button variant="ghost" size="sm" onClick={() => updateStatus(b.id, 'suspended')}>
+                      <Button variant="ghost" size="sm" onClick={() => updateStatus(b.id, 'suspended')} disabled={loading}>
                         <PauseCircle className="w-4 h-4" />
                       </Button>
                     )}
                     {b.status !== 'banned' && (
-                      <Button variant="ghost" size="sm" onClick={() => updateStatus(b.id, 'banned')}>
+                      <Button variant="ghost" size="sm" onClick={() => updateStatus(b.id, 'banned')} disabled={loading}>
                         <Ban className="w-4 h-4 text-destructive" />
                       </Button>
                     )}
                     {b.status !== 'active' && (
-                      <Button variant="ghost" size="sm" onClick={() => updateStatus(b.id, 'active')}>
+                      <Button variant="ghost" size="sm" onClick={() => updateStatus(b.id, 'active')} disabled={loading}>
                         <RefreshCcw className="w-4 h-4" />
                       </Button>
                     )}

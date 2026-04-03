@@ -19,7 +19,13 @@ const UserManagement = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: '', email: '', role: 'school' as User['role'] });
+  const [createForm, setCreateForm] = useState({
+    name: '',
+    email: '',
+    role: 'school' as User['role'],
+    password: '',
+    schoolRef: '',
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
 
@@ -65,13 +71,30 @@ const UserManagement = () => {
       toast.error('Name and email are required');
       return;
     }
+
     setLoading(true);
-    const response = await mockApi.createUser({ name: createForm.name, email: createForm.email, role: createForm.role });
-    setUsers((prev) => [...prev, response.data.user]);
-    setCreateDialogOpen(false);
-    setCreateForm({ name: '', email: '', role: 'school' });
-    toast.success(`User created. Default password: ${response.data.defaultPassword}`);
-    setLoading(false);
+    try {
+      const response = await mockApi.createUser({
+        name: createForm.name,
+        email: createForm.email,
+        role: createForm.role,
+        password: createForm.password || undefined,
+        schoolRef: createForm.role === 'school' ? (createForm.schoolRef || undefined) : undefined,
+      });
+      setUsers((prev) => [...prev, response.data.user]);
+      setCreateDialogOpen(false);
+      setCreateForm({ name: '', email: '', role: 'school', password: '', schoolRef: '' });
+
+      if (response.data.user.role === 'school') {
+        toast.success(`School user created. Password: ${response.data.defaultPassword}. Ref: ${response.data.user.schoolRef}`);
+      } else {
+        toast.success(`User created. Password: ${response.data.defaultPassword}`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to create user');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleBulkUpload = async () => {
@@ -134,6 +157,25 @@ const UserManagement = () => {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-2">
+                  <Label>Password (optional)</Label>
+                  <Input
+                    type="password"
+                    value={createForm.password}
+                    onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                    placeholder="Leave empty to auto-generate"
+                  />
+                </div>
+                {createForm.role === 'school' && (
+                  <div className="space-y-2">
+                    <Label>School Reference (optional)</Label>
+                    <Input
+                      value={createForm.schoolRef}
+                      onChange={(e) => setCreateForm({ ...createForm, schoolRef: e.target.value })}
+                      placeholder="e.g. SCH-1001 (leave empty for new)"
+                    />
+                  </div>
+                )}
                 <p className="text-xs text-muted-foreground">Default password is generated per user and shown once on create.</p>
                 <Button className="w-full" onClick={handleCreateUser} disabled={loading}>Create User</Button>
               </div>
@@ -198,6 +240,7 @@ const UserManagement = () => {
               <TableHead className="text-xs">Name</TableHead>
               <TableHead className="text-xs">Email</TableHead>
               <TableHead className="text-xs">Role</TableHead>
+              <TableHead className="text-xs">Reference</TableHead>
               <TableHead className="text-xs">Status</TableHead>
               <TableHead className="text-xs">Actions</TableHead>
             </TableRow>
@@ -208,6 +251,7 @@ const UserManagement = () => {
                 <TableCell className="font-medium text-sm">{u.name}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{u.email}</TableCell>
                 <TableCell className="capitalize text-sm">{u.role}</TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">{u.schoolRef || '-'}</TableCell>
                 <TableCell><StatusBadge status={u.status} /></TableCell>
                 <TableCell>
                   {u.status !== 'banned' ? (

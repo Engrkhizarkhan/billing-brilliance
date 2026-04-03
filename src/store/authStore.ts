@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { UserRole, User } from '@/types';
+import { mockApi } from '@/lib/mockApi';
 
 interface AuthState {
   user: User | null;
@@ -8,21 +9,14 @@ interface AuthState {
   logout: () => void;
 }
 
-const mockUsers: Record<string, { name: string; role: UserRole }> = {
-  'admin@example.com': { name: 'Admin User', role: 'admin' },
-  'school@example.com': { name: 'School Admin', role: 'school' },
-  'eta@example.com': { name: 'ETA Manager', role: 'eta' },
-};
-
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isAuthenticated: false,
   login: async (email: string, password: string, role: UserRole) => {
-    await new Promise((r) => setTimeout(r, 800));
-    const mockUser = mockUsers[email];
-    if (mockUser && password === '123456' && mockUser.role === role) {
+    const response = await mockApi.login(email, password, role);
+    if (response.data) {
       set({
-        user: { id: '1', email, name: mockUser.name, role, status: 'active' },
+        user: response.data.user,
         isAuthenticated: true,
       });
       return true;

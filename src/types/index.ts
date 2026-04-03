@@ -1,4 +1,5 @@
 export type UserRole = 'admin' | 'school' | 'eta';
+export type SchoolAccessRole = 'admin' | 'finance' | 'staff' | 'viewer';
 
 export interface User {
   id: string;
@@ -6,6 +7,10 @@ export interface User {
   name: string;
   role: UserRole;
   status: 'active' | 'suspended' | 'banned';
+  schoolRef?: string;
+  mainSchoolUserId?: string;
+  schoolAccessRole?: SchoolAccessRole;
+  verified?: boolean;
 }
 
 export interface Biller {

@@ -31,6 +31,7 @@ import {
   Invoice,
   PaymentChannel,
   Service,
+  SchoolAccessRole,
   Student,
   User,
   BundlePackage,
@@ -63,7 +64,11 @@ const nextId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice
 
 const generateTempPassword = () => `${DEFAULT_USER_PASSWORD}-${Math.random().toString(36).slice(2, 4)}`;
 
-let runtimeBillers = [...billers];
+type RuntimeUser = User & {
+  password: string;
+};
+
+const runtimeBillers = [...billers];
 const nextBillerCode = () => {
   const numericCodes = runtimeBillers
     .map((b) => Number.parseInt(b.billerCode, 10))
@@ -72,21 +77,80 @@ const nextBillerCode = () => {
   return String(max + 1);
 };
 
-const seedUsers: User[] = [
-  { id: '1', name: 'Admin User', email: 'admin@example.com', role: 'admin', status: 'active' },
-  { id: '2', name: 'School Admin', email: 'school@example.com', role: 'school', status: 'active' },
-  { id: '3', name: 'ETA Manager', email: 'eta@example.com', role: 'eta', status: 'active' },
-  { id: '4', name: 'John Doe', email: 'john@school.com', role: 'school', status: 'active' },
-  { id: '5', name: 'Jane Smith', email: 'jane@agency.com', role: 'eta', status: 'banned' },
+const seedUsers: RuntimeUser[] = [
+  { id: '1', name: 'Admin User', email: 'admin@example.com', role: 'admin', status: 'active', verified: true, password: '123456' },
+  {
+    id: '2',
+    name: 'School Admin',
+    email: 'school@example.com',
+    role: 'school',
+    schoolAccessRole: 'admin',
+    schoolRef: 'SCH-1001',
+    mainSchoolUserId: '2',
+    status: 'active',
+    verified: true,
+    password: '123456',
+  },
+  { id: '3', name: 'ETA Manager', email: 'eta@example.com', role: 'eta', status: 'active', verified: true, password: '123456' },
+  {
+    id: '4',
+    name: 'School Finance',
+    email: 'finance@school.com',
+    role: 'school',
+    schoolAccessRole: 'finance',
+    schoolRef: 'SCH-1001',
+    mainSchoolUserId: '2',
+    status: 'active',
+    verified: true,
+    password: '123456',
+  },
+  { id: '5', name: 'Jane Smith', email: 'jane@agency.com', role: 'eta', status: 'banned', verified: true, password: '123456' },
 ];
 
-let runtimeUsers = [...seedUsers];
+const runtimeUsers = [...seedUsers];
+
+const toPublicUser = (user: RuntimeUser): User => {
+  const { password, ...safeUser } = user;
+  void password;
+  return structuredClone(safeUser);
+};
+
+const findRuntimeUserByEmail = (email: string) => runtimeUsers.find((u) => u.email.toLowerCase() === email.toLowerCase());
+
+const nextSchoolReference = () => {
+  const numericRefs = runtimeUsers
+    .map((u) => u.schoolRef)
+    .filter((ref): ref is string => Boolean(ref && ref.startsWith('SCH-')))
+    .map((ref) => Number.parseInt(ref.replace('SCH-', ''), 10))
+    .filter((num) => Number.isFinite(num));
+  const max = numericRefs.length ? Math.max(...numericRefs) : 1000;
+  return `SCH-${max + 1}`;
+};
+
+const normalizeSchoolAccessRole = (role?: SchoolAccessRole): SchoolAccessRole => role || 'staff';
 
 export const mockApi = {
   // ---- Auth (mock) ----
-  async login(email: string, role: User['role']): ApiResponse<{ token: string; role: User['role'] }> {
+  async login(email: string, password: string, role: User['role']): ApiResponse<{ token: string; user: User } | null> {
     await delay();
-    return { data: { token: `mock-token-${role}`, role }, message: 'Authenticated (mock)' };
+    const user = findRuntimeUserByEmail(email);
+    if (!user) {
+      return { data: null, message: 'User not found' };
+    }
+    if (user.role !== role) {
+      return { data: null, message: 'Role mismatch' };
+    }
+    if (user.status !== 'active') {
+      return { data: null, message: 'User is not active' };
+    }
+    if (user.password !== password) {
+      return { data: null, message: 'Invalid password' };
+    }
+
+    return {
+      data: { token: `mock-token-${user.id}`, user: toPublicUser(user) },
+      message: 'Authenticated (mock)',
+    };
   },
 
   // ---- Students ----
@@ -338,6 +402,19 @@ export const mockApi = {
     return { data: structuredClone(biller), message: 'Biller created (session only)' };
   },
 
+  async updateBiller(id: string, payload: Partial<Pick<Biller, 'name' | 'type' | 'email' | 'phone'>>): ApiResponse<Biller | null> {
+    await delay();
+    const target = runtimeBillers.find((b) => b.id === id);
+    if (!target) return { data: null };
+
+    if (payload.name !== undefined) target.name = payload.name;
+    if (payload.type !== undefined) target.type = payload.type;
+    if (payload.email !== undefined) target.email = payload.email;
+    if (payload.phone !== undefined) target.phone = payload.phone;
+
+    return { data: structuredClone(target), message: 'Biller updated' };
+  },
+
   async updateBillerStatus(id: string, status: Biller['status']): ApiResponse<Biller | null> {
     await delay();
     const target = runtimeBillers.find((b) => b.id === id);
@@ -357,21 +434,161 @@ export const mockApi = {
       return matchRole && matchStatus && matchSearch;
     });
     const { data, meta } = paginate(filtered, page, pageSize);
-    return { data: structuredClone(data), meta };
+    return { data: structuredClone(data.map(toPublicUser)), meta };
   },
 
-  async createUser(payload: { name: string; email: string; role: User['role']; status?: User['status'] }): ApiResponse<{ user: User; defaultPassword: string }> {
+  async createUser(payload: {
+    name: string;
+    email: string;
+    role: User['role'];
+    status?: User['status'];
+    password?: string;
+    schoolRef?: string;
+    mainSchoolUserId?: string;
+    schoolAccessRole?: SchoolAccessRole;
+    verified?: boolean;
+  }): ApiResponse<{ user: User; defaultPassword: string }> {
     await delay();
-    const user: User = {
-      id: nextId('u'),
+    if (findRuntimeUserByEmail(payload.email)) {
+      throw new Error('A user with this email already exists');
+    }
+
+    const id = nextId('u');
+    const isSchool = payload.role === 'school';
+    const schoolRef = isSchool ? (payload.schoolRef?.trim() || nextSchoolReference()) : undefined;
+    const defaultPassword = payload.password?.trim() || generateTempPassword();
+
+    const existingSchoolUsersForRef = isSchool && schoolRef
+      ? runtimeUsers.filter((u) => u.role === 'school' && u.schoolRef === schoolRef)
+      : [];
+    const inheritedMainSchoolUserId = existingSchoolUsersForRef.length
+      ? (existingSchoolUsersForRef[0].mainSchoolUserId || existingSchoolUsersForRef[0].id)
+      : undefined;
+    const defaultSchoolAccessRole: SchoolAccessRole = existingSchoolUsersForRef.length ? 'staff' : 'admin';
+
+    const runtimeUser: RuntimeUser = {
+      id,
       name: payload.name,
       email: payload.email,
       role: payload.role,
       status: payload.status || 'active',
+      verified: payload.verified ?? true,
+      schoolRef,
+      schoolAccessRole: isSchool ? normalizeSchoolAccessRole(payload.schoolAccessRole || defaultSchoolAccessRole) : undefined,
+      mainSchoolUserId: isSchool ? (payload.mainSchoolUserId || inheritedMainSchoolUserId || id) : undefined,
+      password: defaultPassword,
     };
-    const defaultPassword = generateTempPassword();
-    runtimeUsers.push(user);
-    return { data: { user: structuredClone(user), defaultPassword }, message: 'User created (session only)' };
+
+    runtimeUsers.push(runtimeUser);
+    return { data: { user: toPublicUser(runtimeUser), defaultPassword }, message: 'User created (session only)' };
+  },
+
+  async fetchSchoolUsers(schoolRef: string): ApiResponse<User[]> {
+    await delay();
+    const scopedUsers = runtimeUsers.filter((u) => u.role === 'school' && u.schoolRef === schoolRef);
+    return { data: structuredClone(scopedUsers.map(toPublicUser)) };
+  },
+
+  async createSchoolSubUser(payload: {
+    name: string;
+    email: string;
+    password: string;
+    schoolRef: string;
+    mainSchoolUserId: string;
+    schoolAccessRole: SchoolAccessRole;
+    verified?: boolean;
+  }): ApiResponse<User> {
+    await delay();
+
+    if (findRuntimeUserByEmail(payload.email)) {
+      throw new Error('A user with this email already exists');
+    }
+
+    const owner = runtimeUsers.find((u) => u.id === payload.mainSchoolUserId && u.role === 'school' && u.schoolRef === payload.schoolRef);
+    if (!owner) {
+      throw new Error('Main school account reference is invalid');
+    }
+
+    const runtimeUser: RuntimeUser = {
+      id: nextId('u'),
+      name: payload.name,
+      email: payload.email,
+      role: 'school',
+      schoolRef: payload.schoolRef,
+      mainSchoolUserId: payload.mainSchoolUserId,
+      schoolAccessRole: normalizeSchoolAccessRole(payload.schoolAccessRole),
+      verified: payload.verified ?? false,
+      status: 'active',
+      password: payload.password,
+    };
+
+    runtimeUsers.push(runtimeUser);
+    return { data: toPublicUser(runtimeUser), message: 'School sub-user created (session only)' };
+  },
+
+  async updateSchoolUser(
+    id: string,
+    payload: Partial<Pick<User, 'name' | 'email' | 'verified' | 'schoolAccessRole'>>,
+  ): ApiResponse<User | null> {
+    await delay();
+    const target = runtimeUsers.find((u) => u.id === id && u.role === 'school');
+    if (!target) return { data: null };
+
+    if (payload.email) {
+      const duplicate = runtimeUsers.find((u) => u.id !== id && u.email.toLowerCase() === payload.email!.toLowerCase());
+      if (duplicate) {
+        throw new Error('Another user already has this email');
+      }
+      target.email = payload.email;
+    }
+
+    if (payload.name !== undefined) target.name = payload.name;
+    if (payload.verified !== undefined) target.verified = payload.verified;
+    if (payload.schoolAccessRole !== undefined) target.schoolAccessRole = normalizeSchoolAccessRole(payload.schoolAccessRole);
+
+    return { data: toPublicUser(target), message: 'School user updated' };
+  },
+
+  async deleteSchoolUser(id: string, schoolRef: string): ApiResponse<boolean> {
+    await delay();
+    const index = runtimeUsers.findIndex((u) => u.id === id && u.role === 'school' && u.schoolRef === schoolRef);
+    if (index === -1) return { data: false };
+
+    const target = runtimeUsers[index];
+    const adminCount = runtimeUsers.filter((u) => u.role === 'school' && u.schoolRef === schoolRef && u.schoolAccessRole === 'admin').length;
+    if (target.schoolAccessRole === 'admin' && adminCount <= 1) {
+      throw new Error('At least one school admin is required');
+    }
+
+    runtimeUsers.splice(index, 1);
+    return { data: true, message: 'School user deleted' };
+  },
+
+  async resetUserPassword(id: string, nextPassword: string): ApiResponse<boolean> {
+    await delay();
+    const target = runtimeUsers.find((u) => u.id === id);
+    if (!target) return { data: false };
+    target.password = nextPassword;
+    return { data: true, message: 'Password reset' };
+  },
+
+  async updateUserPassword(id: string, previousPassword: string, nextPassword: string): ApiResponse<boolean> {
+    await delay();
+    const target = runtimeUsers.find((u) => u.id === id);
+    if (!target) return { data: false };
+    if (target.password !== previousPassword) {
+      throw new Error('Previous password is incorrect');
+    }
+    target.password = nextPassword;
+    return { data: true, message: 'Password updated' };
+  },
+
+  async setUserVerified(id: string, verified: boolean): ApiResponse<User | null> {
+    await delay();
+    const target = runtimeUsers.find((u) => u.id === id);
+    if (!target) return { data: null };
+    target.verified = verified;
+    return { data: toPublicUser(target), message: 'User verification updated' };
   },
 
   async updateUserStatus(id: string, status: User['status']): ApiResponse<User | null> {
@@ -379,7 +596,7 @@ export const mockApi = {
     const target = runtimeUsers.find((u) => u.id === id);
     if (!target) return { data: null };
     target.status = status;
-    return { data: structuredClone(target), message: 'User status updated' };
+    return { data: toPublicUser(target), message: 'User status updated' };
   },
 };
 
