@@ -6,6 +6,7 @@ import {
   BillStatus,
   BundlePackage,
   FetchBundleResponse,
+  OneLinkInquiryReservedFields,
 } from '@/types';
 import {
   billBundles,
@@ -23,6 +24,31 @@ const DEFAULT_BASE_URL = 'https://sandbox.onebill.local';
 const BASE_URL = import.meta.env.VITE_ONEBILL_BASE_URL || DEFAULT_BASE_URL;
 const USE_MOCK = (import.meta.env.VITE_ONEBILL_USE_MOCK ?? 'true') !== 'false';
 const REQUEST_TIMEOUT_MS = Number(import.meta.env.VITE_ONEBILL_TIMEOUT_MS || 8000);
+const DEFAULT_ONELINK_USERNAME = import.meta.env.VITE_ONELINK_USERNAME || 'demo-user';
+const DEFAULT_ONELINK_PASSWORD = import.meta.env.VITE_ONELINK_PASSWORD || 'demo-pass';
+const DEFAULT_ONELINK_BANK_MNEMONIC = import.meta.env.VITE_ONELINK_BANK_MNEMONIC || 'MBLINK01';
+
+const padRight = (value: string, length: number) => value.slice(0, length).padEnd(length, ' ');
+
+export const buildOneLinkInquiryReserved = (fields: OneLinkInquiryReservedFields = {}) => {
+  const cnic = padRight((fields.cnic || '').replace(/\D/g, ''), 13);
+  const accountId = padRight(fields.accountId || '', 28);
+  const bundleId = padRight(fields.bundleId || '', 100);
+  const supportingInfo1 = padRight(fields.supportingInfo1 || '', 100);
+  const supportingInfo2 = padRight(fields.supportingInfo2 || '', 144);
+  return `${cnic}${accountId}${bundleId}${supportingInfo1}${supportingInfo2}`;
+};
+
+const toOneLinkInquiryPayload = (payload: BillInquiryRequest) => {
+  const reserved = payload.reserved || buildOneLinkInquiryReserved(payload.reservedFields);
+  return {
+    username: padRight(payload.username || DEFAULT_ONELINK_USERNAME, 60).trimEnd(),
+    password: padRight(payload.password || DEFAULT_ONELINK_PASSWORD, 60).trimEnd(),
+    consumer_number: padRight(payload.consumerNumber.trim(), 24).trimEnd(),
+    bank_mnemonic: padRight(payload.bankMnemonic || DEFAULT_ONELINK_BANK_MNEMONIC, 8).trimEnd(),
+    reserved: padRight(reserved, 400),
+  };
+};
 
 const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number) => {
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
@@ -125,11 +151,13 @@ export const billInquiry = async (payload: BillInquiryRequest): Promise<BillInqu
     return mockBillInquiry(payload);
   }
 
+  const oneLinkPayload = toOneLinkInquiryPayload(payload);
+
   const response = await withTimeout(
     fetch(`${BASE_URL}/api/1.0/Payments/BillInquiry`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(oneLinkPayload),
     }),
     REQUEST_TIMEOUT_MS,
   );
@@ -186,8 +214,14 @@ export const fetchBundle = async (): Promise<FetchBundleResponse> => {
   return data;
 };
 
+export const billInquiry1Link = billInquiry;
+
 export const onebillConfig = {
   baseUrl: BASE_URL,
   useMock: USE_MOCK,
   timeoutMs: REQUEST_TIMEOUT_MS,
+  oneLink: {
+    username: DEFAULT_ONELINK_USERNAME,
+    bankMnemonic: DEFAULT_ONELINK_BANK_MNEMONIC,
+  },
 };

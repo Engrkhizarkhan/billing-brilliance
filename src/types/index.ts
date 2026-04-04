@@ -200,6 +200,23 @@ export interface AuditLog {
 
 export type BillStatus = 'paid' | 'unpaid' | 'partial' | 'overdue';
 
+export interface OneLinkInquiryReservedFields {
+  cnic?: string;
+  accountId?: string;
+  bundleId?: string;
+  supportingInfo1?: string;
+  supportingInfo2?: string;
+}
+
+export interface BillBundleDetail {
+  bundleId: string;
+  bundleName: string;
+  description?: string;
+  expiryDate?: string;
+  amount?: string;
+  tag?: string;
+}
+
 export type PaymentChannel = 'jazzcash' | 'easypaisa' | 'bank_app' | 'atm' | 'counter' | 'cash_offline';
 
 export interface BillInquiryRequest {
@@ -207,6 +224,11 @@ export interface BillInquiryRequest {
   studentRef?: string;
   voucherNumber?: string;
   billerCode?: string;
+  username?: string;
+  password?: string;
+  bankMnemonic?: string;
+  reserved?: string;
+  reservedFields?: OneLinkInquiryReservedFields;
 }
 
 export interface BillInquiryResponse {
@@ -225,6 +247,9 @@ export interface BillInquiryResponse {
   billerName?: string;
   currency?: string;
   message?: string;
+  companyId?: string;
+  responseCode?: string;
+  bundleDetails?: BillBundleDetail[];
 }
 
 export interface BillPaymentRequest {
@@ -265,4 +290,103 @@ export interface BundlePackage {
 export interface FetchBundleResponse {
   bundles: BundlePackage[];
   fetchedAt: string;
+}
+
+export type EtaPaymentStatus = 'pending' | 'paid' | 'failed' | 'expired';
+
+export interface EtaPaymentRecord {
+  id: string;
+  applicationId: string;
+  applicantId: string;
+  postingId: string;
+  billId: string;
+  amount: number;
+  status: EtaPaymentStatus;
+  dueDate: string;
+  expiryDate: string;
+  createdAt: string;
+  paidAt?: string;
+  transactionId?: string;
+  description?: string;
+  callbackUrl: string;
+}
+
+export interface EtaCreatePaymentRequest {
+  applicantId: string;
+  applicationId: string;
+  postingId: string;
+  amount: number;
+  dueDate: string;
+  description?: string;
+  // API contract aliases for integration payload compatibility
+  applicant_id?: string;
+  application_id?: string;
+  posting_id?: string;
+  due_date?: string;
+  customerName?: string;
+  customer_name?: string;
+}
+
+export interface EtaCreatePaymentResponse {
+  paymentId: string;
+  billId: string;
+  status: EtaPaymentStatus;
+  payment: EtaPaymentRecord;
+  oneBillRequest: OneBillCreateBillRequest;
+}
+
+export interface OneBillCreateBillRequest {
+  billId: string;
+  amount: number;
+  dueDate: string;
+  customerName: string;
+  callbackUrl: string;
+  description: string;
+  // API contract aliases for serialized payload compatibility
+  bill_id?: string;
+  due_date?: string;
+  customer_name?: string;
+  callback_url?: string;
+}
+
+export interface EtaPaymentStatusResponse {
+  applicationId: string;
+  status: EtaPaymentStatus | 'not_found';
+  payment?: EtaPaymentRecord;
+}
+
+export interface EtaPaymentCallbackRequest {
+  billId: string;
+  status: Extract<EtaPaymentStatus, 'paid' | 'failed' | 'expired'>;
+  transactionId: string;
+  paidAt?: string;
+}
+
+export interface EtaPaymentCallbackResponse {
+  acknowledged: boolean;
+  payment?: EtaPaymentRecord;
+  message: string;
+}
+
+export interface EtaPaymentNotification {
+  id: string;
+  applicationId: string;
+  paymentId: string;
+  billId: string;
+  status: EtaPaymentStatus;
+  sentAt: string;
+}
+
+export interface EtaHealthResponse {
+  status: 'ok';
+  service: 'eta-payment-controller';
+  timestamp: string;
+}
+
+export interface EtaRequestSecurityContext {
+  apiKey?: string;
+  sourceIp?: string;
+  protocol?: 'https' | 'http';
+  webhookSignature?: string;
+  idempotencyKey?: string;
 }

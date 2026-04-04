@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { students, applicants, transactions, invoices } from '@/data/mockData';
-import { GraduationCap, UserPlus, CreditCard, Receipt, Search } from 'lucide-react';
+import { students, applicants, transactions, eteaPostings } from '@/data/mockData';
+import { GraduationCap, UserPlus, CreditCard, Search, Megaphone } from 'lucide-react';
 
 export const GlobalSearch = () => {
   const [open, setOpen] = useState(false);
@@ -20,6 +20,7 @@ export const GlobalSearch = () => {
 
   const filteredStudents = query.length > 1 ? students.filter(s => s.name.toLowerCase().includes(query.toLowerCase()) || s.consumerNumber.includes(query)).slice(0, 5) : [];
   const filteredApplicants = query.length > 1 ? applicants.filter(a => a.name.toLowerCase().includes(query.toLowerCase()) || a.cnic.includes(query)).slice(0, 5) : [];
+  const filteredPostings = query.length > 1 ? eteaPostings.filter(p => p.title.toLowerCase().includes(query.toLowerCase()) || p.department.toLowerCase().includes(query.toLowerCase())).slice(0, 5) : [];
   const filteredTxns = query.length > 1 ? transactions.filter(t => t.transactionId.toLowerCase().includes(query.toLowerCase()) || t.consumerNumber.includes(query)).slice(0, 5) : [];
 
   return (
@@ -51,6 +52,17 @@ export const GlobalSearch = () => {
                   <UserPlus className="w-4 h-4 mr-2 text-info" />
                   <span>{a.name}</span>
                   <span className="ml-auto text-[10px] text-muted-foreground font-mono">{a.cnic}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+          {filteredPostings.length > 0 && (
+            <CommandGroup heading="Postings">
+              {filteredPostings.map(p => (
+                <CommandItem key={p.id} onSelect={() => { navigate('/eta/postings'); setOpen(false); }}>
+                  <Megaphone className="w-4 h-4 mr-2 text-warning" />
+                  <span>{p.title}</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground font-mono capitalize">{p.status}</span>
                 </CommandItem>
               ))}
             </CommandGroup>

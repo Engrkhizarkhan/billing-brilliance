@@ -24,16 +24,12 @@ import Defaulters from "./pages/school/Defaulters";
 import SchoolSettings from "./pages/school/SchoolSettings";
 import LoginActivity from "./pages/school/LoginActivity";
 import ETADashboard from "./pages/eta/ETADashboard";
-import ServiceList from "./pages/eta/ServiceList";
 import ApplicantList from "./pages/eta/ApplicantList";
 import ETEAPostings from "./pages/eta/ETEAPostings";
 import ETAInvoices from "./pages/eta/ETAInvoices";
 import ETAPayments from "./pages/eta/ETAPayments";
+import ETARealtimePayments from "./pages/eta/ETARealtimePayments";
 import ETAReports from "./pages/eta/ETAReports";
-import ETAPaymentPrograms from "./pages/eta/ETAPaymentPrograms";
-import RollAssignment from "./pages/eta/RollAssignment";
-import AdmitCards from "./pages/eta/AdmitCards";
-import Results from "./pages/eta/Results";
 import ETASettings from "./pages/eta/ETASettings";
 import AuditTrail from "./pages/admin/AuditTrail";
 import ApiHealth from "./pages/admin/ApiHealth";
@@ -81,15 +77,11 @@ const App = () => (
           <Route path="/eta" element={<DashboardLayout />}>
             <Route index element={<ETADashboard />} />
             <Route path="postings" element={<ETEAPostings />} />
-            <Route path="services" element={<ServiceList />} />
             <Route path="applicants" element={<ApplicantList />} />
-            <Route path="payment-programs" element={<ETAPaymentPrograms />} />
             <Route path="invoices" element={<ETAInvoices />} />
             <Route path="payments" element={<ETAPayments />} />
+            <Route path="realtime-payments" element={<ETARealtimePayments />} />
             <Route path="reports" element={<ETAReports />} />
-            <Route path="roll-assignment" element={<RollAssignment />} />
-            <Route path="admit-cards" element={<AdmitCards />} />
-            <Route path="results" element={<Results />} />
             <Route path="settings" element={<ETASettings />} />
           </Route>
 

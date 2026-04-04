@@ -10,8 +10,7 @@ import {
   LayoutDashboard, Users, CreditCard, BarChart3, Building2,
   GraduationCap, BookOpen, Award, Receipt, Wallet, Briefcase, UserPlus,
   LogOut, Menu, X, DollarSign, ChevronRight, Settings, Sun, Moon,
-  AlertTriangle, FileText, Shield, ClipboardList, Megaphone, UserCheck, Activity,
-  Ticket, Trophy, MapPin
+  AlertTriangle, FileText, Shield, ClipboardList, Megaphone, Activity
 } from 'lucide-react';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -53,12 +52,9 @@ const navItems: Record<UserRole, NavItem[]> = {
   eta: [
     { label: 'Dashboard', path: '/eta', icon: LayoutDashboard, group: 'Overview' },
     { label: 'Postings', path: '/eta/postings', icon: Megaphone, group: 'Management' },
-    { label: 'Applicants', path: '/eta/applicants', icon: UserPlus, badge: '15', group: 'Management' },
-    { label: 'Roll Assignment', path: '/eta/roll-assignment', icon: UserCheck, group: 'Operations' },
-    { label: 'Admit Cards', path: '/eta/admit-cards', icon: Ticket, group: 'Operations' },
-    { label: 'Results', path: '/eta/results', icon: Trophy, group: 'Operations' },
-    { label: 'Payment Programs', path: '/eta/payment-programs', icon: CreditCard, group: 'Finance' },
+    { label: 'Application References', path: '/eta/applicants', icon: UserPlus, badge: '15', group: 'Management' },
     { label: 'Payments', path: '/eta/payments', icon: Wallet, group: 'Finance' },
+    { label: 'Real-Time Payments', path: '/eta/realtime-payments', icon: Activity, group: 'Finance' },
     { label: 'Reports', path: '/eta/reports', icon: BarChart3, group: 'Analytics' },
     { label: 'Settings', path: '/eta/settings', icon: Settings, group: 'System' },
   ],

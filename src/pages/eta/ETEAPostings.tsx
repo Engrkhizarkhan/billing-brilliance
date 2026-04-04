@@ -16,39 +16,136 @@ import { toast } from 'sonner';
 import { Plus, Megaphone, Users, Calendar, MoreHorizontal, Eye, Copy } from 'lucide-react';
 import { formatPKR } from '@/lib/formatters';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { notifyPaymentUpdate } from '@/store/paymentStore';
+
+const initialForm = {
+  title: '',
+  type: 'entry_test' as 'entry_test' | 'job_vacancy',
+  department: '',
+  totalSeats: '',
+  applicationFee: '',
+  startDate: '',
+  endDate: '',
+  testDate: '',
+};
+
+const getNextPostingId = (items: ETEAPosting[]) => {
+  const highestNumericId = items.reduce((highest, item) => {
+    const parsed = Number.parseInt(item.id.replace(/\D/g, ''), 10);
+    return Number.isNaN(parsed) ? highest : Math.max(highest, parsed);
+  }, 0);
+
+  return `ep${highestNumericId + 1}`;
+};
+
+const toFormValues = (posting: ETEAPosting) => ({
+  title: posting.title,
+  type: posting.type,
+  department: posting.department,
+  totalSeats: String(posting.totalSeats),
+  applicationFee: String(posting.applicationFee),
+  startDate: posting.startDate,
+  endDate: posting.endDate,
+  testDate: posting.testDate,
+});
 
 const ETEAPostings = () => {
   const [postings, setPostings] = useState<ETEAPosting[]>(eteaPostings);
   const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
+  const [viewOpen, setViewOpen] = useState(false);
+  const [selectedPosting, setSelectedPosting] = useState<ETEAPosting | null>(null);
+  const [editingPostingId, setEditingPostingId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [form, setForm] = useState({
-    title: '', type: 'entry_test' as 'entry_test' | 'job_vacancy', department: '', totalSeats: '', applicationFee: '',
-    startDate: '', endDate: '', testDate: '',
-  });
+  const [form, setForm] = useState(initialForm);
 
   const filtered = postings.filter(p => p.title.toLowerCase().includes(search.toLowerCase()) || p.department.toLowerCase().includes(search.toLowerCase()));
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  const handleAdd = () => {
-    const newPosting: ETEAPosting = {
-      id: `ep${postings.length + 1}`,
-      title: form.title,
-      type: form.type,
-      department: form.department,
-      totalSeats: parseInt(form.totalSeats) || 0,
-      applicationFee: parseInt(form.applicationFee) || 0,
-      startDate: form.startDate,
-      endDate: form.endDate,
-      testDate: form.testDate,
+  const syncPostings = (nextPostings: ETEAPosting[]) => {
+    eteaPostings.splice(0, eteaPostings.length, ...nextPostings);
+    setPostings(nextPostings);
+    notifyPaymentUpdate();
+  };
+
+  const handleOpenCreate = () => {
+    setEditingPostingId(null);
+    setForm(initialForm);
+    setAddOpen(true);
+  };
+
+  const handleAddOrUpdate = () => {
+    if (!form.title.trim()) {
+      toast.error('Posting title is required');
+      return;
+    }
+
+    if (editingPostingId) {
+      const nextPostings = postings.map((item) =>
+          item.id === editingPostingId
+            ? {
+                ...item,
+                title: form.title.trim(),
+                type: form.type,
+                department: form.department.trim(),
+                totalSeats: Number.parseInt(form.totalSeats, 10) || 0,
+                applicationFee: Number.parseInt(form.applicationFee, 10) || 0,
+                startDate: form.startDate,
+                endDate: form.endDate,
+                testDate: form.testDate,
+              }
+            : item
+      );
+      syncPostings(nextPostings);
+      toast.success(`Posting "${form.title.trim()}" updated`);
+    } else {
+      const newPosting: ETEAPosting = {
+        id: getNextPostingId(postings),
+        title: form.title.trim(),
+        type: form.type,
+        department: form.department.trim(),
+        totalSeats: Number.parseInt(form.totalSeats, 10) || 0,
+        applicationFee: Number.parseInt(form.applicationFee, 10) || 0,
+        startDate: form.startDate,
+        endDate: form.endDate,
+        testDate: form.testDate,
+        status: 'draft',
+        applicationsReceived: 0,
+      };
+
+      syncPostings([...postings, newPosting]);
+      toast.success(`Posting "${newPosting.title}" created as draft`);
+    }
+
+    setAddOpen(false);
+    setEditingPostingId(null);
+    setForm(initialForm);
+  };
+
+  const handleView = (posting: ETEAPosting) => {
+    setSelectedPosting(posting);
+    setViewOpen(true);
+  };
+
+  const handleEdit = (posting: ETEAPosting) => {
+    setEditingPostingId(posting.id);
+    setForm(toFormValues(posting));
+    setAddOpen(true);
+  };
+
+  const handleClone = (posting: ETEAPosting) => {
+    const clonedPosting: ETEAPosting = {
+      ...posting,
+      id: getNextPostingId(postings),
+      title: `${posting.title} (Copy)`,
       status: 'draft',
       applicationsReceived: 0,
     };
-    setPostings([...postings, newPosting]);
-    setAddOpen(false);
-    setForm({ title: '', type: 'entry_test', department: '', totalSeats: '', applicationFee: '', startDate: '', endDate: '', testDate: '' });
-    toast.success(`Posting "${newPosting.title}" created as draft`);
+
+    syncPostings([clonedPosting, ...postings]);
+    setPage(1);
+    toast.success(`Posting cloned as "${clonedPosting.title}"`);
   };
 
   return (
@@ -58,9 +155,9 @@ const ETEAPostings = () => {
         <div className="flex gap-2">
           <ExportButton data={filtered.map(p => ({ Title: p.title, Type: p.type, Department: p.department, Seats: p.totalSeats, Fee: p.applicationFee, Status: p.status, Applications: p.applicationsReceived }))} filename="postings" />
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
-            <DialogTrigger asChild><Button size="sm" className="rounded-lg"><Plus className="w-4 h-4 mr-1.5" />Add Posting</Button></DialogTrigger>
+            <DialogTrigger asChild><Button size="sm" className="rounded-lg" onClick={handleOpenCreate}><Plus className="w-4 h-4 mr-1.5" />Add Posting</Button></DialogTrigger>
             <DialogContent className="max-w-lg">
-              <DialogHeader><DialogTitle>Create New Posting</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>{editingPostingId ? 'Edit Posting' : 'Create New Posting'}</DialogTitle></DialogHeader>
               <div className="space-y-4 pt-2">
                 <div className="space-y-2"><Label className="text-xs font-semibold">Title *</Label><Input className="h-10 rounded-xl" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="MDCAT 2025" /></div>
                 <div className="grid grid-cols-2 gap-3">
@@ -82,7 +179,7 @@ const ETEAPostings = () => {
                   <div className="space-y-2"><Label className="text-xs font-semibold">End Date</Label><Input type="date" className="h-10 rounded-xl" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} /></div>
                   <div className="space-y-2"><Label className="text-xs font-semibold">Test Date</Label><Input type="date" className="h-10 rounded-xl" value={form.testDate} onChange={e => setForm({ ...form, testDate: e.target.value })} /></div>
                 </div>
-                <Button onClick={handleAdd} className="w-full h-10 rounded-xl" disabled={!form.title}>Create Posting</Button>
+                <Button onClick={handleAddOrUpdate} className="w-full h-10 rounded-xl" disabled={!form.title.trim()}>{editingPostingId ? 'Save Changes' : 'Create Posting'}</Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -91,7 +188,7 @@ const ETEAPostings = () => {
       <FilterBar searchPlaceholder="Search postings…" onSearch={v => { setSearch(v); setPage(1); }} />
       <div className="table-container">
         {paginated.length === 0 ? (
-          <EmptyState icon={Megaphone} title="No postings yet" description="Create your first test or job posting to start accepting applications." actionLabel="+ Create First Posting" onAction={() => setAddOpen(true)} />
+          <EmptyState icon={Megaphone} title="No postings yet" description="Create your first test or job posting to start accepting applications." actionLabel="+ Create First Posting" onAction={handleOpenCreate} />
         ) : (
           <Table>
             <TableHeader>
@@ -122,9 +219,9 @@ const ETEAPostings = () => {
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="w-4 h-4" /></Button></DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem><Eye className="w-4 h-4 mr-2" />View</DropdownMenuItem>
-                        <DropdownMenuItem>Edit</DropdownMenuItem>
-                        <DropdownMenuItem><Copy className="w-4 h-4 mr-2" />Clone</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => handleView(p)}><Eye className="w-4 h-4 mr-2" />View</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => handleEdit(p)}>Edit</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => handleClone(p)}><Copy className="w-4 h-4 mr-2" />Clone</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -135,6 +232,52 @@ const ETEAPostings = () => {
         )}
         <TablePagination total={filtered.length} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </div>
+
+      <Dialog open={viewOpen} onOpenChange={setViewOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Posting Details</DialogTitle></DialogHeader>
+          {selectedPosting ? (
+            <div className="space-y-4 pt-2">
+              <div>
+                <p className="text-sm font-semibold">{selectedPosting.title}</p>
+                <p className="text-xs text-muted-foreground">{selectedPosting.department}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Type</p>
+                  <p className="font-medium capitalize">{selectedPosting.type.replace('_', ' ')}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Status</p>
+                  <div className="mt-1"><StatusBadge status={selectedPosting.status} /></div>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Application Fee</p>
+                  <p className="font-medium">{formatPKR(selectedPosting.applicationFee)}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Total Seats</p>
+                  <p className="font-medium">{selectedPosting.totalSeats.toLocaleString()}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="flex items-center gap-2 text-muted-foreground"><Users className="w-4 h-4" /><span>Applications: {selectedPosting.applicationsReceived.toLocaleString()}</span></div>
+                <div className="flex items-center gap-2 text-muted-foreground"><Calendar className="w-4 h-4" /><span>Test Date: {selectedPosting.testDate || 'TBD'}</span></div>
+              </div>
+              <Button
+                variant="outline"
+                className="w-full rounded-lg"
+                onClick={() => {
+                  setViewOpen(false);
+                  handleEdit(selectedPosting);
+                }}
+              >
+                Edit This Posting
+              </Button>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -16,6 +16,8 @@ import {
   Transaction,
   BillStatus,
   BundlePackage,
+  EtaPaymentNotification,
+  EtaPaymentRecord,
 } from '@/types';
 
 const FINTECH_PREFIX = '123456';
@@ -110,12 +112,63 @@ export type RuntimeBillPayment = {
 
 const runtimeBillPayments: RuntimeBillPayment[] = [];
 
+const etaPaymentRecords: EtaPaymentRecord[] = [];
+const etaPaymentNotifications: EtaPaymentNotification[] = [];
+let etaPaymentSequence = 1000;
+
 export const recordRuntimeBillPayment = (payment: RuntimeBillPayment) => {
   runtimeBillPayments.push(payment);
   return payment;
 };
 
 export const getRuntimeBillPayments = () => runtimeBillPayments;
+
+export const getEtaPaymentRecords = () => etaPaymentRecords;
+
+export const getEtaPaymentByApplicationId = (applicationId: string) =>
+  etaPaymentRecords.find((payment) => payment.applicationId === applicationId);
+
+export const getEtaPaymentByBillId = (billId: string) =>
+  etaPaymentRecords.find((payment) => payment.billId === billId);
+
+export const createEtaPaymentRecord = (record: Omit<EtaPaymentRecord, 'id'>) => {
+  etaPaymentSequence += 1;
+  const created: EtaPaymentRecord = {
+    id: `PAY-${etaPaymentSequence}`,
+    ...record,
+  };
+  etaPaymentRecords.unshift(created);
+  return created;
+};
+
+export const updateEtaPaymentRecord = (
+  paymentId: string,
+  updates: Partial<Omit<EtaPaymentRecord, 'id'>>
+) => {
+  const index = etaPaymentRecords.findIndex((payment) => payment.id === paymentId);
+  if (index === -1) return null;
+
+  etaPaymentRecords[index] = {
+    ...etaPaymentRecords[index],
+    ...updates,
+  };
+
+  return etaPaymentRecords[index];
+};
+
+export const getEtaPaymentNotifications = () => etaPaymentNotifications;
+
+export const recordEtaPaymentNotification = (
+  notification: Omit<EtaPaymentNotification, 'id' | 'sentAt'>
+) => {
+  const created: EtaPaymentNotification = {
+    id: `NTF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    sentAt: new Date().toISOString(),
+    ...notification,
+  };
+  etaPaymentNotifications.unshift(created);
+  return created;
+};
 
 export const findStudentByConsumerNumber = (consumerNumber: string) =>
   students.find((student) => student.consumerNumber === consumerNumber);
@@ -553,6 +606,138 @@ export const applicants: Applicant[] = applicantNames.map((name, i) => ({
   marks: i % 9 >= 7 ? 650 + (i * 13) % 200 : undefined,
   appliedDate: `2025-03-${String((i % 28) + 1).padStart(2, '0')}`,
 }));
+
+const buildEtaBillId = (applicationId: string) => {
+  const applicationDigits = applicationId.replace(/\D/g, '').padStart(14, '0').slice(-14);
+  return `1234562001${applicationDigits}`;
+};
+
+const etaSeedPayments: EtaPaymentRecord[] = [
+  {
+    id: 'PAY-1001',
+    applicationId: 'a1',
+    applicantId: 'a1',
+    postingId: applicants[0].serviceId,
+    billId: buildEtaBillId('a1'),
+    amount: 3500,
+    status: 'paid',
+    dueDate: '2026-04-10',
+    expiryDate: '2026-04-12T09:00:00.000Z',
+    createdAt: '2026-04-01T09:00:00.000Z',
+    paidAt: '2026-04-01T09:17:00.000Z',
+    transactionId: 'TXN-ETA-1001',
+    description: 'MDCAT application fee',
+    callbackUrl: '/api/payment/callback',
+  },
+  {
+    id: 'PAY-1002',
+    applicationId: 'a2',
+    applicantId: 'a2',
+    postingId: applicants[1].serviceId,
+    billId: buildEtaBillId('a2'),
+    amount: 3500,
+    status: 'pending',
+    dueDate: '2026-04-11',
+    expiryDate: '2026-04-13T11:00:00.000Z',
+    createdAt: '2026-04-01T11:00:00.000Z',
+    description: 'MDCAT application fee',
+    callbackUrl: '/api/payment/callback',
+  },
+  {
+    id: 'PAY-1003',
+    applicationId: 'a3',
+    applicantId: 'a3',
+    postingId: applicants[2].serviceId,
+    billId: buildEtaBillId('a3'),
+    amount: 3500,
+    status: 'failed',
+    dueDate: '2026-04-09',
+    expiryDate: '2026-04-11T08:00:00.000Z',
+    createdAt: '2026-03-31T08:00:00.000Z',
+    transactionId: 'TXN-ETA-1003',
+    description: 'ECAT application fee',
+    callbackUrl: '/api/payment/callback',
+  },
+  {
+    id: 'PAY-1004',
+    applicationId: 'a4',
+    applicantId: 'a4',
+    postingId: applicants[3].serviceId,
+    billId: buildEtaBillId('a4'),
+    amount: 2500,
+    status: 'paid',
+    dueDate: '2026-04-08',
+    expiryDate: '2026-04-10T10:00:00.000Z',
+    createdAt: '2026-03-30T10:00:00.000Z',
+    paidAt: '2026-03-30T10:42:00.000Z',
+    transactionId: 'TXN-ETA-1004',
+    description: 'Lecturer recruitment application fee',
+    callbackUrl: '/api/payment/callback',
+  },
+  {
+    id: 'PAY-1005',
+    applicationId: 'a5',
+    applicantId: 'a5',
+    postingId: applicants[4].serviceId,
+    billId: buildEtaBillId('a5'),
+    amount: 3500,
+    status: 'expired',
+    dueDate: '2026-03-25',
+    expiryDate: '2026-03-27T07:00:00.000Z',
+    createdAt: '2026-03-25T07:00:00.000Z',
+    description: 'MDCAT application fee',
+    callbackUrl: '/api/payment/callback',
+  },
+  {
+    id: 'PAY-1006',
+    applicationId: 'a6',
+    applicantId: 'a6',
+    postingId: applicants[5].serviceId,
+    billId: buildEtaBillId('a6'),
+    amount: 3500,
+    status: 'pending',
+    dueDate: '2026-04-14',
+    expiryDate: '2026-04-16T12:00:00.000Z',
+    createdAt: '2026-04-02T12:00:00.000Z',
+    description: 'MDCAT application fee',
+    callbackUrl: '/api/payment/callback',
+  },
+];
+
+etaPaymentRecords.push(...etaSeedPayments);
+etaPaymentSequence = 1000 + etaSeedPayments.length;
+
+etaSeedPayments.forEach((payment) => {
+  const applicant = applicants.find((entry) => entry.id === payment.applicantId);
+  if (!applicant) return;
+
+  applicant.billId = payment.billId;
+  if (payment.status === 'paid') {
+    applicant.paymentStatus = 'paid';
+    if (applicant.applicationStatus === 'submitted' || applicant.applicationStatus === 'fee_pending') {
+      applicant.applicationStatus = 'fee_paid';
+    }
+    return;
+  }
+
+  applicant.paymentStatus = 'pending';
+  if (applicant.applicationStatus === 'submitted') {
+    applicant.applicationStatus = 'fee_pending';
+  }
+});
+
+const etaSeedNotifications: EtaPaymentNotification[] = etaSeedPayments
+  .filter((payment) => payment.status !== 'pending')
+  .map((payment, index) => ({
+    id: `NTF-SEED-${index + 1}`,
+    applicationId: payment.applicationId,
+    paymentId: payment.id,
+    billId: payment.billId,
+    status: payment.status,
+    sentAt: payment.paidAt || payment.createdAt,
+  }));
+
+etaPaymentNotifications.push(...etaSeedNotifications);
 
 export const auditLogs: AuditLog[] = [
   { id: 'al1', userId: '1', userName: 'Admin User', action: 'create', entity: 'student', entityId: 's1', details: 'Created student Ahmed Khan', timestamp: '2025-03-28T10:30:00', ip: '192.168.1.100' },

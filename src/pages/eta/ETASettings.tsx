@@ -1,190 +1,175 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Separator } from '@/components/ui/separator';
-import { toast } from 'sonner';
+import { Label } from '@/components/ui/label';
+import { useEtaSecurityStore } from '@/store/etaSecurityStore';
 
 const ETASettings = () => {
-  const [paymentPrefs, setPaymentPrefs] = useState({
-    allowPartial: false,
-    autoVerifyBank: true,
-    smsReminders: true,
-    autoReconcile: true,
-  });
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
-  const [admitPolicy, setAdmitPolicy] = useState({
-    requireCNICMatch: true,
-    blockUnpaid: true,
-    showCenterQR: true,
-    downloadWatermark: true,
-  });
+  const storedApiKey = useEtaSecurityStore((state) => state.apiKey);
+  const storedSourceIp = useEtaSecurityStore((state) => state.sourceIp);
+  const setApiKey = useEtaSecurityStore((state) => state.setApiKey);
+  const setSourceIp = useEtaSecurityStore((state) => state.setSourceIp);
 
-  const [resultPrefs, setResultPrefs] = useState({
-    cutoffMarks: '750',
-    waitlistCount: '500',
-    sendSMS: false,
-  });
+  const [securityApiKey, setSecurityApiKey] = useState(storedApiKey);
+  const [securitySourceIp, setSecuritySourceIp] = useState(storedSourceIp);
 
-  const handleSave = () => {
-    toast.success('ETA settings updated (mock)');
+  const resetForm = () => {
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+  };
+
+  const handleUpdatePassword = () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast.error('All password fields are required');
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      toast.error('New password must be at least 8 characters');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast.error('New password and confirm password do not match');
+      return;
+    }
+
+    if (currentPassword === newPassword) {
+      toast.error('New password must be different from current password');
+      return;
+    }
+
+    toast.success('Password updated successfully (mock)');
+    resetForm();
+  };
+
+  const handleSaveSecurityContext = () => {
+    if (!securityApiKey.trim()) {
+      toast.error('API key is required');
+      return;
+    }
+
+    if (!securitySourceIp.trim()) {
+      toast.error('Source IP is required');
+      return;
+    }
+
+    setApiKey(securityApiKey);
+    setSourceIp(securitySourceIp);
+    toast.success('API Security Context updated');
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">ETA Settings</h1>
-          <p className="text-sm text-muted-foreground">Guard payment, admit card, and result publication policies.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Badge variant="secondary">Draft</Badge>
-          <Button onClick={handleSave}>Save changes</Button>
-        </div>
+    <div className="space-y-6 animate-fade-in">
+      <div>
+        <h1 className="page-header">Settings</h1>
+        <p className="page-description">Update your account password.</p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-3">
-            <CardTitle>Payment & reconciliation</CardTitle>
-            <CardDescription>How applicants pay and how payments get cleared.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Allow partial fee</p>
-                <p className="text-sm text-muted-foreground">Accept part payment while keeping balance due.</p>
-              </div>
-              <Switch checked={paymentPrefs.allowPartial} onCheckedChange={(checked) => setPaymentPrefs((p) => ({ ...p, allowPartial: checked }))} />
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Auto verify with bank</p>
-                <p className="text-sm text-muted-foreground">Mark payments paid after bank webhook (mock).</p>
-              </div>
-              <Switch checked={paymentPrefs.autoVerifyBank} onCheckedChange={(checked) => setPaymentPrefs((p) => ({ ...p, autoVerifyBank: checked }))} />
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Send SMS reminders</p>
-                <p className="text-sm text-muted-foreground">Nudge applicants before fee due date.</p>
-              </div>
-              <Switch checked={paymentPrefs.smsReminders} onCheckedChange={(checked) => setPaymentPrefs((p) => ({ ...p, smsReminders: checked }))} />
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Auto reconcile retries</p>
-                <p className="text-sm text-muted-foreground">Retry matching late bank files every 30 minutes.</p>
-              </div>
-              <Switch checked={paymentPrefs.autoReconcile} onCheckedChange={(checked) => setPaymentPrefs((p) => ({ ...p, autoReconcile: checked }))} />
-            </div>
-          </CardContent>
-        </Card>
+      <Card className="max-w-2xl">
+        <CardHeader>
+          <CardTitle>Update Password</CardTitle>
+          <CardDescription>
+            Use a strong password with at least 8 characters.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="current-password">Current Password</Label>
+            <Input
+              id="current-password"
+              type="password"
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+              className="rounded-lg"
+              autoComplete="current-password"
+            />
+          </div>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle>Admit cards</CardTitle>
-            <CardDescription>Access and security rules for admit downloads.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Match CNIC with roll</p>
-                <p className="text-sm text-muted-foreground">Block downloads if CNIC mismatch is detected.</p>
-              </div>
-              <Switch checked={admitPolicy.requireCNICMatch} onCheckedChange={(checked) => setAdmitPolicy((p) => ({ ...p, requireCNICMatch: checked }))} />
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Block unpaid applicants</p>
-                <p className="text-sm text-muted-foreground">Only paid applicants can fetch admit cards.</p>
-              </div>
-              <Switch checked={admitPolicy.blockUnpaid} onCheckedChange={(checked) => setAdmitPolicy((p) => ({ ...p, blockUnpaid: checked }))} />
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Show center QR</p>
-                <p className="text-sm text-muted-foreground">Include QR with center and slot info.</p>
-              </div>
-              <Switch checked={admitPolicy.showCenterQR} onCheckedChange={(checked) => setAdmitPolicy((p) => ({ ...p, showCenterQR: checked }))} />
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Watermark downloads</p>
-                <p className="text-sm text-muted-foreground">Stamp admit PDFs with user and timestamp.</p>
-              </div>
-              <Switch checked={admitPolicy.downloadWatermark} onCheckedChange={(checked) => setAdmitPolicy((p) => ({ ...p, downloadWatermark: checked }))} />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-password">New Password</Label>
+            <Input
+              id="new-password"
+              type="password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              className="rounded-lg"
+              autoComplete="new-password"
+            />
+          </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-3">
-            <CardTitle>Result publication</CardTitle>
-            <CardDescription>Guard cutoffs and applicant communication.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="cutoff">Minimum cutoff (marks)</Label>
-                <Input
-                  id="cutoff"
-                  type="number"
-                  min={0}
-                  max={1200}
-                  value={resultPrefs.cutoffMarks}
-                  onChange={(e) => setResultPrefs((p) => ({ ...p, cutoffMarks: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="waitlist">Waitlist size</Label>
-                <Input
-                  id="waitlist"
-                  type="number"
-                  min={0}
-                  max={5000}
-                  value={resultPrefs.waitlistCount}
-                  onChange={(e) => setResultPrefs((p) => ({ ...p, waitlistCount: e.target.value }))}
-                />
-              </div>
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Send SMS on publish</p>
-                <p className="text-sm text-muted-foreground">Notify applicants with marks and status.</p>
-              </div>
-              <Switch checked={resultPrefs.sendSMS} onCheckedChange={(checked) => setResultPrefs((p) => ({ ...p, sendSMS: checked }))} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="result-note">Footer note for merit list</Label>
-              <Textarea id="result-note" rows={3} placeholder="Objections can be filed within 48 hours at support@etea.pk" />
-            </div>
-          </CardContent>
-        </Card>
+          <div className="space-y-2">
+            <Label htmlFor="confirm-password">Confirm New Password</Label>
+            <Input
+              id="confirm-password"
+              type="password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              className="rounded-lg"
+              autoComplete="new-password"
+            />
+          </div>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle>Audit & compliance</CardTitle>
-            <CardDescription>Capture who changed high-risk settings.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="p-3 rounded-xl bg-muted/50 border">
-              <p className="text-sm font-semibold">Immutable log (mock)</p>
-              <p className="text-xs text-muted-foreground">Setting changes are stamped with user + IP. Connect to Audit Trail later.</p>
-            </div>
-            <Button variant="outline" className="w-full rounded-lg" onClick={() => toast.info('Audit export is stubbed in mock mode')}>
-              Export audit trail
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+          <Button className="rounded-lg" onClick={handleUpdatePassword}>
+            Update Password
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="max-w-2xl">
+        <CardHeader>
+          <CardTitle>API Security Context</CardTitle>
+          <CardDescription>
+            Configure API key and source IP for ETA payment-controller calls. Protocol is fixed to HTTPS and callback flow enforces signature + idempotency controls.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="api-key">API Key</Label>
+            <Input
+              id="api-key"
+              value={securityApiKey}
+              onChange={(event) => setSecurityApiKey(event.target.value)}
+              className="rounded-lg"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="source-ip">Source IP (Whitelisted)</Label>
+            <Input
+              id="source-ip"
+              value={securitySourceIp}
+              onChange={(event) => setSecuritySourceIp(event.target.value)}
+              className="rounded-lg"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="protocol">Protocol</Label>
+            <Input id="protocol" value="https" readOnly className="rounded-lg bg-muted/40" />
+          </div>
+
+          <div className="rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground space-y-1">
+            <p>Security controls enabled:</p>
+            <p>- API key authentication</p>
+            <p>- Source IP whitelist</p>
+            <p>- HTTPS-only transport</p>
+            <p>- Webhook signature verification</p>
+            <p>- Callback idempotency protection</p>
+          </div>
+
+          <Button className="rounded-lg" onClick={handleSaveSecurityContext}>
+            Save Security Context
+          </Button>
+        </CardContent>
+      </Card>
     </div>
   );
 };
