@@ -13,28 +13,28 @@ import { resolvePostingById } from '@/lib/etaFinance';
 import { useNavigate } from 'react-router-dom';
 import { usePaymentStore } from '@/store/paymentStore';
 
-const statusLabels: Record<string, string> = {
+type ReferenceStatus = 'submitted' | 'fee_pending' | 'fee_paid' | 'external';
+type ReferenceStatusFilter = 'all' | ReferenceStatus;
+
+const referenceStatusLabels: Record<ReferenceStatus, string> = {
   submitted: 'Submitted',
   fee_pending: 'Fee Pending',
   fee_paid: 'Fee Paid',
-  roll_assigned: 'Roll Assigned',
-  test_scheduled: 'Test Scheduled',
-  appeared: 'Appeared',
-  result_pending: 'Result Pending',
-  selected: 'Selected',
-  rejected: 'Rejected',
+  external: 'External Stage',
 };
 
-const statusColors: Record<string, string> = {
+const referenceStatusColors: Record<ReferenceStatus, string> = {
   submitted: 'bg-muted text-muted-foreground',
   fee_pending: 'bg-warning/10 text-warning',
   fee_paid: 'bg-success/10 text-success',
-  roll_assigned: 'bg-primary/10 text-primary',
-  test_scheduled: 'bg-info/10 text-info',
-  appeared: 'bg-primary/10 text-primary',
-  result_pending: 'bg-warning/10 text-warning',
-  selected: 'bg-success/10 text-success',
-  rejected: 'bg-destructive/10 text-destructive',
+  external: 'bg-primary/10 text-primary',
+};
+
+const normalizeReferenceStatus = (status: string): ReferenceStatus => {
+  if (status === 'submitted' || status === 'fee_pending' || status === 'fee_paid') {
+    return status;
+  }
+  return 'external';
 };
 
 const ApplicantList = () => {
@@ -43,7 +43,7 @@ const ApplicantList = () => {
   const navigate = useNavigate();
 
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<ReferenceStatusFilter>('all');
   const [postingFilter, setPostingFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -61,14 +61,33 @@ const ApplicantList = () => {
     return Array.from(optionMap.entries()).map(([value, label]) => ({ value, label }));
   }, [applicantList]);
 
+  const statusFilterOptions = useMemo(() => {
+    const counts: Record<ReferenceStatus, number> = {
+      submitted: 0,
+      fee_pending: 0,
+      fee_paid: 0,
+      external: 0,
+    };
+
+    applicantList.forEach((applicant) => {
+      const normalized = normalizeReferenceStatus(applicant.applicationStatus);
+      counts[normalized] += 1;
+    });
+
+    return (Object.keys(referenceStatusLabels) as ReferenceStatus[]).map((status) => ({
+      value: status,
+      label: `${referenceStatusLabels[status]} (${counts[status]})`,
+    }));
+  }, [applicantList]);
+
   const filtered = applicantList.filter((applicant) => {
     const query = search.toLowerCase();
     const matchSearch =
       applicant.id.toLowerCase().includes(query) ||
       applicant.name.toLowerCase().includes(query) ||
-      applicant.cnic.includes(search) ||
-      (applicant.rollNumber || '').toLowerCase().includes(query);
-    const matchStatus = statusFilter === 'all' || applicant.applicationStatus === statusFilter;
+      applicant.cnic.includes(search);
+    const normalizedStatus = normalizeReferenceStatus(applicant.applicationStatus);
+    const matchStatus = statusFilter === 'all' || normalizedStatus === statusFilter;
     const matchPosting = postingFilter === 'all' || applicant.serviceId === postingFilter;
     return matchSearch && matchStatus && matchPosting;
   });
@@ -88,13 +107,14 @@ const ApplicantList = () => {
           <ExportButton
             data={filtered.map((applicant) => ({
               ReferenceId: applicant.id,
+              ApplicationId: applicant.id,
+              ApplicantId: applicant.id,
               Name: applicant.name,
-              Father: applicant.fatherName,
               CNIC: applicant.cnic,
-              District: applicant.district,
+              PostingId: applicant.serviceId,
               Posting: resolvePostingById(applicant.serviceId).title,
               PaymentStatus: applicant.paymentStatus,
-              ApplicationStatus: applicant.applicationStatus,
+              ReferenceStatus: referenceStatusLabels[normalizeReferenceStatus(applicant.applicationStatus)],
             }))}
             filename="eta-application-references"
           />
@@ -105,46 +125,34 @@ const ApplicantList = () => {
       </div>
 
       <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
-        Payment processor boundary: references are used for payment workflow only. Student or applicant master records are owned by the source ETA or ETEA system.
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {Object.entries(statusLabels).map(([key, label]) => {
-          const count = applicantList.filter((applicant) => applicant.applicationStatus === key).length;
-          return (
-            <button
-              key={key}
-              onClick={() => {
-                setStatusFilter(key === statusFilter ? 'all' : key);
-                setPage(1);
-              }}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-                statusFilter === key
-                  ? `${statusColors[key]} border-current`
-                  : 'border-border text-muted-foreground hover:border-foreground/20'
-              }`}
-            >
-              {label} <span className="ml-1 font-mono">{count}</span>
-            </button>
-          );
-        })}
+        Payment processor boundary: references are used for payment workflow only. Student or applicant master records are owned by the source ETA or ETEA system. Any non-payment pipeline stage from source data is grouped as External Stage.
       </div>
 
       <FilterBar
-        searchPlaceholder="Search by reference ID, name, CNIC, or roll number..."
+        searchPlaceholder="Search by reference ID, name, or CNIC..."
         onSearch={(value) => {
           setSearch(value);
           setPage(1);
         }}
         filters={[
           {
+            key: 'status',
+            label: 'Filter by Reference Status',
+            options: statusFilterOptions,
+          },
+          {
             key: 'posting',
             label: 'Filter by Posting',
             options: postingFilterOptions,
           },
         ]}
-        onFilterChange={(_, value) => {
-          setPostingFilter(value === 'all' ? 'all' : value);
+        onFilterChange={(key, value) => {
+          if (key === 'status') {
+            setStatusFilter(value as ReferenceStatusFilter);
+          }
+          if (key === 'posting') {
+            setPostingFilter(value === 'all' ? 'all' : value);
+          }
           setPage(1);
         }}
       />
@@ -168,13 +176,11 @@ const ApplicantList = () => {
               <TableRow>
                 <TableHead className="text-xs font-semibold">Reference ID</TableHead>
                 <TableHead className="text-xs font-semibold">Name</TableHead>
-                <TableHead className="text-xs font-semibold">Father Name</TableHead>
                 <TableHead className="text-xs font-semibold">CNIC</TableHead>
                 <TableHead className="text-xs font-semibold">District</TableHead>
                 <TableHead className="text-xs font-semibold">Posting</TableHead>
                 <TableHead className="text-xs font-semibold">Payment</TableHead>
-                <TableHead className="text-xs font-semibold">Status</TableHead>
-                <TableHead className="text-xs font-semibold">Roll #</TableHead>
+                <TableHead className="text-xs font-semibold">Reference Status</TableHead>
                 <TableHead className="text-xs font-semibold w-10"></TableHead>
               </TableRow>
             </TableHeader>
@@ -183,7 +189,6 @@ const ApplicantList = () => {
                 <TableRow key={applicant.id} className="hover:bg-muted/30">
                   <TableCell className="font-mono text-xs">{applicant.id}</TableCell>
                   <TableCell className="font-medium text-sm">{applicant.name}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{applicant.fatherName}</TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">{applicant.cnic}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{applicant.district}</TableCell>
                   <TableCell className="text-xs">
@@ -191,11 +196,10 @@ const ApplicantList = () => {
                   </TableCell>
                   <TableCell><StatusBadge status={applicant.paymentStatus} /></TableCell>
                   <TableCell>
-                    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${statusColors[applicant.applicationStatus]}`}>
-                      {statusLabels[applicant.applicationStatus]}
+                    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${referenceStatusColors[normalizeReferenceStatus(applicant.applicationStatus)]}`}>
+                      {referenceStatusLabels[normalizeReferenceStatus(applicant.applicationStatus)]}
                     </span>
                   </TableCell>
-                  <TableCell className="font-mono text-xs">{applicant.rollNumber || '-'}</TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
