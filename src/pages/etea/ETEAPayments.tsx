@@ -18,17 +18,17 @@ import {
   listPaymentNotifications,
   listPayments,
   processPaymentCallback,
-  etaPaymentControllerConfig,
-} from '@/services/etaPaymentController';
+  eteaPaymentControllerConfig,
+} from '@/services/eteaPaymentController';
 import { formatPKR } from '@/lib/formatters';
 import { usePaymentStore } from '@/store/paymentStore';
-import { useEtaSecurityStore } from '@/store/etaSecurityStore';
+import { useEteaSecurityStore } from '@/store/eteaSecurityStore';
 import {
-  EtaCreatePaymentResponse,
-  EtaHealthResponse,
-  EtaPaymentCallbackResponse,
-  EtaPaymentStatus,
-  EtaPaymentStatusResponse,
+  EteaCreatePaymentResponse,
+  EteaHealthResponse,
+  EteaPaymentCallbackResponse,
+  EteaPaymentStatus,
+  EteaPaymentStatusResponse,
 } from '@/types';
 import { toast } from 'sonner';
 
@@ -38,20 +38,20 @@ const getDefaultDueDate = () => {
   return target.toISOString().slice(0, 10);
 };
 
-const CALLBACK_STATUS_OPTIONS: Array<Extract<EtaPaymentStatus, 'paid' | 'failed' | 'expired'>> = [
+const CALLBACK_STATUS_OPTIONS: Array<Extract<EteaPaymentStatus, 'paid' | 'failed' | 'expired'>> = [
   'paid',
   'failed',
   'expired',
 ];
 
-const ETAPayments = () => {
+const ETEAPayments = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
   const [searchParams] = useSearchParams();
 
   const queryApplicationId = searchParams.get('application') || '';
 
-  const apiKey = useEtaSecurityStore((state) => state.apiKey);
-  const sourceIp = useEtaSecurityStore((state) => state.sourceIp);
+  const apiKey = useEteaSecurityStore((state) => state.apiKey);
+  const sourceIp = useEteaSecurityStore((state) => state.sourceIp);
 
   const [createForm, setCreateForm] = useState({
     applicant_id: '',
@@ -66,15 +66,15 @@ const ETAPayments = () => {
   const [lookupApplicationId, setLookupApplicationId] = useState(queryApplicationId);
   const [callbackForm, setCallbackForm] = useState({
     bill_id: '',
-    status: 'paid' as Extract<EtaPaymentStatus, 'paid' | 'failed' | 'expired'>,
+    status: 'paid' as Extract<EteaPaymentStatus, 'paid' | 'failed' | 'expired'>,
     transaction_id: `TXN-${Date.now()}`,
     paid_at: new Date().toISOString().slice(0, 16),
   });
 
-  const [createResult, setCreateResult] = useState<EtaCreatePaymentResponse | null>(null);
-  const [lookupResult, setLookupResult] = useState<EtaPaymentStatusResponse | null>(null);
-  const [callbackResult, setCallbackResult] = useState<EtaPaymentCallbackResponse | null>(null);
-  const [health, setHealth] = useState<EtaHealthResponse | null>(null);
+  const [createResult, setCreateResult] = useState<EteaCreatePaymentResponse | null>(null);
+  const [lookupResult, setLookupResult] = useState<EteaPaymentStatusResponse | null>(null);
+  const [callbackResult, setCallbackResult] = useState<EteaPaymentCallbackResponse | null>(null);
+  const [health, setHealth] = useState<EteaHealthResponse | null>(null);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -260,7 +260,7 @@ const ETAPayments = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="page-header">ETA Payment Controller</h1>
+        <h1 className="page-header">ETEA Payment Controller</h1>
         <p className="page-description">
           Government testing body flow: ETEA creates payment request, system creates temporary payment record, creates 1Bill payload, processes callback, then notifies ETEA.
         </p>
@@ -273,19 +273,19 @@ const ETAPayments = () => {
         <CardContent className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 text-sm">
           <div className="rounded-lg border p-3">
             <p className="text-xs text-muted-foreground">Create Endpoint</p>
-            <p className="font-mono text-xs">{etaPaymentControllerConfig.endpoints.create}</p>
+            <p className="font-mono text-xs">{eteaPaymentControllerConfig.endpoints.create}</p>
           </div>
           <div className="rounded-lg border p-3">
             <p className="text-xs text-muted-foreground">Callback Endpoint</p>
-            <p className="font-mono text-xs">{etaPaymentControllerConfig.endpoints.callback}</p>
+            <p className="font-mono text-xs">{eteaPaymentControllerConfig.endpoints.callback}</p>
           </div>
           <div className="rounded-lg border p-3">
             <p className="text-xs text-muted-foreground">Notify Endpoint</p>
-            <p className="font-mono text-xs">{etaPaymentControllerConfig.endpoints.notifyEtea}</p>
+            <p className="font-mono text-xs">{eteaPaymentControllerConfig.endpoints.notifyEtea}</p>
           </div>
           <div className="rounded-lg border p-3">
             <p className="text-xs text-muted-foreground">Bill ID Pattern</p>
-            <p className="font-mono text-xs">{etaPaymentControllerConfig.billIdPattern}</p>
+            <p className="font-mono text-xs">{eteaPaymentControllerConfig.billIdPattern}</p>
           </div>
         </CardContent>
       </Card>
@@ -442,7 +442,7 @@ const ETAPayments = () => {
                 <Label className="text-xs">status</Label>
                 <Select
                   value={callbackForm.status}
-                  onValueChange={(value: Extract<EtaPaymentStatus, 'paid' | 'failed' | 'expired'>) =>
+                  onValueChange={(value: Extract<EteaPaymentStatus, 'paid' | 'failed' | 'expired'>) =>
                     setCallbackForm({ ...callbackForm, status: value })
                   }
                 >
@@ -605,4 +605,4 @@ const ETAPayments = () => {
   );
 };
 
-export default ETAPayments;
+export default ETEAPayments;

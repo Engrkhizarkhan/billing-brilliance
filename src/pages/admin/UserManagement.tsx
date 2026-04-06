@@ -101,7 +101,7 @@ const UserManagement = () => {
     setLoading(true);
     const bulkPayload = [
       { name: 'Saad Qureshi', email: 'saad@school.com', role: 'school' as User['role'] },
-      { name: 'Farah Naz', email: 'farah@agency.com', role: 'eta' as User['role'] },
+      { name: 'Farah Naz', email: 'farah@agency.com', role: 'etea' as User['role'] },
       { name: 'Kashif Raza', email: 'kashif@school.com', role: 'school' as User['role'] },
     ];
     const created = await Promise.all(bulkPayload.map((u) => mockApi.createUser(u)));
@@ -153,7 +153,7 @@ const UserManagement = () => {
                     <SelectContent>
                       <SelectItem value="admin">Admin</SelectItem>
                       <SelectItem value="school">School</SelectItem>
-                      <SelectItem value="eta">ETA</SelectItem>
+                      <SelectItem value="etea">ETEA</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -220,7 +220,7 @@ const UserManagement = () => {
         searchPlaceholder="Search users…"
         onSearch={setSearch}
         filters={[
-          { key: 'role', label: 'Role', options: [{ value: 'admin', label: 'Admin' }, { value: 'school', label: 'School' }, { value: 'eta', label: 'ETA' }] },
+          { key: 'role', label: 'Role', options: [{ value: 'admin', label: 'Admin' }, { value: 'school', label: 'School' }, { value: 'etea', label: 'ETEA' }] },
           { key: 'status', label: 'Status', options: [{ value: 'active', label: 'Active' }, { value: 'banned', label: 'Banned' }] },
         ]}
         onFilterChange={(key, value) => {

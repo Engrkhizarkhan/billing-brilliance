@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Eye, MoreHorizontal, UserPlus, Wallet } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { resolvePostingById } from '@/lib/etaFinance';
+import { resolvePostingById } from '@/lib/eteaFinance';
 import { useNavigate } from 'react-router-dom';
 import { usePaymentStore } from '@/store/paymentStore';
 
@@ -116,16 +116,16 @@ const ApplicantList = () => {
               PaymentStatus: applicant.paymentStatus,
               ReferenceStatus: referenceStatusLabels[normalizeReferenceStatus(applicant.applicationStatus)],
             }))}
-            filename="eta-application-references"
+            filename="etea-application-references"
           />
-          <Button variant="outline" size="sm" className="rounded-lg" onClick={() => navigate('/eta/payments')}>
+          <Button variant="outline" size="sm" className="rounded-lg" onClick={() => navigate('/etea/payments')}>
             <Wallet className="w-4 h-4 mr-1.5" />Open Payment Controller
           </Button>
         </div>
       </div>
 
       <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
-        Payment processor boundary: references are used for payment workflow only. Student or applicant master records are owned by the source ETA or ETEA system. Any non-payment pipeline stage from source data is grouped as External Stage.
+        Payment processor boundary: references are used for payment workflow only. Student or applicant master records are owned by the source authority. Any non-payment pipeline stage from source data is grouped as External Stage.
       </div>
 
       <FilterBar
@@ -168,7 +168,7 @@ const ApplicantList = () => {
           <EmptyState
             icon={UserPlus}
             title="No application references"
-            description="No source references are available yet. Sync references from ETA or ETEA source before creating payment requests."
+            description="No source references are available yet. Sync references from the source system before creating payment requests."
           />
         ) : (
           <Table>
@@ -211,7 +211,7 @@ const ApplicantList = () => {
                         <DropdownMenuItem>
                           <Eye className="w-4 h-4 mr-2" />View Reference
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => navigate(`/eta/payments?application=${applicant.id}`)}>
+                        <DropdownMenuItem onClick={() => navigate(`/etea/payments?application=${applicant.id}`)}>
                           Open Payment Request
                         </DropdownMenuItem>
                       </DropdownMenuContent>

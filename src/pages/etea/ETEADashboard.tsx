@@ -5,11 +5,11 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { formatPKR } from '@/lib/formatters';
 import { useNavigate } from 'react-router-dom';
 import { useMemo } from 'react';
-import { resolvePostingById } from '@/lib/etaFinance';
+import { resolvePostingById } from '@/lib/eteaFinance';
 import { usePaymentStore } from '@/store/paymentStore';
-import { listPayments } from '@/services/etaPaymentController';
+import { listPayments } from '@/services/eteaPaymentController';
 
-const ETADashboard = () => {
+const ETEADashboard = () => {
   const navigate = useNavigate();
   const paymentVersion = usePaymentStore((state) => state.version);
 
@@ -80,7 +80,7 @@ const ETADashboard = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-header">ETEA Dashboard</h1>
-          <p className="page-description">Manage postings and payment processing. Applicant master data remains with the source ETA/ETEA system.</p>
+          <p className="page-description">Manage postings and payment processing. Applicant master data remains with the source ETEA system.</p>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Activity className="w-3.5 h-3.5 text-success" />
@@ -93,8 +93,8 @@ const ETADashboard = () => {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <div className="cursor-pointer" onClick={() => navigate('/eta/postings')}><StatCard title="Active Postings" value={activePostings} icon={Megaphone} /></div>
-        <div className="cursor-pointer" onClick={() => navigate('/eta/payments')}><StatCard title="Payment Requests" value={paymentRecords.length} icon={Receipt} /></div>
+        <div className="cursor-pointer" onClick={() => navigate('/etea/postings')}><StatCard title="Active Postings" value={activePostings} icon={Megaphone} /></div>
+        <div className="cursor-pointer" onClick={() => navigate('/etea/payments')}><StatCard title="Payment Requests" value={paymentRecords.length} icon={Receipt} /></div>
         <StatCard title="Fees Collected" value={formatPKR(feeCollected)} icon={Wallet} trend="Paid payment records" trendUp={feeCollected > 0} />
         <StatCard title="Pending Payments" value={pendingPayments} icon={Receipt} trend="Requests awaiting callback" trendUp={false} />
         <StatCard title="Verified Transactions" value={verifiedTransactions} icon={CheckCircle2} trend="Callback confirmed transactions" trendUp />
@@ -144,7 +144,7 @@ const ETADashboard = () => {
         <ResponsiveContainer width="100%" height={250}>
           <AreaChart data={collectionTrend}>
             <defs>
-              <linearGradient id="etaRevGrad" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id="eteaRevGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="hsl(221, 83%, 53%)" stopOpacity={0.15} />
                 <stop offset="95%" stopColor="hsl(221, 83%, 53%)" stopOpacity={0} />
               </linearGradient>
@@ -153,7 +153,7 @@ const ETADashboard = () => {
             <XAxis dataKey="month" fontSize={11} tick={{ fill: 'hsl(220, 9%, 46%)' }} />
             <YAxis fontSize={11} tickFormatter={(value) => `${value / 1000}K`} tick={{ fill: 'hsl(220, 9%, 46%)' }} />
             <Tooltip formatter={(value: number) => [formatPKR(value), 'Collected']} contentStyle={{ borderRadius: '10px', fontSize: '12px', border: '1px solid hsl(220, 13%, 91%)' }} />
-            <Area type="monotone" dataKey="revenue" stroke="hsl(221, 83%, 53%)" fill="url(#etaRevGrad)" strokeWidth={2.5} />
+            <Area type="monotone" dataKey="revenue" stroke="hsl(221, 83%, 53%)" fill="url(#eteaRevGrad)" strokeWidth={2.5} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -161,4 +161,4 @@ const ETADashboard = () => {
   );
 };
 
-export default ETADashboard;
+export default ETEADashboard;

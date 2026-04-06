@@ -4,17 +4,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useEtaSecurityStore } from '@/store/etaSecurityStore';
+import { useEteaSecurityStore } from '@/store/eteaSecurityStore';
 
-const ETASettings = () => {
+const ETEASettings = () => {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  const storedApiKey = useEtaSecurityStore((state) => state.apiKey);
-  const storedSourceIp = useEtaSecurityStore((state) => state.sourceIp);
-  const setApiKey = useEtaSecurityStore((state) => state.setApiKey);
-  const setSourceIp = useEtaSecurityStore((state) => state.setSourceIp);
+  const storedApiKey = useEteaSecurityStore((state) => state.apiKey);
+  const storedSourceIp = useEteaSecurityStore((state) => state.sourceIp);
+  const setApiKey = useEteaSecurityStore((state) => state.setApiKey);
+  const setSourceIp = useEteaSecurityStore((state) => state.setSourceIp);
 
   const [securityApiKey, setSecurityApiKey] = useState(storedApiKey);
   const [securitySourceIp, setSecuritySourceIp] = useState(storedSourceIp);
@@ -127,7 +127,7 @@ const ETASettings = () => {
         <CardHeader>
           <CardTitle>API Security Context</CardTitle>
           <CardDescription>
-            Configure API key and source IP for ETA payment-controller calls. Protocol is fixed to HTTPS and callback flow enforces signature + idempotency controls.
+            Configure API key and source IP for ETEA payment-controller calls. Protocol is fixed to HTTPS and callback flow enforces signature + idempotency controls.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -174,4 +174,4 @@ const ETASettings = () => {
   );
 };
 
-export default ETASettings;
+export default ETEASettings;

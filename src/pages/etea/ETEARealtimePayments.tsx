@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { listPayments } from '@/services/etaPaymentController';
+import { listPayments } from '@/services/eteaPaymentController';
 import { usePaymentStore } from '@/store/paymentStore';
 import { formatPKR } from '@/lib/formatters';
 
@@ -21,7 +21,7 @@ const formatTimestamp = (value?: string) => {
   });
 };
 
-const ETARealtimePayments = () => {
+const ETEARealtimePayments = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [liveClock, setLiveClock] = useState(() => new Date());
@@ -65,7 +65,7 @@ const ETARealtimePayments = () => {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col gap-1">
         <h1 className="page-header">Real-Time Payments</h1>
-        <p className="page-description">Live feed of paid ETA application transactions.</p>
+        <p className="page-description">Live feed of paid ETEA application transactions.</p>
       </div>
 
       <Card>
@@ -73,7 +73,7 @@ const ETARealtimePayments = () => {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
               <Activity className="w-4 h-4 text-primary" />
-              <p className="text-sm font-semibold">ETA Payments Stream</p>
+              <p className="text-sm font-semibold">ETEA Payments Stream</p>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">
@@ -126,7 +126,7 @@ const ETARealtimePayments = () => {
                 {paidPayments.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">
-                      No paid ETA payment events yet.
+                      No paid ETEA payment events yet.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -151,4 +151,4 @@ const ETARealtimePayments = () => {
   );
 };
 
-export default ETARealtimePayments;
+export default ETEARealtimePayments;

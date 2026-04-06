@@ -1,4 +1,4 @@
-# ETA Dashboard Workflow (Target Production Model)
+# ETEA Dashboard Workflow (Target Production Model)
 
 Last updated: 2026-04-05
 
@@ -7,8 +7,8 @@ Related workflow docs:
 - Full Workflow: [workflow.md](./workflow.md)
 - Sequence View: [workflow-sequence.md](./workflow-sequence.md)
 
-This document captures the ETA payment architecture exactly as required for production-style behavior.
-The ETA dashboard should behave as a payment controller over applications, not as an owner of student master data.
+This document captures the ETEA payment architecture exactly as required for production-style behavior.
+The ETEA dashboard should behave as a payment controller over applications, not as an owner of student master data.
 Endpoint naming in this document follows the canonical callback path: `POST /api/payment/callback`.
 
 ## 1) Roles in This System
@@ -257,7 +257,7 @@ Medical test applicant flow:
 4. 1Bill callback updates payment status.
 5. Payment system notifies ETEA with final status.
 
-## 13) ETA Dashboard Behavior Mapping
+## 13) ETEA Dashboard Behavior Mapping
 
 Dashboard modules should align with this architecture:
 

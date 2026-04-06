@@ -32,7 +32,7 @@ const initialAssignments: ServiceAssignment[] = [
   { id: 'sa4', applicantName: 'Saira Bano', cnic: '35204-4567890-4', consumerNumber: applicants[3].consumerNumber, serviceName: 'Immigration Filing', amount: 75000, paymentType: 'one-time', status: 'completed', assignedDate: '2025-01-10', nextDue: '-' },
 ];
 
-const ETAPaymentPrograms = () => {
+const ETEAPaymentPrograms = () => {
   const [assignments, setAssignments] = useState<ServiceAssignment[]>(initialAssignments);
   const [search, setSearch] = useState('');
   const [assignOpen, setAssignOpen] = useState(false);
@@ -324,4 +324,4 @@ const ETAPaymentPrograms = () => {
   );
 };
 
-export default ETAPaymentPrograms;
+export default ETEAPaymentPrograms;

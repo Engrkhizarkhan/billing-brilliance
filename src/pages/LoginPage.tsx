@@ -11,7 +11,7 @@ import { Lock, Mail, Building2, GraduationCap, Briefcase, Shield, ArrowRight, Ch
 const roles: { value: UserRole; label: string; desc: string; icon: React.ElementType; email: string }[] = [
   { value: 'admin', label: 'Admin', desc: 'Platform management', icon: Shield, email: 'admin@example.com' },
   { value: 'school', label: 'School', desc: 'Fee & student management', icon: GraduationCap, email: 'school@example.com' },
-  { value: 'eta', label: 'Agency', desc: 'Service & applicant management', icon: Briefcase, email: 'eta@example.com' },
+  { value: 'etea', label: 'ETEA', desc: 'Posting & payment management', icon: Briefcase, email: 'etea@example.com' },
 ];
 
 const features = [
@@ -169,7 +169,7 @@ const LoginPage = () => {
             <div className="rounded-xl bg-muted/60 border border-border p-4">
               <p className="text-[11px] font-semibold text-foreground mb-1.5">Demo credentials</p>
               <div className="space-y-0.5">
-                <p className="text-[11px] text-muted-foreground font-mono">admin@ / school@ / eta@example.com</p>
+                <p className="text-[11px] text-muted-foreground font-mono">admin@ / school@ / etea@example.com</p>
                 <p className="text-[11px] text-muted-foreground font-mono">Password: 123456</p>
               </div>
             </div>

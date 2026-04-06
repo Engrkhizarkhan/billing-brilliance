@@ -49,21 +49,21 @@ const navItems: Record<UserRole, NavItem[]> = {
     { label: 'Login Activity', path: '/school/login-activity', icon: Shield, group: 'System' },
     { label: 'Settings', path: '/school/settings', icon: Settings, group: 'System' },
   ],
-  eta: [
-    { label: 'Dashboard', path: '/eta', icon: LayoutDashboard, group: 'Overview' },
-    { label: 'Postings', path: '/eta/postings', icon: Megaphone, group: 'Management' },
-    { label: 'Application References', path: '/eta/applicants', icon: UserPlus, badge: '15', group: 'Management' },
-    { label: 'Payments', path: '/eta/payments', icon: Wallet, group: 'Finance' },
-    { label: 'Real-Time Payments', path: '/eta/realtime-payments', icon: Activity, group: 'Finance' },
-    { label: 'Reports', path: '/eta/reports', icon: BarChart3, group: 'Analytics' },
-    { label: 'Settings', path: '/eta/settings', icon: Settings, group: 'System' },
+  etea: [
+    { label: 'Dashboard', path: '/etea', icon: LayoutDashboard, group: 'Overview' },
+    { label: 'Postings', path: '/etea/postings', icon: Megaphone, group: 'Management' },
+    { label: 'Application References', path: '/etea/applicants', icon: UserPlus, badge: '15', group: 'Management' },
+    { label: 'Payments', path: '/etea/payments', icon: Wallet, group: 'Finance' },
+    { label: 'Real-Time Payments', path: '/etea/realtime-payments', icon: Activity, group: 'Finance' },
+    { label: 'Reports', path: '/etea/reports', icon: BarChart3, group: 'Analytics' },
+    { label: 'Settings', path: '/etea/settings', icon: Settings, group: 'System' },
   ],
 };
 
 const roleLabels: Record<UserRole, string> = {
   admin: 'Super Admin',
   school: 'School Portal',
-  eta: 'ETEA Portal',
+  etea: 'ETEA Portal',
 };
 
 const DashboardLayout = () => {
@@ -79,9 +79,10 @@ const DashboardLayout = () => {
   if (!user) { navigate('/login'); return null; }
 
   const items = navItems[user.role];
+  const roleRootPath = `/${user.role}`;
 
   const isActive = (path: string) => {
-    if (path === `/${user.role}`) return location.pathname === path;
+    if (path === roleRootPath) return location.pathname === path;
     return location.pathname.startsWith(path);
   };
 
@@ -181,7 +182,7 @@ const DashboardLayout = () => {
           {/* Breadcrumb */}
           <div className="hidden sm:flex items-center gap-1.5 text-sm">
             <span className="text-muted-foreground">{roleLabels[user.role]}</span>
-            {currentPage && currentPage.path !== `/${user.role}` && (
+            {currentPage && currentPage.path !== roleRootPath && (
               <>
                 <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />
                 <span className="font-medium text-foreground">{currentPage.label}</span>

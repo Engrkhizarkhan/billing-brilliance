@@ -91,7 +91,7 @@ const seedUsers: RuntimeUser[] = [
     verified: true,
     password: '123456',
   },
-  { id: '3', name: 'ETA Manager', email: 'eta@example.com', role: 'eta', status: 'active', verified: true, password: '123456' },
+  { id: '3', name: 'ETEA Manager', email: 'etea@example.com', role: 'etea', status: 'active', verified: true, password: '123456' },
   {
     id: '4',
     name: 'School Finance',
@@ -104,7 +104,7 @@ const seedUsers: RuntimeUser[] = [
     verified: true,
     password: '123456',
   },
-  { id: '5', name: 'Jane Smith', email: 'jane@agency.com', role: 'eta', status: 'banned', verified: true, password: '123456' },
+  { id: '5', name: 'Jane Smith', email: 'jane@agency.com', role: 'etea', status: 'banned', verified: true, password: '123456' },
 ];
 
 const runtimeUsers = [...seedUsers];
@@ -302,7 +302,7 @@ export const mockApi = {
     return { data: structuredClone(transactions) };
   },
 
-  // ---- Applicants & ETA ----
+  // ---- Applicants & ETEA ----
   async fetchApplicants(params: { page?: number; pageSize?: number; status?: Applicant['applicationStatus']; postingId?: string; search?: string } = {}): ApiResponse<Applicant[]> {
     await delay();
     const { page = 1, pageSize = 25, status, postingId, search } = params;
@@ -323,7 +323,7 @@ export const mockApi = {
       ...payload,
       id: `a${idx}`,
       consumerNumber: generateConsumerNumber('2001', String(idx)),
-      billId: `ETA-MDCAT25-${String(idx).padStart(5, '0')}`,
+      billId: `ETEA-MDCAT25-${String(idx).padStart(5, '0')}`,
       paymentStatus: 'pending',
       applicationStatus: 'submitted',
       appliedDate: new Date().toISOString().split('T')[0],

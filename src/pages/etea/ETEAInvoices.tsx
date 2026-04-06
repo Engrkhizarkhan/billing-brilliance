@@ -5,7 +5,7 @@ import { TablePagination } from '@/components/TablePagination';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatPKR } from '@/lib/formatters';
 import { usePaymentStore } from '@/store/paymentStore';
-import { listPayments } from '@/services/etaPaymentController';
+import { listPayments } from '@/services/eteaPaymentController';
 
 const mapPaymentToInvoiceStatus = (status: 'pending' | 'paid' | 'failed' | 'expired'): 'paid' | 'pending' | 'overdue' => {
   if (status === 'paid') return 'paid';
@@ -13,7 +13,7 @@ const mapPaymentToInvoiceStatus = (status: 'pending' | 'paid' | 'failed' | 'expi
   return 'overdue';
 };
 
-const ETAInvoices = () => {
+const ETEAInvoices = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -51,7 +51,7 @@ const ETAInvoices = () => {
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="page-header">Invoices</h1>
-        <p className="page-description">ETA payment invoices generated from temporary payment records.</p>
+        <p className="page-description">ETEA payment invoices generated from temporary payment records.</p>
       </div>
 
       <FilterBar
@@ -94,7 +94,7 @@ const ETAInvoices = () => {
             {paginatedRows.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">
-                  No ETA invoices match your filters.
+                  No ETEA invoices match your filters.
                 </TableCell>
               </TableRow>
             ) : (
@@ -125,4 +125,4 @@ const ETAInvoices = () => {
   );
 };
 
-export default ETAInvoices;
+export default ETEAInvoices;

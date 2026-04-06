@@ -5,13 +5,13 @@ Last updated: 2026-04-05
 Related workflow docs:
 
 - Full Workflow: [workflow.md](./workflow.md)
-- ETA Dashboard Workflow: [eta-dashboard-workflow.md](./eta-dashboard-workflow.md)
+- ETEA Dashboard Workflow: [etea-dashboard-workflow.md](./etea-dashboard-workflow.md)
 
 This is a compact visual companion to the full workflow in [workflow.md](./workflow.md).
 
-ETA ownership boundary for this flow:
+ETEA ownership boundary for this flow:
 
-- ETA/ETEA source system owns student/applicant master data.
+- ETEA source system owns student/applicant master data.
 - This system acts as payment processor only.
 - Store temporary payment records per application/payment request.
 - Do not model permanent student ownership in the payment engine.
@@ -97,41 +97,41 @@ sequenceDiagram
     RT-->>SchoolOperator: Updated realtime feed and totals
 ```
 
-## 4. ETA Application Payment Flow
+## 4. ETEA Application Payment Flow
 
 ```mermaid
 sequenceDiagram
-    actor EtaOps as ETA User
-    participant EtaUI as ETA Payments Page
-    participant Controller as etaPaymentController
+    actor EteaOps as ETEA User
+    participant EteaUI as ETEA Payments Page
+    participant Controller as eteaPaymentController
     participant Data as In-memory Data
     participant Store as paymentStore
-    participant Reports as ETA Realtime/Reports
+    participant Reports as ETEA Realtime/Reports
 
-    EtaOps->>EtaUI: Create payment for application
-    EtaUI->>Controller: createPayment(request, securityContext)
+    EteaOps->>EteaUI: Create payment for application
+    EteaUI->>Controller: createPayment(request, securityContext)
     Controller->>Controller: assertSecurity(apiKey/ip/https)
     Controller->>Data: Create payment record + billId
     Controller->>Data: Store temporary payment record only
     Controller->>Store: notifyPaymentUpdate()
-    Controller-->>EtaUI: payment + oneBillRequest payload
+    Controller-->>EteaUI: payment + oneBillRequest payload
 
-    EtaOps->>EtaUI: Process callback payload
-    EtaUI->>Controller: processPaymentCallback(callback, securityContext)
+    EteaOps->>EteaUI: Process callback payload
+    EteaUI->>Controller: processPaymentCallback(callback, securityContext)
     Controller->>Controller: Verify signature + idempotency
     Controller->>Data: Update payment/transaction/notification
     Controller->>Store: notifyPaymentUpdate()
-    Controller-->>EtaUI: acknowledged + updated status
+    Controller-->>EteaUI: acknowledged + updated status
 
     Store-->>Reports: version increment triggers refresh
-    Reports-->>EtaOps: Realtime, invoices, and reports updated
+    Reports-->>EteaOps: Realtime, invoices, and reports updated
 ```
 
 ## 5. Shared State Refresh Pattern
 
 ```mermaid
 sequenceDiagram
-    participant AnyModule as Admin/School/ETA Action
+    participant AnyModule as Admin/School/ETEA Action
     participant Data as In-memory Data
     participant Store as paymentStore.version
     participant Screens as Dependent Screens
@@ -148,7 +148,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     actor TenantUser
-    participant UI as School/ETA UI
+    participant UI as School/ETEA UI
     participant API as Backend API
     participant Auth as Auth and Claims
     participant DB as Tenant Data Store
@@ -170,6 +170,6 @@ sequenceDiagram
 ## 7. Runtime Note
 
 - This repository currently runs frontend-first with in-memory state.
-- Most mutations are session-scoped unless explicitly stored (for example ETA security context in localStorage).
+- Most mutations are session-scoped unless explicitly stored (for example ETEA security context in localStorage).
 - OneBill defaults to mock mode unless environment flags switch it to live.
-- ETA mock reference rows are demo fixtures; production ownership remains in source system.
+- ETEA mock reference rows are demo fixtures; production ownership remains in source system.

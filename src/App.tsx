@@ -23,14 +23,14 @@ import PaymentPrograms from "./pages/school/PaymentPrograms";
 import Defaulters from "./pages/school/Defaulters";
 import SchoolSettings from "./pages/school/SchoolSettings";
 import LoginActivity from "./pages/school/LoginActivity";
-import ETADashboard from "./pages/eta/ETADashboard";
-import ApplicantList from "./pages/eta/ApplicantList";
-import ETEAPostings from "./pages/eta/ETEAPostings";
-import ETAInvoices from "./pages/eta/ETAInvoices";
-import ETAPayments from "./pages/eta/ETAPayments";
-import ETARealtimePayments from "./pages/eta/ETARealtimePayments";
-import ETAReports from "./pages/eta/ETAReports";
-import ETASettings from "./pages/eta/ETASettings";
+import ETEADashboard from "./pages/etea/ETEADashboard";
+import ApplicantList from "./pages/etea/ApplicantList";
+import ETEAPostings from "./pages/etea/ETEAPostings";
+import ETEAInvoices from "./pages/etea/ETEAInvoices";
+import ETEAPayments from "./pages/etea/ETEAPayments";
+import ETEARealtimePayments from "./pages/etea/ETEARealtimePayments";
+import ETEAReports from "./pages/etea/ETEAReports";
+import ETEASettings from "./pages/etea/ETEASettings";
 import AuditTrail from "./pages/admin/AuditTrail";
 import ApiHealth from "./pages/admin/ApiHealth";
 import NotFound from "./pages/NotFound";
@@ -74,15 +74,15 @@ const App = () => (
             <Route path="settings" element={<SchoolSettings />} />
           </Route>
 
-          <Route path="/eta" element={<DashboardLayout />}>
-            <Route index element={<ETADashboard />} />
+          <Route path="/etea" element={<DashboardLayout />}>
+            <Route index element={<ETEADashboard />} />
             <Route path="postings" element={<ETEAPostings />} />
             <Route path="applicants" element={<ApplicantList />} />
-            <Route path="invoices" element={<ETAInvoices />} />
-            <Route path="payments" element={<ETAPayments />} />
-            <Route path="realtime-payments" element={<ETARealtimePayments />} />
-            <Route path="reports" element={<ETAReports />} />
-            <Route path="settings" element={<ETASettings />} />
+            <Route path="invoices" element={<ETEAInvoices />} />
+            <Route path="payments" element={<ETEAPayments />} />
+            <Route path="realtime-payments" element={<ETEARealtimePayments />} />
+            <Route path="reports" element={<ETEAReports />} />
+            <Route path="settings" element={<ETEASettings />} />
           </Route>
 
           <Route path="*" element={<NotFound />} />

@@ -1,21 +1,21 @@
 import { applicants, eteaPostings, services } from '@/data/mockData';
 import { Applicant } from '@/types';
 
-export const ETA_CONSUMER_PREFIX = '1234562001';
+export const ETEA_CONSUMER_PREFIX = '1234562001';
 
-export type EtaPostingSource = 'posting' | 'service' | 'unknown';
+export type EteaPostingSource = 'posting' | 'service' | 'unknown';
 
-export interface ResolvedEtaPosting {
+export interface ResolvedEteaPosting {
   id: string;
   title: string;
   applicationFee: number;
-  source: EtaPostingSource;
+  source: EteaPostingSource;
 }
 
-export const isEtaConsumerNumber = (consumerNumber: string) =>
-  consumerNumber.startsWith(ETA_CONSUMER_PREFIX);
+export const isEteaConsumerNumber = (consumerNumber: string) =>
+  consumerNumber.startsWith(ETEA_CONSUMER_PREFIX);
 
-export const resolveApplicantPosting = (applicant: Applicant): ResolvedEtaPosting => {
+export const resolveApplicantPosting = (applicant: Applicant): ResolvedEteaPosting => {
   const posting = eteaPostings.find((item) => item.id === applicant.serviceId);
   if (posting) {
     return {
@@ -73,7 +73,7 @@ export const resolvePostingById = (id: string) => {
   };
 };
 
-export const getEtaApplicationFee = (applicant: Applicant) =>
+export const getEteaApplicationFee = (applicant: Applicant) =>
   resolveApplicantPosting(applicant).applicationFee;
 
 export const mapApplicantPaymentToInvoiceStatus = (
@@ -91,5 +91,5 @@ export const estimateDueDateFromAppliedDate = (appliedDate: string, days = 10) =
   return parsed.toISOString().slice(0, 10);
 };
 
-export const getEtaApplicants = () =>
-  applicants.filter((applicant) => isEtaConsumerNumber(applicant.consumerNumber));
+export const getEteaApplicants = () =>
+  applicants.filter((applicant) => isEteaConsumerNumber(applicant.consumerNumber));

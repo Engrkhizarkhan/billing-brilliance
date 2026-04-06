@@ -48,7 +48,7 @@ export const GlobalSearch = () => {
           {filteredApplicants.length > 0 && (
             <CommandGroup heading="Applicants">
               {filteredApplicants.map(a => (
-                <CommandItem key={a.id} onSelect={() => { navigate('/eta/applicants'); setOpen(false); }}>
+                <CommandItem key={a.id} onSelect={() => { navigate('/etea/applicants'); setOpen(false); }}>
                   <UserPlus className="w-4 h-4 mr-2 text-info" />
                   <span>{a.name}</span>
                   <span className="ml-auto text-[10px] text-muted-foreground font-mono">{a.cnic}</span>
@@ -59,7 +59,7 @@ export const GlobalSearch = () => {
           {filteredPostings.length > 0 && (
             <CommandGroup heading="Postings">
               {filteredPostings.map(p => (
-                <CommandItem key={p.id} onSelect={() => { navigate('/eta/postings'); setOpen(false); }}>
+                <CommandItem key={p.id} onSelect={() => { navigate('/etea/postings'); setOpen(false); }}>
                   <Megaphone className="w-4 h-4 mr-2 text-warning" />
                   <span>{p.title}</span>
                   <span className="ml-auto text-[10px] text-muted-foreground font-mono capitalize">{p.status}</span>

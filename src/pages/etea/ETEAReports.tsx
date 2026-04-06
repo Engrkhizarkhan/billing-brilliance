@@ -1,12 +1,12 @@
 import { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatPKR } from '@/lib/formatters';
-import { resolvePostingById } from '@/lib/etaFinance';
+import { resolvePostingById } from '@/lib/eteaFinance';
 import { usePaymentStore } from '@/store/paymentStore';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { listPayments } from '@/services/etaPaymentController';
+import { listPayments } from '@/services/eteaPaymentController';
 
-const ETAReports = () => {
+const ETEAReports = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
 
   const paymentRecords = useMemo(() => listPayments(), [paymentVersion]);
@@ -66,7 +66,7 @@ const ETAReports = () => {
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="page-header">Reports</h1>
-        <p className="page-description">ETA payment-processor analytics from temporary payment records.</p>
+        <p className="page-description">ETEA payment-processor analytics from temporary payment records.</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -123,4 +123,4 @@ const ETAReports = () => {
   );
 };
 
-export default ETAReports;
+export default ETEAReports;

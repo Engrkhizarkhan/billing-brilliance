@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-interface EtaSecurityStore {
+interface EteaSecurityStore {
   apiKey: string;
   sourceIp: string;
   setApiKey: (apiKey: string) => void;
@@ -8,8 +8,8 @@ interface EtaSecurityStore {
   reset: () => void;
 }
 
-const STORAGE_KEY = 'eta-payment-security-context';
-const DEFAULT_API_KEY = import.meta.env.VITE_ETA_API_KEY || 'eta-dev-key';
+const STORAGE_KEY = 'etea-payment-security-context';
+const DEFAULT_API_KEY = import.meta.env.VITE_ETEA_API_KEY || 'etea-dev-key';
 const DEFAULT_SOURCE_IP = '127.0.0.1';
 
 const readStoredState = () => {
@@ -29,7 +29,7 @@ const readStoredState = () => {
       };
     }
 
-    const parsed = JSON.parse(raw) as Partial<Pick<EtaSecurityStore, 'apiKey' | 'sourceIp'>>;
+    const parsed = JSON.parse(raw) as Partial<Pick<EteaSecurityStore, 'apiKey' | 'sourceIp'>>;
     return {
       apiKey: parsed.apiKey || DEFAULT_API_KEY,
       sourceIp: parsed.sourceIp || DEFAULT_SOURCE_IP,
@@ -49,7 +49,7 @@ const persistState = (apiKey: string, sourceIp: string) => {
 
 const initial = readStoredState();
 
-export const useEtaSecurityStore = create<EtaSecurityStore>((set, get) => ({
+export const useEteaSecurityStore = create<EteaSecurityStore>((set, get) => ({
   apiKey: initial.apiKey,
   sourceIp: initial.sourceIp,
   setApiKey: (apiKey) => {

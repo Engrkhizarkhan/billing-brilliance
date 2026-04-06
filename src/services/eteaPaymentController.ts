@@ -1,44 +1,44 @@
 import {
-  createEtaPaymentRecord,
-  getEtaPaymentByApplicationId,
-  getEtaPaymentByBillId,
-  getEtaPaymentNotifications,
-  getEtaPaymentRecords,
-  recordEtaPaymentNotification,
+  createEteaPaymentRecord,
+  getEteaPaymentByApplicationId,
+  getEteaPaymentByBillId,
+  getEteaPaymentNotifications,
+  getEteaPaymentRecords,
+  recordEteaPaymentNotification,
   transactions,
-  updateEtaPaymentRecord,
+  updateEteaPaymentRecord,
 } from '@/data/mockData';
-import { resolvePostingById } from '@/lib/etaFinance';
+import { resolvePostingById } from '@/lib/eteaFinance';
 import {
-  EtaCreatePaymentRequest,
-  EtaCreatePaymentResponse,
-  EtaHealthResponse,
-  EtaPaymentCallbackRequest,
-  EtaPaymentCallbackResponse,
-  EtaPaymentNotification,
-  EtaPaymentRecord,
-  EtaPaymentStatusResponse,
-  EtaRequestSecurityContext,
+  EteaCreatePaymentRequest,
+  EteaCreatePaymentResponse,
+  EteaHealthResponse,
+  EteaPaymentCallbackRequest,
+  EteaPaymentCallbackResponse,
+  EteaPaymentNotification,
+  EteaPaymentRecord,
+  EteaPaymentStatusResponse,
+  EteaRequestSecurityContext,
   OneBillCreateBillRequest,
 } from '@/types';
 import { notifyPaymentUpdate } from '@/store/paymentStore';
 
-const CALLBACK_URL = import.meta.env.VITE_ETA_CALLBACK_URL || '/api/payment/callback';
-const ETA_API_KEY = import.meta.env.VITE_ETA_API_KEY || 'eta-dev-key';
-const ALLOWED_IPS = (import.meta.env.VITE_ETA_ALLOWED_IPS || '127.0.0.1,::1')
+const CALLBACK_URL = import.meta.env.VITE_ETEA_CALLBACK_URL || '/api/payment/callback';
+const ETEA_API_KEY = import.meta.env.VITE_ETEA_API_KEY || 'etea-dev-key';
+const ALLOWED_IPS = (import.meta.env.VITE_ETEA_ALLOWED_IPS || '127.0.0.1,::1')
   .split(',')
   .map((value) => value.trim())
   .filter(Boolean);
-const WEBHOOK_SECRET = import.meta.env.VITE_ETA_WEBHOOK_SECRET || 'eta-webhook-dev-secret';
-const REQUIRE_WEBHOOK_SIGNATURE = (import.meta.env.VITE_ETA_REQUIRE_WEBHOOK_SIGNATURE || 'true').toLowerCase() !== 'false';
-const DEFAULT_EXPIRY_HOURS = Number(import.meta.env.VITE_ETA_PAYMENT_EXPIRY_HOURS || 48);
+const WEBHOOK_SECRET = import.meta.env.VITE_ETEA_WEBHOOK_SECRET || 'etea-webhook-dev-secret';
+const REQUIRE_WEBHOOK_SIGNATURE = (import.meta.env.VITE_ETEA_REQUIRE_WEBHOOK_SIGNATURE || 'true').toLowerCase() !== 'false';
+const DEFAULT_EXPIRY_HOURS = Number(import.meta.env.VITE_ETEA_PAYMENT_EXPIRY_HOURS || 48);
 
-const callbackIdempotencyLog = new Map<string, EtaPaymentCallbackResponse>();
+const callbackIdempotencyLog = new Map<string, EteaPaymentCallbackResponse>();
 
 const withDefaultSecurityContext = (
-  context?: EtaRequestSecurityContext
-): Required<Pick<EtaRequestSecurityContext, 'apiKey' | 'sourceIp' | 'protocol' | 'webhookSignature' | 'idempotencyKey'>> => ({
-  apiKey: context?.apiKey || ETA_API_KEY,
+  context?: EteaRequestSecurityContext
+): Required<Pick<EteaRequestSecurityContext, 'apiKey' | 'sourceIp' | 'protocol' | 'webhookSignature' | 'idempotencyKey'>> => ({
+  apiKey: context?.apiKey || ETEA_API_KEY,
   sourceIp: context?.sourceIp || ALLOWED_IPS[0] || '127.0.0.1',
   protocol: context?.protocol || 'https',
   webhookSignature: context?.webhookSignature || '',
@@ -54,15 +54,15 @@ const toSignatureHash = (value: string) => {
   return Math.abs(hash).toString(16);
 };
 
-const callbackSignaturePayload = (callback: EtaPaymentCallbackRequest) => {
+const callbackSignaturePayload = (callback: EteaPaymentCallbackRequest) => {
   const paidAt = callback.paidAt || '';
   return `${callback.billId}|${callback.status}|${callback.transactionId}|${paidAt}|${WEBHOOK_SECRET}`;
 };
 
-export const generateWebhookSignature = (callback: EtaPaymentCallbackRequest) =>
+export const generateWebhookSignature = (callback: EteaPaymentCallbackRequest) =>
   toSignatureHash(callbackSignaturePayload(callback));
 
-const normalizeCreateRequest = (request: EtaCreatePaymentRequest) => {
+const normalizeCreateRequest = (request: EteaCreatePaymentRequest) => {
   const applicantId = (request.applicantId || request.applicant_id || '').trim();
   const applicationId = (request.applicationId || request.application_id || '').trim();
   const postingId = (request.postingId || request.posting_id || '').trim();
@@ -82,10 +82,10 @@ const normalizeCreateRequest = (request: EtaCreatePaymentRequest) => {
 };
 
 const assertSecurity = (
-  context?: EtaRequestSecurityContext,
+  context?: EteaRequestSecurityContext,
   options?: {
     requireWebhookSignature?: boolean;
-    callback?: EtaPaymentCallbackRequest;
+    callback?: EteaPaymentCallbackRequest;
   }
 ) => {
   const resolved = withDefaultSecurityContext(context);
@@ -94,7 +94,7 @@ const assertSecurity = (
     throw new Error('HTTPS is required');
   }
 
-  if (resolved.apiKey !== ETA_API_KEY) {
+  if (resolved.apiKey !== ETEA_API_KEY) {
     throw new Error('Invalid API key');
   }
 
@@ -130,14 +130,14 @@ const toIsoDate = (input: string) => {
   return parsed.toISOString();
 };
 
-const isExpired = (payment: EtaPaymentRecord) => {
+const isExpired = (payment: EteaPaymentRecord) => {
   if (payment.status !== 'pending') return false;
   return new Date(payment.expiryDate).getTime() <= Date.now();
 };
 
-const ensurePaymentNotStale = (payment: EtaPaymentRecord) => {
+const ensurePaymentNotStale = (payment: EteaPaymentRecord) => {
   if (!isExpired(payment)) return payment;
-  const updated = updateEtaPaymentRecord(payment.id, { status: 'expired' });
+  const updated = updateEteaPaymentRecord(payment.id, { status: 'expired' });
   if (updated) {
     notifyPaymentUpdate();
     return updated;
@@ -145,7 +145,7 @@ const ensurePaymentNotStale = (payment: EtaPaymentRecord) => {
   return payment;
 };
 
-const toOneBillCreatePayload = (payment: EtaPaymentRecord, customerName: string): OneBillCreateBillRequest => ({
+const toOneBillCreatePayload = (payment: EteaPaymentRecord, customerName: string): OneBillCreateBillRequest => ({
   billId: payment.billId,
   amount: payment.amount,
   dueDate: payment.dueDate,
@@ -158,7 +158,7 @@ const toOneBillCreatePayload = (payment: EtaPaymentRecord, customerName: string)
   callback_url: payment.callbackUrl,
 });
 
-const toStatusResponse = (applicationId: string, payment?: EtaPaymentRecord): EtaPaymentStatusResponse => {
+const toStatusResponse = (applicationId: string, payment?: EteaPaymentRecord): EteaPaymentStatusResponse => {
   if (!payment) {
     return {
       applicationId,
@@ -173,8 +173,8 @@ const toStatusResponse = (applicationId: string, payment?: EtaPaymentRecord): Et
   };
 };
 
-const notifyETEA = (payment: EtaPaymentRecord): EtaPaymentNotification => {
-  return recordEtaPaymentNotification({
+const notifyETEA = (payment: EteaPaymentRecord): EteaPaymentNotification => {
+  return recordEteaPaymentNotification({
     applicationId: payment.applicationId,
     paymentId: payment.id,
     billId: payment.billId,
@@ -182,7 +182,7 @@ const notifyETEA = (payment: EtaPaymentRecord): EtaPaymentNotification => {
   });
 };
 
-const upsertTransactionFromEtaPayment = (payment: EtaPaymentRecord, consumerNumber?: string) => {
+const upsertTransactionFromEteaPayment = (payment: EteaPaymentRecord, consumerNumber?: string) => {
   if (!payment.transactionId) return;
 
   const existing = transactions.find((transaction) => transaction.transactionId === payment.transactionId);
@@ -199,7 +199,7 @@ const upsertTransactionFromEtaPayment = (payment: EtaPaymentRecord, consumerNumb
   }
 
   transactions.unshift({
-    id: `eta-${payment.id}-${Date.now()}`,
+    id: `etea-${payment.id}-${Date.now()}`,
     transactionId: payment.transactionId,
     consumerNumber: consumerNumber || payment.billId,
     amount: payment.amount,
@@ -210,9 +210,9 @@ const upsertTransactionFromEtaPayment = (payment: EtaPaymentRecord, consumerNumb
 };
 
 export const createPayment = (
-  request: EtaCreatePaymentRequest,
-  context?: EtaRequestSecurityContext
-): EtaCreatePaymentResponse => {
+  request: EteaCreatePaymentRequest,
+  context?: EteaRequestSecurityContext
+): EteaCreatePaymentResponse => {
   assertSecurity(context);
 
   const normalized = normalizeCreateRequest(request);
@@ -244,7 +244,7 @@ export const createPayment = (
 
   const posting = resolvePostingById(normalized.postingId);
 
-  const existing = getEtaPaymentByApplicationId(applicationId);
+  const existing = getEteaPaymentByApplicationId(applicationId);
   if (existing) {
     const current = ensurePaymentNotStale(existing);
     return {
@@ -265,7 +265,7 @@ export const createPayment = (
       ? `Payment for application ${applicationId}`
       : `${posting.title} application fee`);
 
-  const provisional = createEtaPaymentRecord({
+  const provisional = createEteaPaymentRecord({
     applicationId,
     applicantId: normalized.applicantId,
     postingId: normalized.postingId,
@@ -280,7 +280,7 @@ export const createPayment = (
   });
 
   const payment =
-    updateEtaPaymentRecord(provisional.id, { billId: generateBillIdForPayment(provisional.id) }) ||
+    updateEteaPaymentRecord(provisional.id, { billId: generateBillIdForPayment(provisional.id) }) ||
     provisional;
 
   notifyPaymentUpdate();
@@ -296,10 +296,10 @@ export const createPayment = (
 
 export const getPaymentStatus = (
   applicationId: string,
-  context?: EtaRequestSecurityContext
-): EtaPaymentStatusResponse => {
+  context?: EteaRequestSecurityContext
+): EteaPaymentStatusResponse => {
   assertSecurity(context);
-  const payment = getEtaPaymentByApplicationId(applicationId);
+  const payment = getEteaPaymentByApplicationId(applicationId);
   if (!payment) return toStatusResponse(applicationId);
 
   const current = ensurePaymentNotStale(payment);
@@ -307,9 +307,9 @@ export const getPaymentStatus = (
 };
 
 export const processPaymentCallback = (
-  callback: EtaPaymentCallbackRequest,
-  context?: EtaRequestSecurityContext
-): EtaPaymentCallbackResponse => {
+  callback: EteaPaymentCallbackRequest,
+  context?: EteaRequestSecurityContext
+): EteaPaymentCallbackResponse => {
   assertSecurity(context, { requireWebhookSignature: true, callback });
 
   const resolvedContext = withDefaultSecurityContext(context);
@@ -321,9 +321,9 @@ export const processPaymentCallback = (
     }
   }
 
-  const payment = getEtaPaymentByBillId(callback.billId);
+  const payment = getEteaPaymentByBillId(callback.billId);
   if (!payment) {
-    const response: EtaPaymentCallbackResponse = {
+    const response: EteaPaymentCallbackResponse = {
       acknowledged: false,
       message: `Bill ID ${callback.billId} not found`,
     };
@@ -337,11 +337,11 @@ export const processPaymentCallback = (
 
   const duplicateByTransactionId =
     callback.transactionId &&
-    getEtaPaymentRecords().find(
+    getEteaPaymentRecords().find(
       (record) => record.transactionId === callback.transactionId && record.billId !== callback.billId
     );
   if (duplicateByTransactionId) {
-    const response: EtaPaymentCallbackResponse = {
+    const response: EteaPaymentCallbackResponse = {
       acknowledged: false,
       payment: current,
       message: `Transaction ID ${callback.transactionId} already used for another bill`,
@@ -353,7 +353,7 @@ export const processPaymentCallback = (
   }
 
   if (current.status === 'paid' && callback.status === 'paid') {
-    const response: EtaPaymentCallbackResponse = {
+    const response: EteaPaymentCallbackResponse = {
       acknowledged: true,
       payment: current,
       message: 'Duplicate callback ignored; payment already marked paid',
@@ -364,7 +364,7 @@ export const processPaymentCallback = (
     return response;
   }
 
-  const updates: Partial<Omit<EtaPaymentRecord, 'id'>> = {
+  const updates: Partial<Omit<EteaPaymentRecord, 'id'>> = {
     status: callback.status,
     transactionId: callback.transactionId,
   };
@@ -373,9 +373,9 @@ export const processPaymentCallback = (
     updates.paidAt = callback.paidAt || new Date().toISOString();
   }
 
-  const updated = updateEtaPaymentRecord(current.id, updates);
+  const updated = updateEteaPaymentRecord(current.id, updates);
   if (!updated) {
-    const response: EtaPaymentCallbackResponse = {
+    const response: EteaPaymentCallbackResponse = {
       acknowledged: false,
       message: 'Payment update failed',
     };
@@ -385,12 +385,12 @@ export const processPaymentCallback = (
     return response;
   }
 
-  upsertTransactionFromEtaPayment(updated, updated.applicantId || updated.billId);
+  upsertTransactionFromEteaPayment(updated, updated.applicantId || updated.billId);
 
   notifyETEA(updated);
   notifyPaymentUpdate();
 
-  const response: EtaPaymentCallbackResponse = {
+  const response: EteaPaymentCallbackResponse = {
     acknowledged: true,
     payment: updated,
     message: `Callback processed. Payment marked ${updated.status}`,
@@ -402,15 +402,15 @@ export const processPaymentCallback = (
   return response;
 };
 
-export const healthCheck = (): EtaHealthResponse => ({
+export const healthCheck = (): EteaHealthResponse => ({
   status: 'ok',
-  service: 'eta-payment-controller',
+  service: 'etea-payment-controller',
   timestamp: new Date().toISOString(),
 });
 
 export const expireOverduePayments = () => {
   let expiredCount = 0;
-  getEtaPaymentRecords().forEach((payment) => {
+  getEteaPaymentRecords().forEach((payment) => {
     const updated = ensurePaymentNotStale(payment);
     if (updated.status === 'expired' && payment.status !== 'expired') {
       expiredCount += 1;
@@ -420,11 +420,11 @@ export const expireOverduePayments = () => {
   return expiredCount;
 };
 
-export const listPayments = () => [...getEtaPaymentRecords()];
+export const listPayments = () => [...getEteaPaymentRecords()];
 
-export const listPaymentNotifications = () => getEtaPaymentNotifications();
+export const listPaymentNotifications = () => getEteaPaymentNotifications();
 
-export const etaPaymentControllerConfig = {
+export const eteaPaymentControllerConfig = {
   billIdPattern: 'ETEA-<payment_sequence>',
   callbackUrl: CALLBACK_URL,
   endpoints: {

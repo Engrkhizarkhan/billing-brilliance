@@ -4,10 +4,10 @@ Last updated: 2026-04-05
 
 Related workflow docs:
 
-- ETA Dashboard Workflow: [eta-dashboard-workflow.md](./eta-dashboard-workflow.md)
+- ETEA Dashboard Workflow: [etea-dashboard-workflow.md](./etea-dashboard-workflow.md)
 - Sequence View: [workflow-sequence.md](./workflow-sequence.md)
 
-ETA canonical endpoints in this document:
+ETEA canonical endpoints in this document:
 
 - `POST /api/payments/create`
 - `GET /api/payments/{application_id}`
@@ -21,7 +21,7 @@ This document provides a complete, implementation-accurate workflow for the curr
 
 - Admin lifecycle: login, biller setup, user management, platform monitoring.
 - School lifecycle: student onboarding, scholarship/plan assignment, invoices, ledger, payments, defaulters, settings.
-- ETA lifecycle: posting and application-reference handling, payment request/callback flow, realtime tracking, reporting.
+- ETEA lifecycle: posting and application-reference handling, payment request/callback flow, realtime tracking, reporting.
 - 1Bill and 1Link API behavior in this codebase.
 
 This repository is frontend-first with in-memory/mock service orchestration.
@@ -32,16 +32,16 @@ This repository is frontend-first with in-memory/mock service orchestration.
 
 - Admin portal: multi-tenant control plane.
 - School portal: fee and student operations.
-- ETA portal: posting and applicant payment operations.
+- ETEA portal: posting and applicant payment operations.
 
 ### 2.2 SaaS Tenant Model and Data Isolation
 
-- This platform is a SaaS multi-tenant system for schools and ETA organizations.
-- Tenant examples: School A, School B, ETA Org A, ETA Org B.
+- This platform is a SaaS multi-tenant system for schools and ETEA organizations.
+- Tenant examples: School A, School B, ETEA Org A, ETEA Org B.
 - Every authenticated tenant user is bound to one tenant scope.
 - Strict rule: School A users cannot view or modify School B data.
 - Strict rule: School B users cannot view or modify School A data.
-- Strict rule: ETA Org A users cannot view or modify ETA Org B data, and vice versa.
+- Strict rule: ETEA Org A users cannot view or modify ETEA Org B data, and vice versa.
 - Cross-tenant access is denied by default unless user role is platform admin.
 - Required enforcement: every API read/write applies tenant filter (for example school_id or organization_id).
 - Required enforcement: token claims carry tenant identity and role, and ownership is validated on every mutation.
@@ -53,13 +53,13 @@ This repository is frontend-first with in-memory/mock service orchestration.
 - UI and routing: React + React Router.
 - Auth/session state: Zustand (`authStore`).
 - Shared payment refresh signal: Zustand (`paymentStore.version`).
-- ETA security context: Zustand + localStorage (`etaSecurityStore`).
+- ETEA security context: Zustand + localStorage (`eteaSecurityStore`).
 - Domain data and service simulation: `src/data/mockData.ts`, `src/lib/mockApi.ts`, `src/services/*`.
 
-### 2.4 ETA Ownership Boundary (Payment Processor Mode)
+### 2.4 ETEA Ownership Boundary (Payment Processor Mode)
 
-- ETA should NOT add students into the payment system as a permanent master-data owner.
-- Student/applicant ownership remains with the source authority (ETEA/ETA source system).
+- ETEA should NOT add students into the payment system as a permanent master-data owner.
+- Student/applicant ownership remains with the source authority (ETEA source system).
 - This system is the payment processor.
 - This system should store temporary payment records only.
 - Payment record scope is per application/payment request (not student master profile ownership).
@@ -76,7 +76,7 @@ Role credentials validated by `mockApi.login(email, password, role)`:
 
 - Admin: `admin@example.com` / `123456`
 - School: `school@example.com` / `123456`
-- ETA: `eta@example.com` / `123456`
+- ETEA: `etea@example.com` / `123456`
 
 On success:
 
@@ -131,16 +131,16 @@ Every dashboard route checks for authenticated user. If missing:
 - `/school/login-activity`
 - `/school/settings`
 
-#### ETA
+#### ETEA
 
-- `/eta`
-- `/eta/postings`
-- `/eta/applicants`
-- `/eta/invoices`
-- `/eta/payments`
-- `/eta/realtime-payments`
-- `/eta/reports`
-- `/eta/settings`
+- `/etea`
+- `/etea/postings`
+- `/etea/applicants`
+- `/etea/invoices`
+- `/etea/payments`
+- `/etea/realtime-payments`
+- `/etea/reports`
+- `/etea/settings`
 
 ## 4. Admin Workflow (End-to-End)
 
@@ -326,26 +326,26 @@ At `/school/login-activity`:
 
 - Filterable mock login event table by role, user, IP, device.
 
-## 6. ETA Workflow (End-to-End)
+## 6. ETEA Workflow (End-to-End)
 
 ### Step E1: Manage Postings
 
-At `/eta/postings`:
+At `/etea/postings`:
 
 - Create, edit, clone postings (entry test/job vacancy).
 - Posting data updates shared `eteaPostings` and notifies payment store.
 
 ### Step E2: Capture Application References (No Student Ownership)
 
-At `/eta/applicants`:
+At `/etea/applicants`:
 
 1. Source system provides reference fields (`applicant_id`, `application_id`, `posting_id`) to payment controller.
 2. Payment system does not create student master entities.
 3. Payment system only uses these references to create and track temporary payment records.
 
-### Step E3: Create ETA Payment Request
+### Step E3: Create ETEA Payment Request
 
-At `/eta/payments` (`POST /api/payments/create` section):
+At `/etea/payments` (`POST /api/payments/create` section):
 
 1. Submit: `applicant_id`, `application_id`, `posting_id`, `amount`, `due_date`, `description`.
 3. Call `createPayment(request, securityContext)`.
@@ -358,14 +358,14 @@ At `/eta/payments` (`POST /api/payments/create` section):
 
 ### Step E4: Lookup Payment Status
 
-At `/eta/payments` (`GET /api/payments/{application_id}` section):
+At `/etea/payments` (`GET /api/payments/{application_id}` section):
 
 - Call `getPaymentStatus(applicationId, securityContext)`.
 - Returns `not_found` or current payment record/status.
 
 ### Step E5: Process Callback
 
-At `/eta/payments` (`POST /api/payment/callback` section):
+At `/etea/payments` (`POST /api/payment/callback` section):
 
 1. Fill `bill_id`, callback status, transaction ID, paid timestamp.
 2. UI generates webhook signature and idempotency key.
@@ -373,24 +373,24 @@ At `/eta/payments` (`POST /api/payment/callback` section):
 4. On success:
    - payment record updated,
    - payment status updated (`pending` -> `paid|failed|expired`),
-   - ETA transaction upserted in global transactions,
+   - ETEA transaction upserted in global transactions,
    - ETEA payment-status notification record stored,
    - payment store bump triggers all dependent screens.
 
 ### Step E6: Health Check
 
-At `/eta/payments` (`GET /api/health` section):
+At `/etea/payments` (`GET /api/health` section):
 
 - Call `healthCheck()` and display service status/timestamp.
 
-### Step E7: ETA Realtime, Invoices, Reports, Settings
+### Step E7: ETEA Realtime, Invoices, Reports, Settings
 
-- `/eta/realtime-payments`: paid ETA payment events stream with live metrics.
-- `/eta/invoices`: invoice rows projected from payment records.
-- `/eta/reports`: monthly collection, paid-app ratios, posting revenue table.
-- `/eta/settings`: update password (mock) and API security context (API key + source IP persisted in localStorage-backed store).
+- `/etea/realtime-payments`: paid ETEA payment events stream with live metrics.
+- `/etea/invoices`: invoice rows projected from payment records.
+- `/etea/reports`: monthly collection, paid-app ratios, posting revenue table.
+- `/etea/settings`: update password (mock) and API security context (API key + source IP persisted in localStorage-backed store).
 
-## 7. ETA Payment API Contract (As Implemented)
+## 7. ETEA Payment API Contract (As Implemented)
 
 ### 7.1 `POST /api/payments/create`
 
@@ -445,16 +445,16 @@ Notification payload sent by payment processor:
 Response:
 
 - `status: ok`
-- `service: eta-payment-controller`
+- `service: etea-payment-controller`
 - `timestamp`
 
-## 8. ETA Callback Security Model
+## 8. ETEA Callback Security Model
 
-Implemented checks in `etaPaymentController.assertSecurity()`:
+Implemented checks in `eteaPaymentController.assertSecurity()`:
 
 - HTTPS-only (`protocol` must be `https`).
-- API key match (`VITE_ETA_API_KEY`).
-- Source IP must be whitelisted (`VITE_ETA_ALLOWED_IPS`).
+- API key match (`VITE_ETEA_API_KEY`).
+- Source IP must be whitelisted (`VITE_ETEA_ALLOWED_IPS`).
 - Webhook signature verification (enabled unless explicitly disabled).
 - Idempotency key caching to prevent duplicate callback processing.
 - Duplicate `transactionId` protection across different bills.
@@ -479,9 +479,9 @@ School payments page directly uses:
 
 and then reconciliation pipeline updates invoices, transactions, ledger-derived history, and audit entries.
 
-### 9.3 ETA Usage
+### 9.3 ETEA Usage
 
-ETA does not directly perform generic school bill inquiry/payment for application flow.
+ETEA does not directly perform generic school bill inquiry/payment for application flow.
 
 Instead it:
 
@@ -497,9 +497,9 @@ Instead it:
 Key runtime arrays:
 
 - `students`, `invoices`, `transactions`, `auditLogs`
-- `applicants`, `eteaPostings` (mock reference cache for ETA flow)
+- `applicants`, `eteaPostings` (mock reference cache for ETEA flow)
 - `runtimeBillPayments`
-- `etaPaymentRecords`, `etaPaymentNotifications`
+- `eteaPaymentRecords`, `eteaPaymentNotifications`
 
 Key mutation trigger:
 
@@ -526,23 +526,23 @@ This is the cross-module synchronization mechanism in the current frontend-only 
 6. Posts payment via 1BILL action.
 7. Reconciliation updates invoice, transactions, audit, and realtime feed.
 
-### Scenario C: ETA Applicant Payment Lifecycle
+### Scenario C: ETEA Applicant Payment Lifecycle
 
-1. ETA creates posting.
-2. ETA/ETEA source provides applicant/application reference (no student master ownership transfer).
-3. ETA creates payment request for application.
+1. ETEA creates posting.
+2. ETEA source provides applicant/application reference (no student master ownership transfer).
+3. ETEA creates payment request for application.
 4. System returns OneBill create-bill payload.
 5. Callback arrives with status and transaction ID.
 6. System validates security, applies idempotency, updates applicant/payment state.
-7. ETA realtime/report/invoice screens reflect new status.
+7. ETEA realtime/report/invoice screens reflect new status.
 
-### Scenario D: Tenant Isolation Guarantee (School and ETA)
+### Scenario D: Tenant Isolation Guarantee (School and ETEA)
 
 1. School A user logs in and requests students, invoices, payments, and reports.
 2. System applies School A tenant scope to all reads and writes.
 3. School B records are excluded from School A responses.
 4. Any direct access attempt to School B resource IDs is rejected (forbidden/not found by policy).
-5. ETA organizations follow the same rule: Org A cannot access Org B records.
+5. ETEA organizations follow the same rule: Org A cannot access Org B records.
 6. Platform admin can access cross-tenant views for operations and governance.
 
 ## 12. Current Limitations
@@ -551,7 +551,7 @@ This is the cross-module synchronization mechanism in the current frontend-only 
 - Refresh can reset non-persisted mutations.
 - Billing policy scheduler controls are UI/mock behavior, not real backend cron.
 - OneBill defaults to mock mode unless env enables live integration.
-- ETA notification list is maintained in local runtime arrays (no external ETEA push transport implemented).
+- ETEA notification list is maintained in local runtime arrays (no external ETEA push transport implemented).
 - Tenant partitioning is documented as required SaaS behavior, but this frontend mock is not a full production-grade row-level security backend.
 
 ## 13. Key Implementation Files
@@ -562,7 +562,7 @@ This is the cross-module synchronization mechanism in the current frontend-only 
 - Data and generators: `src/data/mockData.ts`
 - OneBill integration layer: `src/services/onebillService.ts`
 - School payment reconciliation: `src/services/paymentReconciliation.ts`
-- ETA payment controller: `src/services/etaPaymentController.ts`
-- ETA finance utilities: `src/lib/etaFinance.ts`
+- ETEA payment controller: `src/services/eteaPaymentController.ts`
+- ETEA finance utilities: `src/lib/eteaFinance.ts`
 - Shared payment update store: `src/store/paymentStore.ts`
-- ETA security context store: `src/store/etaSecurityStore.ts`
+- ETEA security context store: `src/store/eteaSecurityStore.ts`

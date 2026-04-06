@@ -14,7 +14,7 @@ import { mockApi } from '@/lib/mockApi';
 
 const billerTypeLabels: Record<Biller['type'], string> = {
   school: 'School',
-  eta: 'ETA',
+  etea: 'ETEA',
   private_agency: 'Private Agency',
 };
 
@@ -138,7 +138,7 @@ const BillerManagement = () => {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="school">School</SelectItem>
-                    <SelectItem value="eta">ETA</SelectItem>
+                    <SelectItem value="etea">ETEA</SelectItem>
                     <SelectItem value="private_agency">Private Agency</SelectItem>
                   </SelectContent>
                 </Select>
@@ -170,7 +170,7 @@ const BillerManagement = () => {
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="school">School</SelectItem>
-                      <SelectItem value="eta">ETA</SelectItem>
+                      <SelectItem value="etea">ETEA</SelectItem>
                       <SelectItem value="private_agency">Private Agency</SelectItem>
                     </SelectContent>
                   </Select>
@@ -203,7 +203,7 @@ const BillerManagement = () => {
             label: 'Type',
             options: [
               { value: 'school', label: 'School' },
-              { value: 'eta', label: 'ETA' },
+              { value: 'etea', label: 'ETEA' },
               { value: 'private_agency', label: 'Private Agency' },
             ],
           },

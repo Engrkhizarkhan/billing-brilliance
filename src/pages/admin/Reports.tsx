@@ -3,7 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 
 const pieData = [
   { name: 'Schools', value: 65 },
-  { name: 'ETA', value: 25 },
+  { name: 'ETEA', value: 25 },
   { name: 'Agencies', value: 10 },
 ];
 const COLORS = ['hsl(221, 83%, 53%)', 'hsl(160, 84%, 39%)', 'hsl(38, 92%, 50%)'];
