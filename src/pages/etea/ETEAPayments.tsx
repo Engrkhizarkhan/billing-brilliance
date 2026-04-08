@@ -8,21 +8,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import {
-  generateWebhookSignature,
-  eteaPaymentControllerConfig,
-} from '@/services/eteaPaymentController';
 import { formatPKR } from '@/lib/formatters';
 import { usePaymentStore } from '@/store/paymentStore';
 import { useEteaSecurityStore } from '@/store/eteaSecurityStore';
 import {
   EteaCreatePaymentResponse,
   EteaHealthResponse,
-  EteaPaymentCallbackResponse,
   EteaPaymentRecord,
   EteaPaymentNotification,
-  EteaPaymentStatus,
   EteaPaymentStatusResponse,
 } from '@/types';
 import { toast } from 'sonner';
@@ -30,17 +23,6 @@ import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import { Copy, Loader2 } from 'lucide-react';
 
-const getDefaultDueDate = () => {
-  const target = new Date();
-  target.setDate(target.getDate() + 2);
-  return target.toISOString().slice(0, 10);
-};
-
-const CALLBACK_STATUS_OPTIONS: Array<Extract<EteaPaymentStatus, 'paid' | 'failed' | 'expired'>> = [
-  'paid',
-  'failed',
-  'expired',
-];
 
 const ETEAPayments = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
@@ -56,22 +38,15 @@ const ETEAPayments = () => {
     application_id: queryApplicationId,
     posting_id: '',
     amount: 0,
-    due_date: getDefaultDueDate(),
+    expires_in_hours: 2880,
     description: '',
     customer_name: '',
   });
 
   const [lookupApplicationId, setLookupApplicationId] = useState(queryApplicationId);
-  const [callbackForm, setCallbackForm] = useState({
-    bill_id: '',
-    status: 'paid' as Extract<EteaPaymentStatus, 'paid' | 'failed' | 'expired'>,
-    transaction_id: `TXN-${Date.now()}`,
-    paid_at: new Date().toISOString().slice(0, 16),
-  });
 
   const [createResult, setCreateResult] = useState<EteaCreatePaymentResponse | null>(null);
   const [lookupResult, setLookupResult] = useState<EteaPaymentStatusResponse | null>(null);
-  const [callbackResult, setCallbackResult] = useState<EteaPaymentCallbackResponse | null>(null);
   const [health, setHealth] = useState<EteaHealthResponse | null>(null);
 
   const [search, setSearch] = useState('');
@@ -120,18 +95,15 @@ const ETEAPayments = () => {
       return;
     }
 
-    if (!createForm.due_date.trim()) {
-      toast.error('due_date is required');
-      return;
-    }
-
     try {
       const res = await api.createEteaPayment({
         applicantId: createForm.applicant_id,
         applicationId: createForm.application_id,
         postingId: createForm.posting_id,
         amount: createForm.amount,
-        dueDate: createForm.due_date,
+        expireAt: createForm.expires_in_hours > 0
+          ? new Date(Date.now() + createForm.expires_in_hours * 60 * 1000).toISOString()
+          : undefined,
         description: createForm.description || undefined,
         customerName: createForm.customer_name || createForm.applicant_id,
       });
@@ -144,11 +116,6 @@ const ETEAPayments = () => {
         status: created.status,
         payment: created.payment,
       });
-      setCallbackForm((current) => ({
-        ...current,
-        bill_id: created.billId,
-        transaction_id: `TXN-${Date.now()}`,
-      }));
 
       await refetchPayments();
       toast.success(`Payment request created (${created.paymentId})`);
@@ -177,54 +144,6 @@ const ETEAPayments = () => {
     }
   };
 
-  const handleProcessCallback = async () => {
-    if (!callbackForm.bill_id.trim()) {
-      toast.error('bill_id is required for callback');
-      return;
-    }
-
-    if (!callbackForm.transaction_id.trim()) {
-      toast.error('transaction_id is required for callback');
-      return;
-    }
-
-    try {
-      const callbackPayload = {
-        billId: callbackForm.bill_id.trim(),
-        status: callbackForm.status,
-        transactionId: callbackForm.transaction_id.trim(),
-        paidAt: callbackForm.paid_at ? new Date(callbackForm.paid_at).toISOString() : undefined,
-      };
-      const webhookSignature = generateWebhookSignature(callbackPayload);
-      const idempotencyKey = `cb:${callbackPayload.billId}:${callbackPayload.status}:${callbackPayload.transactionId}`;
-
-      const res = await api.processEteaPaymentCallback({
-        ...callbackPayload,
-        webhookSignature,
-        idempotencyKey,
-      });
-
-      const callback = res.data as EteaPaymentCallbackResponse;
-      setCallbackResult(callback);
-      if (callback.payment) {
-        const lookupRes = await api.getEteaPaymentStatus(callback.payment.applicationId);
-        setLookupResult(lookupRes.data as EteaPaymentStatusResponse);
-        setLookupApplicationId(callback.payment.applicationId);
-      }
-
-      await refetchPayments();
-      await refetchNotifications();
-
-      if (!callback.acknowledged) {
-        toast.error(callback.message);
-        return;
-      }
-      toast.success(callback.message);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Callback processing failed');
-    }
-  };
-
   const handleHealthCheck = async () => {
     try {
       const res = await api.eteaHealthCheck();
@@ -247,7 +166,6 @@ const ETEAPayments = () => {
         payment.applicationId.toLowerCase().includes(query) ||
         payment.applicantId.toLowerCase().includes(query) ||
         payment.postingId.toLowerCase().includes(query) ||
-        payment.billId.toLowerCase().includes(query) ||
         (payment.consumerNumber || '').toLowerCase().includes(query) ||
         payment.transactionId?.toLowerCase().includes(query);
       const matchesStatus = statusFilter === 'all' || payment.status === statusFilter;
@@ -277,33 +195,9 @@ const ETEAPayments = () => {
       <div>
         <h1 className="page-header">ETEA Payment Controller</h1>
         <p className="page-description">
-          Government testing body flow: ETEA creates payment request, system creates temporary payment record, creates 1Bill payload, processes callback, then notifies ETEA.
+          ETEA creates a payment request, the system generates a 1BILL consumer number, and the applicant pays via ATM or mobile banking.
         </p>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Architecture Contract</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 text-sm">
-          <div className="rounded-lg border p-3">
-            <p className="text-xs text-muted-foreground">Create Endpoint</p>
-            <p className="font-mono text-xs">{eteaPaymentControllerConfig.endpoints.create}</p>
-          </div>
-          <div className="rounded-lg border p-3">
-            <p className="text-xs text-muted-foreground">Callback Endpoint</p>
-            <p className="font-mono text-xs">{eteaPaymentControllerConfig.endpoints.callback}</p>
-          </div>
-          <div className="rounded-lg border p-3">
-            <p className="text-xs text-muted-foreground">Notify Endpoint</p>
-            <p className="font-mono text-xs">{eteaPaymentControllerConfig.endpoints.notifyEtea}</p>
-          </div>
-          <div className="rounded-lg border p-3">
-            <p className="text-xs text-muted-foreground">Bill ID Pattern</p>
-            <p className="font-mono text-xs">{eteaPaymentControllerConfig.billIdPattern}</p>
-          </div>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>
@@ -349,12 +243,14 @@ const ETEAPayments = () => {
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">due_date</Label>
+              <Label className="text-xs">expires_in_minutes (0 = use server default)</Label>
               <Input
-                type="date"
-                value={createForm.due_date}
-                onChange={(event) => setCreateForm({ ...createForm, due_date: event.target.value })}
+                type="number"
+                min={0}
+                value={createForm.expires_in_hours}
+                onChange={(event) => setCreateForm({ ...createForm, expires_in_hours: Number(event.target.value) || 0 })}
                 className="rounded-lg"
+                placeholder="2880"
               />
             </div>
             <div className="space-y-1.5">
@@ -380,15 +276,7 @@ const ETEAPayments = () => {
           <Button onClick={handleCreatePayment} className="rounded-lg">Create Payment Request</Button>
 
           {createResult ? (
-            <div className="rounded-lg border bg-muted/20 p-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-              <div>
-                <p className="text-xs text-muted-foreground">payment_id</p>
-                <p className="font-mono font-semibold">{createResult.paymentId}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">bill_id</p>
-                <p className="font-mono font-semibold break-all">{createResult.billId}</p>
-              </div>
+            <div className="rounded-lg border bg-muted/20 p-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
               <div>
                 <p className="text-xs text-muted-foreground">status</p>
                 <div className="mt-1"><StatusBadge status={createResult.status} /></div>
@@ -423,7 +311,7 @@ const ETEAPayments = () => {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div>
         <Card>
           <CardHeader>
             <CardTitle className="text-base">GET /api/payments/{'{application_id}'}</CardTitle>
@@ -447,74 +335,11 @@ const ETEAPayments = () => {
                 </div>
                 {lookupResult.payment ? (
                   <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                    <p>payment_id: <span className="font-mono">{lookupResult.payment.id}</span></p>
-                    <p>bill_id: <span className="font-mono">{lookupResult.payment.billId}</span></p>
+                    <p>consumer #: <span className="font-mono">{lookupResult.payment.consumerNumber || '—'}</span></p>
                     <p>amount: <span className="font-medium text-foreground">{formatPKR(lookupResult.payment.amount)}</span></p>
                     <p>status: <span className="text-foreground">{lookupResult.payment.status}</span></p>
                   </div>
                 ) : null}
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">POST /api/payment/callback</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="space-y-1.5 md:col-span-2">
-                <Label className="text-xs">bill_id</Label>
-                <Input
-                  value={callbackForm.bill_id}
-                  onChange={(event) => setCallbackForm({ ...callbackForm, bill_id: event.target.value })}
-                  className="rounded-lg font-mono"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">status</Label>
-                <Select
-                  value={callbackForm.status}
-                  onValueChange={(value: Extract<EteaPaymentStatus, 'paid' | 'failed' | 'expired'>) =>
-                    setCallbackForm({ ...callbackForm, status: value })
-                  }
-                >
-                  <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {CALLBACK_STATUS_OPTIONS.map((status) => (
-                      <SelectItem key={status} value={status}>{status}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">transaction_id</Label>
-                <Input
-                  value={callbackForm.transaction_id}
-                  onChange={(event) => setCallbackForm({ ...callbackForm, transaction_id: event.target.value })}
-                  className="rounded-lg"
-                />
-              </div>
-              <div className="space-y-1.5 md:col-span-2">
-                <Label className="text-xs">paid_at</Label>
-                <Input
-                  type="datetime-local"
-                  value={callbackForm.paid_at}
-                  onChange={(event) => setCallbackForm({ ...callbackForm, paid_at: event.target.value })}
-                  className="rounded-lg"
-                />
-              </div>
-            </div>
-
-            <Button variant="outline" className="rounded-lg" onClick={handleProcessCallback}>Process Callback</Button>
-
-            {callbackResult ? (
-              <div className="rounded-lg border p-3 text-sm">
-                <p className="font-medium">{callbackResult.message}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  acknowledged: {callbackResult.acknowledged ? 'true' : 'false'}
-                </p>
               </div>
             ) : null}
           </CardContent>
@@ -536,7 +361,7 @@ const ETEAPayments = () => {
       </Card>
 
       <FilterBar
-        searchPlaceholder="Search payments by payment_id, application_id, applicant_id, posting_id, consumer #, bill_id, or transaction_id..."
+        searchPlaceholder="Search payments by application_id, applicant_id, posting_id, consumer #, or transaction_id..."
         onSearch={(value) => {
           setSearch(value);
           setPage(1);
@@ -563,12 +388,10 @@ const ETEAPayments = () => {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>payment_id</TableHead>
               <TableHead>application_id</TableHead>
               <TableHead>applicant_id</TableHead>
               <TableHead>posting_id</TableHead>
               <TableHead>consumer #</TableHead>
-              <TableHead>bill_id</TableHead>
               <TableHead>amount</TableHead>
               <TableHead>status</TableHead>
               <TableHead>created_at</TableHead>
@@ -579,14 +402,13 @@ const ETEAPayments = () => {
           <TableBody>
             {paginatedPayments.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center text-sm text-muted-foreground py-6">
+                <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-6">
                   No payment records match your filters.
                 </TableCell>
               </TableRow>
             ) : (
               paginatedPayments.map((payment) => (
                 <TableRow key={payment.id}>
-                  <TableCell className="font-mono text-xs">{payment.id}</TableCell>
                   <TableCell className="font-mono text-xs">{payment.applicationId}</TableCell>
                   <TableCell className="font-mono text-xs">{payment.applicantId}</TableCell>
                   <TableCell className="font-mono text-xs">{payment.postingId}</TableCell>
@@ -603,7 +425,6 @@ const ETEAPayments = () => {
                       </div>
                     ) : <span className="text-muted-foreground">—</span>}
                   </TableCell>
-                  <TableCell className="font-mono text-xs break-all">{payment.billId}</TableCell>
                   <TableCell className="font-mono text-sm">{formatPKR(payment.amount)}</TableCell>
                   <TableCell><StatusBadge status={payment.status} /></TableCell>
                   <TableCell className="text-xs text-muted-foreground">{payment.createdAt}</TableCell>

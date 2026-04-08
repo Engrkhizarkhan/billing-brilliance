@@ -63,7 +63,7 @@ const ETEARealtimePayments = () => {
   const todaysPaidPayments = paidPayments.filter((payment) =>
     (payment.paidAt || payment.createdAt).slice(0, 10) === todayKey
   );
-  const todaysTotal = todaysPaidPayments.reduce((sum, payment) => sum + payment.amount, 0);
+  const todaysTotal = todaysPaidPayments.reduce((sum, payment) => sum + Number(payment.amount), 0);
   const lastPayment = paidPayments[0] || null;
 
   if (loading && allPayments.length === 0) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;

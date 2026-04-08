@@ -39,9 +39,12 @@ const parsePaymentAmount = (str) => {
 
 // ── Date helpers ─────────────────────────────────────────────────────────────
 
+/** Parse a MySQL DATETIME string returned with dateStrings:true as UTC */
+const parseDbDate = (str) => new Date(String(str).replace(' ', 'T') + (String(str).includes('Z') || String(str).includes('+') ? '' : 'Z'));
+
 /** Format a date to 1LINK yyyyMMdd */
 const fmtDate = (date) => {
-  const d = date ? new Date(date) : new Date();
+  const d = date ? parseDbDate(date) : new Date();
   const y = d.getFullYear();
   const mo = String(d.getMonth() + 1).padStart(2, '0');
   const dy = String(d.getDate()).padStart(2, '0');
@@ -50,7 +53,7 @@ const fmtDate = (date) => {
 
 /** Format a date to 1LINK yyMM billing month */
 const fmtBillingMonth = (date) => {
-  const d = date ? new Date(date) : new Date();
+  const d = date ? parseDbDate(date) : new Date();
   return String(d.getFullYear()).slice(-2) + String(d.getMonth() + 1).padStart(2, '0');
 };
 
@@ -141,7 +144,7 @@ const billInquiry1Link = async (req, res) => {
 
       const etea = eteaRows[0];
       const now = new Date();
-      const isExpired = etea.expiry_date && new Date(etea.expiry_date) <= now;
+      const isExpired = etea.expiry_date && parseDbDate(etea.expiry_date) <= now;
       const status = etea.status;
 
       // Update status to expired if stale
@@ -176,7 +179,7 @@ const billInquiry1Link = async (req, res) => {
       }
 
       // Pending
-      const isOverdue = etea.due_date && new Date(etea.due_date) < now;
+      const isOverdue = etea.due_date && parseDbDate(etea.due_date) < now;
       const amtFormatted = fmtAmountInquiry(etea.amount);
 
       return res.json({

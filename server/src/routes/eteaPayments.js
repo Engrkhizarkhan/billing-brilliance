@@ -17,6 +17,7 @@ router.get('/payments/:applicationId', authenticate, eteaPaymentController.getPa
 router.post('/payment/callback', paymentCallbackValidation, handleValidation, eteaPaymentController.processPaymentCallback);
 
 // Admin endpoints
+router.get('/stats', authenticate, tenantScope, eteaPaymentController.getStats);
 router.get('/payments', authenticate, tenantScope, eteaPaymentController.listPayments);
 router.get('/payment-notifications', authenticate, tenantScope, eteaPaymentController.listNotifications);
 router.post('/payments/expire', authenticate, eteaPaymentController.expireOverduePayments);

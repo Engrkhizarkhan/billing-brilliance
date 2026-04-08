@@ -6,7 +6,7 @@ import { usePaymentStore } from '@/store/paymentStore';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
-import { EteaPaymentRecord, EteaPosting } from '@/types';
+import { EteaPaymentRecord, ETEAPosting } from '@/types';
 import { Loader2 } from 'lucide-react';
 
 const ETEAReports = () => {
@@ -15,9 +15,9 @@ const ETEAReports = () => {
   const { data: paymentsData, loading } = useApiQuery(() => api.listEteaPayments(), [paymentVersion]);
   const paymentRecords = (paymentsData || []) as EteaPaymentRecord[];
 
-  const { data: postingsData } = useApiQuery(() => api.fetchPostings({}), []);
+  const { data: postingsData } = useApiQuery(() => api.fetchPostings(), []);
   useEffect(() => {
-    if (postingsData) setEteaFinanceCache(postingsData as EteaPosting[], []);
+    if (postingsData) setEteaFinanceCache(postingsData as ETEAPosting[], []);
   }, [postingsData]);
 
   const monthlyCollections = useMemo(() => {
@@ -27,7 +27,7 @@ const ETEAReports = () => {
       .filter((payment) => payment.status === 'paid')
       .forEach((payment) => {
         const monthKey = (payment.paidAt || payment.createdAt).slice(0, 7);
-        byMonth.set(monthKey, (byMonth.get(monthKey) || 0) + payment.amount);
+        byMonth.set(monthKey, (byMonth.get(monthKey) || 0) + Number(payment.amount));
       });
 
     return Array.from(byMonth.entries())
@@ -57,7 +57,7 @@ const ETEAReports = () => {
       current.totalRequests += 1;
       if (payment.status === 'paid') {
         current.paidRequests += 1;
-        current.collected += payment.amount;
+        current.collected += Number(payment.amount);
       }
 
       postingMap.set(key, current);

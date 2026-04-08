@@ -275,6 +275,19 @@ export const api = {
     return post<ApiResponse<{ expired: number }>>('/payments/expire', {});
   },
 
+  async getEteaStats(): Promise<ApiResponse<{
+    totalRequests: number;
+    pending: number;
+    paid: number;
+    expired: number;
+    failed: number;
+    feeCollected: number;
+    verifiedTransactions: number;
+    collectionTrend: { month: string; revenue: number }[];
+  }>> {
+    return get('/stats');
+  },
+
   // ---- Settings ----
   async fetchFeePlans(): Promise<ApiResponse<FeePlan[]>> {
     return get<ApiResponse<FeePlan[]>>('/fee-plans');

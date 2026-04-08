@@ -8,9 +8,9 @@ import { useSessionTimeout } from '@/hooks/useSessionTimeout';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import {
   LayoutDashboard, Users, CreditCard, BarChart3, Building2,
-  GraduationCap, BookOpen, Award, Receipt, Wallet, Briefcase, UserPlus,
+  GraduationCap, BookOpen, Award, Receipt, Wallet, Briefcase,
   LogOut, Menu, X, DollarSign, ChevronRight, Settings, Sun, Moon,
-  AlertTriangle, FileText, Shield, ClipboardList, Megaphone, Activity, Wifi
+  AlertTriangle, FileText, Shield, ClipboardList, Activity, Wifi
 } from 'lucide-react';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -52,11 +52,10 @@ const navItems: Record<UserRole, NavItem[]> = {
   ],
   etea: [
     { label: 'Dashboard', path: '/etea', icon: LayoutDashboard, group: 'Overview' },
-    { label: 'Postings', path: '/etea/postings', icon: Megaphone, group: 'Management' },
-    { label: 'Application References', path: '/etea/applicants', icon: UserPlus, group: 'Management' },
     { label: 'Payments', path: '/etea/payments', icon: Wallet, group: 'Finance' },
     { label: 'Real-Time Payments', path: '/etea/realtime-payments', icon: Activity, group: 'Finance' },
     { label: 'Reports', path: '/etea/reports', icon: BarChart3, group: 'Analytics' },
+    { label: 'Login Activity', path: '/etea/login-activity', icon: Shield, group: 'System' },
     { label: 'Settings', path: '/etea/settings', icon: Settings, group: 'System' },
   ],
 };

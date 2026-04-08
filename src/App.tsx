@@ -27,8 +27,7 @@ import Defaulters from "./pages/school/Defaulters";
 import SchoolSettings from "./pages/school/SchoolSettings";
 import LoginActivity from "./pages/school/LoginActivity";
 import ETEADashboard from "./pages/etea/ETEADashboard";
-import ApplicantList from "./pages/etea/ApplicantList";
-import ETEAPostings from "./pages/etea/ETEAPostings";
+import ETEALoginActivity from "./pages/etea/ETEALoginActivity";
 import ETEAInvoices from "./pages/etea/ETEAInvoices";
 import ETEAPayments from "./pages/etea/ETEAPayments";
 import ETEARealtimePayments from "./pages/etea/ETEARealtimePayments";
@@ -93,12 +92,11 @@ const AppRoutes = () => {
 
           <Route path="/etea" element={<DashboardLayout />}>
             <Route index element={<ETEADashboard />} />
-            <Route path="postings" element={<ETEAPostings />} />
-            <Route path="applicants" element={<ApplicantList />} />
             <Route path="invoices" element={<ETEAInvoices />} />
             <Route path="payments" element={<ETEAPayments />} />
             <Route path="realtime-payments" element={<ETEARealtimePayments />} />
             <Route path="reports" element={<ETEAReports />} />
+            <Route path="login-activity" element={<ETEALoginActivity />} />
             <Route path="settings" element={<ETEASettings />} />
           </Route>
 

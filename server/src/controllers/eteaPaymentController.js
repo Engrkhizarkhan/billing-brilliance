@@ -40,6 +40,7 @@ const normalizeCreateRequest = (body) => ({
   applicationId: (body.applicationId || body.application_id || '').trim(),
   postingId: (body.postingId || body.posting_id || '').trim(),
   dueDate: (body.dueDate || body.due_date || '').trim(),
+  expireAt: body.expireAt || body.expire_at || null,
   description: body.description?.trim(),
   customerName: (body.customerName || body.customer_name || body.applicantId || body.applicant_id || 'Applicant').trim(),
   amount: body.amount,
@@ -81,10 +82,21 @@ const assertSecurity = (req, options = {}) => {
   }
 };
 
+// ---- Parse a MySQL DATETIME string (dateStrings:true) as UTC ----
+const parseDbDate = (str) => new Date(String(str).replace(' ', 'T') + (String(str).includes('Z') || String(str).includes('+') ? '' : 'Z'));
+
+// ---- Format a date value as MySQL DATETIME (YYYY-MM-DD HH:MM:SS UTC) ----
+const toMySQLDatetime = (value) => {
+  if (!value) return null;
+  const d = value instanceof Date ? value : new Date(String(value).replace(' ', 'T') + (String(value).includes('Z') || String(value).includes('+') ? '' : 'Z'));
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().replace('T', ' ').slice(0, 19);
+};
+
 // ---- Expire stale payment ----
 const ensurePaymentNotStale = async (payment) => {
   if (payment.status !== 'pending') return payment;
-  if (new Date(payment.expiry_date).getTime() > Date.now()) return payment;
+  if (parseDbDate(payment.expiry_date).getTime() > Date.now()) return payment;
 
   await pool.query('UPDATE etea_payment_records SET status = ? WHERE id = ?', ['expired', payment.id]);
   return { ...payment, status: 'expired' };
@@ -101,7 +113,6 @@ const createPayment = async (req, res, next) => {
     if (!normalized.applicantId) throw new AppError('applicant_id is required', 400);
     if (!normalized.applicationId) throw new AppError('application_id is required', 400);
     if (!normalized.postingId) throw new AppError('posting_id is required', 400);
-    if (!normalized.dueDate) throw new AppError('due_date is required', 400);
     if (!normalized.amount || normalized.amount <= 0) throw new AppError('Amount must be > 0', 400);
 
     // Check for existing payment (idempotent)
@@ -135,25 +146,26 @@ const createPayment = async (req, res, next) => {
 
     const id = uuidv4();
     const createdAt = new Date().toISOString();
-    const dueDate = new Date(normalized.dueDate).toISOString().slice(0, 10);
-    const expiryDate = addHours(createdAt, DEFAULT_EXPIRY_HOURS);
+    // due_date: derive from expireAt date portion if provided, otherwise default to today+2
+    const dueDate = normalized.dueDate
+      ? new Date(normalized.dueDate).toISOString().slice(0, 10)
+      : normalized.expireAt
+        ? new Date(normalized.expireAt).toISOString().slice(0, 10)
+        : new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const expiryDate = normalized.expireAt
+      ? new Date(normalized.expireAt).toISOString()
+      : addHours(createdAt, DEFAULT_EXPIRY_HOURS);
     const billId = `ETEA-${id.split('-')[0].toUpperCase()}`;
 
     // Generate a 1BILL-compatible consumer number for this payment record.
-    // Format: FINTECH_PREFIX(6) + tenant biller_code(4) + zero-padded sequence(14) = 24 chars.
-    let consumerNumber = null;
-    try {
-      const [tenantRows] = await pool.query('SELECT biller_code FROM tenants WHERE id = ?', [tenantId]);
-      const billerCode = tenantRows[0]?.biller_code || '0000';
-      const [seqRows] = await pool.query(
-        'SELECT COUNT(*) AS cnt FROM etea_payment_records WHERE tenant_id = ?',
-        [tenantId]
-      );
-      const seq = (seqRows[0]?.cnt || 0) + 1;
-      consumerNumber = `${FINTECH_PREFIX}${billerCode}${String(seq).padStart(14, '0')}`;
-    } catch (e) {
-      logger.warn('Could not generate consumer number for ETEA payment:', e.message);
-    }
+    // Format: FINTECH_PREFIX(6) + tenant biller_code(4) + timestamp(10) + random(4) = 24 chars.
+    // Uses timestamp+random instead of COUNT(*) to avoid race conditions on concurrent creates.
+    const [tenantRows] = await pool.query('SELECT biller_code FROM tenants WHERE id = ?', [tenantId]);
+    if (!tenantRows.length) throw new AppError('Tenant not found', 404);
+    const billerCode = tenantRows[0].biller_code;
+    const ts = String(Date.now()).slice(-10);
+    const rand = String(Math.floor(Math.random() * 9999)).padStart(4, '0');
+    const consumerNumber = `${FINTECH_PREFIX}${billerCode}${ts}${rand}`;
 
     await pool.query(
       `INSERT INTO etea_payment_records (id, tenant_id, application_id, applicant_id, posting_id, bill_id, consumer_number, amount, status, due_date, expiry_date, created_at, description, callback_url)
@@ -298,7 +310,7 @@ const processPaymentCallback = async (req, res, next) => {
     // Apply update
     const updates = { status: callback.status, transaction_id: callback.transactionId };
     if (callback.status === 'paid') {
-      updates.paid_at = callback.paidAt || new Date().toISOString();
+      updates.paid_at = toMySQLDatetime(callback.paidAt || new Date());
     }
 
     await pool.query(
@@ -373,6 +385,70 @@ const expireOverduePayments = async (req, res, next) => {
   }
 };
 
+// ---- GET /api/etea/stats ----
+const getStats = async (req, res, next) => {
+  try {
+    const params = [];
+    let where = 'WHERE 1=1';
+    if (req.tenantId) { where += ' AND tenant_id = ?'; params.push(req.tenantId); }
+
+    // Status counts + totals in one query
+    const [statusRows] = await pool.query(
+      `SELECT status, COUNT(*) AS cnt, COALESCE(SUM(amount), 0) AS total
+       FROM etea_payment_records ${where}
+       GROUP BY status`,
+      params
+    );
+
+    const statusMap = {};
+    statusRows.forEach((r) => { statusMap[r.status] = { count: Number(r.cnt), total: parseFloat(r.total) }; });
+
+    const pending   = statusMap.pending   || { count: 0, total: 0 };
+    const paid      = statusMap.paid      || { count: 0, total: 0 };
+    const expired   = statusMap.expired   || { count: 0, total: 0 };
+    const failed    = statusMap.failed    || { count: 0, total: 0 };
+
+    // Verified transactions (paid + has transaction_id)
+    const [vRows] = await pool.query(
+      `SELECT COUNT(*) AS cnt FROM etea_payment_records ${where} AND status = 'paid' AND transaction_id IS NOT NULL`,
+      params
+    );
+    const verifiedTransactions = Number(vRows[0].cnt);
+
+    // Monthly collection trend (last 12 months)
+    const trendParams = [...params];
+    const [trendRows] = await pool.query(
+      `SELECT DATE_FORMAT(paid_at, '%Y-%m') AS month, SUM(amount) AS revenue
+       FROM etea_payment_records
+       ${where} AND status = 'paid' AND paid_at IS NOT NULL
+         AND paid_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+       GROUP BY month ORDER BY month ASC`,
+      trendParams
+    );
+
+    const collectionTrend = trendRows.map((r) => {
+      const [year, mo] = (r.month || '').split('-').map(Number);
+      const label = new Date(year, mo - 1, 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+      return { month: label, revenue: parseFloat(r.revenue) };
+    });
+
+    res.json({
+      data: {
+        totalRequests: pending.count + paid.count + expired.count + failed.count,
+        pending:    pending.count,
+        paid:       paid.count,
+        expired:    expired.count,
+        failed:     failed.count,
+        feeCollected:          paid.total,
+        verifiedTransactions,
+        collectionTrend,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // ---- List all payments & notifications ----
 const listPayments = async (req, res, next) => {
   try {
@@ -416,6 +492,7 @@ module.exports = {
   processPaymentCallback,
   healthCheck,
   expireOverduePayments,
+  getStats,
   listPayments,
   listNotifications,
   generateWebhookSignature,
