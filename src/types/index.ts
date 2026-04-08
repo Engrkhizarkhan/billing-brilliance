@@ -3,6 +3,7 @@ export type SchoolAccessRole = 'admin' | 'finance' | 'staff' | 'viewer';
 
 export interface User {
   id: string;
+  tenantId?: string | null;
   email: string;
   name: string;
   role: UserRole;
@@ -11,6 +12,8 @@ export interface User {
   mainSchoolUserId?: string;
   schoolAccessRole?: SchoolAccessRole;
   verified?: boolean;
+  isProtected?: boolean;
+  tenantApiKey?: string;
 }
 
 export interface Biller {
@@ -22,6 +25,7 @@ export interface Biller {
   phone: string;
   status: 'active' | 'suspended' | 'banned';
   createdAt: string;
+  apiKey?: string;
 }
 
 export interface Student {
@@ -51,10 +55,13 @@ export interface Student {
 export interface Invoice {
   id: string;
   invoiceNumber: string;
+  studentId?: string;
+  feePlanId?: string;
   studentName: string;
   consumerNumber: string;
   month: string;
   amount: number;
+  lateFee?: number;
   status: 'pending' | 'paid' | 'overdue';
   dueDate: string;
   billerId: string;
@@ -90,6 +97,23 @@ export interface StudentScholarshipAssignment {
   status: 'active' | 'inactive';
 }
 
+export interface PaymentPlanAssignment {
+  id: string;
+  studentId: string;
+  feePlanId: string;
+  status: 'active' | 'pending' | 'completed';
+  assignedVia: 'class' | 'individual';
+  assignedDate: string;
+  nextDueDate: string | null;
+  studentName?: string;
+  consumerNumber?: string;
+  className?: string;
+  sectionName?: string;
+  planName?: string;
+  amount?: number;
+  frequency?: FeePlan['frequency'];
+}
+
 export type StudentRiskTier = 'current' | 'watch' | 'high-risk' | 'critical';
 
 export interface StudentFinancialSnapshot {
@@ -99,6 +123,12 @@ export interface StudentFinancialSnapshot {
   lastPaymentDate: string | null;
   scholarshipCount: number;
   riskTier: StudentRiskTier;
+}
+
+export interface StudentFinancialSummary {
+  studentId: string;
+  totalDue: number;
+  overdueMonths: number;
 }
 
 export interface LedgerAllocation {
@@ -190,12 +220,35 @@ export interface AuditLog {
   id: string;
   userId: string;
   userName: string;
+  userEmail?: string;
+  userRole?: UserRole | 'school';
+  schoolAccessRole?: SchoolAccessRole;
   action: string;
   entity: string;
   entityId: string;
   details: string;
-  timestamp: string;
-  ip: string;
+  createdAt: string;
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+export interface AppNotification {
+  id: string;
+  tenantId?: string | null;
+  userId?: string | null;
+  title: string;
+  message: string;
+  type: 'payment' | 'applicant' | 'alert' | 'system';
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface BillingPolicySetting {
+  feeGenerationMode: 'auto' | 'manual' | 'hybrid';
+  alertOnSchedulerFailure: boolean;
+  autoApplyLateFee: boolean;
+  schedulerLastRun: string;
+  lastManualRunAt: string | null;
 }
 
 export type BillStatus = 'paid' | 'unpaid' | 'partial' | 'overdue';
@@ -243,6 +296,7 @@ export interface BillInquiryResponse {
   amount?: number;
   dueDate?: string;
   status?: BillStatus | 'not_found';
+  pendingCount?: number;
   billerCode?: string;
   billerName?: string;
   currency?: string;
@@ -288,8 +342,10 @@ export interface BundlePackage {
 }
 
 export interface FetchBundleResponse {
-  bundles: BundlePackage[];
-  fetchedAt: string;
+  companyId: string;
+  responseCode: string;
+  billerName: string;
+  bundleDetails: BillBundleDetail[];
 }
 
 export type EteaPaymentStatus = 'pending' | 'paid' | 'failed' | 'expired';
@@ -300,6 +356,7 @@ export interface EteaPaymentRecord {
   applicantId: string;
   postingId: string;
   billId: string;
+  consumerNumber?: string;
   amount: number;
   status: EteaPaymentStatus;
   dueDate: string;
@@ -330,6 +387,7 @@ export interface EteaCreatePaymentRequest {
 export interface EteaCreatePaymentResponse {
   paymentId: string;
   billId: string;
+  consumerNumber?: string;
   status: EteaPaymentStatus;
   payment: EteaPaymentRecord;
   oneBillRequest: OneBillCreateBillRequest;

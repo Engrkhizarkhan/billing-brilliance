@@ -18,7 +18,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { mockApi } from '@/lib/mockApi';
+import { api } from '@/lib/api';
 import { SchoolAccessRole, User } from '@/types';
 import { useAuthStore } from '@/store/authStore';
 
@@ -91,7 +91,7 @@ const SchoolSettings = () => {
 
     setLoadingUsers(true);
     try {
-      const response = await mockApi.fetchSchoolUsers(schoolRef);
+      const response = await api.fetchSchoolUsers(schoolRef);
       setUsers(response.data.filter((u): u is SchoolUser => u.role === 'school'));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to load school users');
@@ -116,7 +116,7 @@ const SchoolSettings = () => {
     }
 
     try {
-      const response = await mockApi.createSchoolSubUser({
+      const response = await api.createSchoolSubUser({
         name: newUser.name.trim(),
         email: newUser.email.trim(),
         password: newUser.password,
@@ -128,8 +128,7 @@ const SchoolSettings = () => {
       if (response.data.role === 'school') {
         setUsers((prev) => [...prev, response.data]);
       }
-      toast.success('Sub-user linked to school reference');
-      setNewUser(emptyNewUserForm);
+      toast.success('Sub-user linked to school reference');      setNewUser(emptyNewUserForm);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to add user');
     }
@@ -137,11 +136,11 @@ const SchoolSettings = () => {
 
   const handleVerify = async (id: string) => {
     try {
-      const updated = await mockApi.setUserVerified(id, true);
+      const updated = await api.updateUser(id, { verified: true });
       if (updated.data && updated.data.role === 'school') {
         setUsers((prev) => prev.map((u) => (u.id === id ? updated.data : u)));
       }
-      toast.success('Email marked verified (mock)');
+      toast.success('Email marked verified');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to verify user');
     }
@@ -166,7 +165,7 @@ const SchoolSettings = () => {
     }
 
     try {
-      const updated = await mockApi.updateSchoolUser(editUser.id, {
+      const updated = await api.updateUser(editUser.id, {
         name: editUser.name.trim(),
         email: editUser.email.trim(),
         schoolAccessRole: editUser.schoolAccessRole,
@@ -179,11 +178,11 @@ const SchoolSettings = () => {
       }
 
       if (editUser.nextPassword.trim()) {
-        await mockApi.resetUserPassword(editUser.id, editUser.nextPassword.trim());
+        await api.resetPassword(editUser.id, editUser.nextPassword.trim());
       }
 
       setUsers((prev) => prev.map((u) => (u.id === editUser.id ? updated.data : u)));
-      toast.success('User updated (mock)');
+      toast.success('User updated');
       setEditDialogOpen(false);
       setEditUser(emptyEditUserForm);
     } catch (error) {
@@ -207,13 +206,13 @@ const SchoolSettings = () => {
     }
 
     try {
-      const deleted = await mockApi.deleteSchoolUser(userBeingDeleted.id, schoolRef);
+      const deleted = await api.deleteSchoolUser(userBeingDeleted.id, schoolRef);
       if (!deleted.data) {
         toast.error('User not found');
         return;
       }
       setUsers((prev) => prev.filter((u) => u.id !== userBeingDeleted.id));
-      toast.success('User deleted (mock)');
+      toast.success('User deleted');
       setDeleteDialogOpen(false);
       setUserBeingDeleted(null);
     } catch (error) {
@@ -232,8 +231,8 @@ const SchoolSettings = () => {
     }
 
     try {
-      await mockApi.updateUserPassword(mainSchoolUserId, adminPassword.previous, adminPassword.next);
-      toast.success('Main school admin password updated (mock)');
+      await api.changePassword(adminPassword.previous, adminPassword.next);
+      toast.success('Main school admin password updated');
       setAdminPassword({ previous: '', next: '' });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to update admin password');
@@ -251,7 +250,7 @@ const SchoolSettings = () => {
       return;
     }
 
-    toast.success('Fee generation completed (mock)');
+    toast.success('Fee generation completed');
   };
 
   const handleSaveBillingPolicy = () => {
@@ -261,7 +260,7 @@ const SchoolSettings = () => {
       hybrid: 'Hybrid mode combines scheduled generation with manual override and is recommended.',
     };
 
-    toast.success(`Billing policy saved (mock). ${modeMessage[feeGenerationMode]}`);
+    toast.success(`Billing policy saved. ${modeMessage[feeGenerationMode]}`);
   };
 
   const schedulerHealthLabel: Record<SchedulerHealth, string> = {

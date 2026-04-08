@@ -1,15 +1,24 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatPKR } from '@/lib/formatters';
-import { resolvePostingById } from '@/lib/eteaFinance';
+import { resolvePostingById, setEteaFinanceCache } from '@/lib/eteaFinance';
 import { usePaymentStore } from '@/store/paymentStore';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { listPayments } from '@/services/eteaPaymentController';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import { EteaPaymentRecord, EteaPosting } from '@/types';
+import { Loader2 } from 'lucide-react';
 
 const ETEAReports = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
 
-  const paymentRecords = useMemo(() => listPayments(), [paymentVersion]);
+  const { data: paymentsData, loading } = useApiQuery(() => api.listEteaPayments(), [paymentVersion]);
+  const paymentRecords = (paymentsData || []) as EteaPaymentRecord[];
+
+  const { data: postingsData } = useApiQuery(() => api.fetchPostings({}), []);
+  useEffect(() => {
+    if (postingsData) setEteaFinanceCache(postingsData as EteaPosting[], []);
+  }, [postingsData]);
 
   const monthlyCollections = useMemo(() => {
     const byMonth = new Map<string, number>();
@@ -61,6 +70,8 @@ const ETEAReports = () => {
   const paidRequests = paymentRecords.filter((payment) => payment.status === 'paid').length;
   const collectionRate = paymentRecords.length > 0 ? Math.round((paidRequests / paymentRecords.length) * 100) : 0;
   const verifiedTransactions = paymentRecords.filter((payment) => payment.status === 'paid' && payment.transactionId).length;
+
+  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
   return (
     <div className="space-y-6 animate-fade-in">

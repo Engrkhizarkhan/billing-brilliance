@@ -1,6 +1,7 @@
-import { useState, useRef, useMemo } from 'react';
-import { students as initialStudents, generateConsumerNumber, getStudentFinancialSnapshot } from '@/data/mockData';
-import { Student, StudentFinancialSnapshot } from '@/types';
+import { useState, useRef, useMemo, useEffect } from 'react';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import { Student, StudentFinancialSnapshot, StudentScholarshipAssignment } from '@/types';
 import { FilterBar } from '@/components/FilterBar';
 import { ExportButton } from '@/components/ExportButton';
 import { TablePagination } from '@/components/TablePagination';
@@ -23,7 +24,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { Plus, Upload, Download, FileText, Users, GraduationCap, Eye, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Upload, Download, FileText, Users, GraduationCap, Eye, Pencil, Trash2, Loader2 } from 'lucide-react';
 import { formatCNIC, formatPhone, formatPKR } from '@/lib/formatters';
 import { useNavigate } from 'react-router-dom';
 
@@ -87,8 +88,14 @@ const toStudentForm = (student: Student): StudentFormState => ({
 });
 
 const StudentList = () => {
-  const [studentList, setStudentList] = useState<Student[]>(initialStudents);
+  const { data: studentsData, loading: studentsLoading, refetch } = useApiQuery(() => api.fetchStudents({ pageSize: 9999 }), []);
+  const { data: scholarshipAssignmentsData } = useApiQuery(() => api.fetchAllScholarshipAssignments(), []);
+  const [studentList, setStudentList] = useState<Student[]>([]);
   const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    if (studentsData) setStudentList(studentsData as Student[]);
+  }, [studentsData]);
   const [selectedClass, setSelectedClass] = useState<string>('all');
   const [selectedSection, setSelectedSection] = useState<string>('all');
   const [defaulterFilter, setDefaulterFilter] = useState('all');
@@ -107,9 +114,8 @@ const StudentList = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
-  const syncStudentDirectory = (nextStudents: Student[]) => {
-    setStudentList(nextStudents);
-    initialStudents.splice(0, initialStudents.length, ...nextStudents);
+  const refreshStudents = () => {
+    refetch();
   };
 
   const classSummary = useMemo(() => {
@@ -135,13 +141,40 @@ const StudentList = () => {
       .map(([name, count]) => ({ name, count }));
   }, [classSectionSummary, selectedClass]);
 
-  const financialByStudentId = useMemo(() => {
-    const map: Record<string, StudentFinancialSnapshot> = {};
-    studentList.forEach((student) => {
-      map[student.id] = getStudentFinancialSnapshot(student.id);
+  const { data: financialSummaryData } = useApiQuery(() => api.fetchStudentFinancialSummary(), []);
+
+  const scholarshipCountByStudentId = useMemo(() => {
+    const assignments = (scholarshipAssignmentsData || []) as StudentScholarshipAssignment[];
+    const map: Record<string, number> = {};
+    assignments.forEach((a) => {
+      if (a.status === 'active') {
+        map[a.studentId] = (map[a.studentId] || 0) + 1;
+      }
     });
     return map;
-  }, [studentList]);
+  }, [scholarshipAssignmentsData]);
+
+  const financialByStudentId = useMemo(() => {
+    const summaries = (financialSummaryData || []) as import('@/types').StudentFinancialSummary[];
+    const summaryMap: Record<string, import('@/types').StudentFinancialSummary> = {};
+    summaries.forEach((s) => { summaryMap[s.studentId] = s; });
+
+    const map: Record<string, StudentFinancialSnapshot> = {};
+    studentList.forEach((student) => {
+      const s = summaryMap[student.id];
+      const overdueMonths = s ? (Number(s.overdueMonths) || 0) : 0;
+      const totalDue = s ? (parseFloat(String(s.totalDue)) || 0) : 0;
+      map[student.id] = {
+        studentId: student.id,
+        overdueMonths,
+        totalDue,
+        lastPaymentDate: null,
+        scholarshipCount: scholarshipCountByStudentId[student.id] || 0,
+        riskTier: overdueMonths >= 3 ? 'critical' : overdueMonths >= 2 ? 'high-risk' : overdueMonths >= 1 ? 'watch' : 'current',
+      };
+    });
+    return map;
+  }, [studentList, financialSummaryData, scholarshipCountByStudentId]);
 
   const filtered = studentList.filter((s) => {
     const financial = financialByStudentId[s.id] || {
@@ -163,40 +196,43 @@ const StudentList = () => {
 
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (form.usesBusService && (!form.busServiceStartMonth || Number(form.busMonthlyFee) <= 0)) {
       toast.error('Set bus start month and valid monthly bus fee');
       return;
     }
 
-    const num = String(studentList.length + 1);
-    const newStudent: Student = {
-      id: `s${studentList.length + 1}`,
-      name: form.name,
-      fatherName: form.fatherName,
-      rollNumber: form.rollNumber,
-      class: form.class,
-      section: form.section,
-      phone: form.phone,
-      cnic: form.cnic,
-      consumerNumber: generateConsumerNumber('1001', num),
-      billId: `SCH-GHS-${num.padStart(5, '0')}`,
-      status: 'active',
-      billerId: '1',
-      balance: 0,
-      admissionDate: new Date().toISOString().split('T')[0],
-      gender: form.gender,
-      dateOfBirth: form.dateOfBirth,
-      address: form.address,
-      usesBusService: form.usesBusService,
-      busServiceStartMonth: form.usesBusService ? form.busServiceStartMonth : null,
-      busServiceEndMonth: null,
-      busMonthlyFee: form.usesBusService ? Number(form.busMonthlyFee) : 0,
-    };
-    syncStudentDirectory([...studentList, newStudent]);
-    setDialogOpen(false);
-    setForm(emptyStudentForm);
-    toast.success(`Student added to ${form.class} — Bill ID: ${newStudent.billId}`);
+    try {
+      const result = await api.createStudent({
+        name: form.name,
+        fatherName: form.fatherName,
+        rollNumber: form.rollNumber,
+        class: form.class,
+        section: form.section,
+        phone: form.phone,
+        cnic: form.cnic,
+        status: 'active',
+        billerId: '1',
+        balance: 0,
+        admissionDate: new Date().toISOString().split('T')[0],
+        gender: form.gender,
+        dateOfBirth: form.dateOfBirth,
+        address: form.address,
+        usesBusService: form.usesBusService,
+        busServiceStartMonth: form.usesBusService ? form.busServiceStartMonth : null,
+        busServiceEndMonth: null,
+        busMonthlyFee: form.usesBusService ? Number(form.busMonthlyFee) : 0,
+      });
+      if (result.data) {
+        setStudentList((prev) => [result.data as Student, ...prev]);
+      }
+      void refreshStudents();
+      setDialogOpen(false);
+      setForm(emptyStudentForm);
+      toast.success(`Student added to ${form.class}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to add student');
+    }
   };
 
   const openEditStudent = (student: Student) => {
@@ -205,7 +241,7 @@ const StudentList = () => {
     setEditDialogOpen(true);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!studentBeingEdited) return;
 
     if (!editForm.name || !editForm.fatherName || !editForm.cnic) {
@@ -218,14 +254,11 @@ const StudentList = () => {
       return;
     }
 
-    const nextStudents = studentList.map((student) => {
-      if (student.id !== studentBeingEdited.id) return student;
+    const nowUsesBus = editForm.usesBusService;
+    const wasUsingBus = studentBeingEdited.usesBusService;
 
-      const nowUsesBus = editForm.usesBusService;
-      const wasUsingBus = student.usesBusService;
-
-      return {
-        ...student,
+    try {
+      const updateResult = await api.updateStudent(studentBeingEdited.id, {
         name: editForm.name,
         fatherName: editForm.fatherName,
         rollNumber: editForm.rollNumber,
@@ -237,17 +270,21 @@ const StudentList = () => {
         dateOfBirth: editForm.dateOfBirth,
         address: editForm.address,
         usesBusService: nowUsesBus,
-        busServiceStartMonth: nowUsesBus ? editForm.busServiceStartMonth : student.busServiceStartMonth,
-        busServiceEndMonth: nowUsesBus ? null : (wasUsingBus ? (student.busServiceEndMonth || currentMonthKey()) : student.busServiceEndMonth),
-        busMonthlyFee: nowUsesBus ? Number(editForm.busMonthlyFee) : student.busMonthlyFee,
-      };
-    });
-
-    syncStudentDirectory(nextStudents);
-    setEditDialogOpen(false);
-    setStudentBeingEdited(null);
-    setEditForm(emptyStudentForm);
-    toast.success('Student profile updated');
+        busServiceStartMonth: nowUsesBus ? editForm.busServiceStartMonth : studentBeingEdited.busServiceStartMonth,
+        busServiceEndMonth: nowUsesBus ? null : (wasUsingBus ? (studentBeingEdited.busServiceEndMonth || currentMonthKey()) : studentBeingEdited.busServiceEndMonth),
+        busMonthlyFee: nowUsesBus ? Number(editForm.busMonthlyFee) : studentBeingEdited.busMonthlyFee,
+      });
+      if (updateResult.data) {
+        setStudentList((prev) => prev.map((s) => s.id === studentBeingEdited.id ? updateResult.data as Student : s));
+      }
+      void refreshStudents();
+      setEditDialogOpen(false);
+      setStudentBeingEdited(null);
+      setEditForm(emptyStudentForm);
+      toast.success('Student profile updated');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to update student');
+    }
   };
 
   const openDeleteStudent = (student: Student) => {
@@ -255,51 +292,58 @@ const StudentList = () => {
     setDeleteDialogOpen(true);
   };
 
-  const handleDeleteStudent = () => {
+  const handleDeleteStudent = async () => {
     if (!studentBeingDeleted) return;
 
-    const nextStudents = studentList.filter((student) => student.id !== studentBeingDeleted.id);
-    syncStudentDirectory(nextStudents);
-
-    const maxPage = Math.max(1, Math.ceil(nextStudents.length / pageSize));
-    setPage((currentPage) => Math.min(currentPage, maxPage));
-
-    toast.success(`${studentBeingDeleted.name} deleted`);
-    setStudentBeingDeleted(null);
-    setDeleteDialogOpen(false);
+    try {
+      await api.deleteStudent(studentBeingDeleted.id);
+      setStudentList((prev) => {
+        const next = prev.filter((s) => s.id !== studentBeingDeleted.id);
+        const maxPage = Math.max(1, Math.ceil(next.length / pageSize));
+        setPage((currentPage) => Math.min(currentPage, maxPage));
+        return next;
+      });
+      void refreshStudents();
+      toast.success(`${studentBeingDeleted.name} deleted`);
+      setStudentBeingDeleted(null);
+      setDeleteDialogOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to delete student');
+    }
   };
 
-  const handleBulkUpload = () => {
-    const newStudents: Student[] = Array.from({ length: 5 }, (_, i) => {
-      const idx = studentList.length + i + 1;
-      const usesBusService = i % 2 === 0;
-      return {
-        id: `bulk-${idx}`,
-        name: ['Ali Hassan', 'Ayesha Siddiqui', 'Hamza Tariq', 'Maryam Ahmed', 'Usman Ghani'][i],
-        fatherName: ['Hassan Ali', 'Siddiqui Sahib', 'Tariq Khan', 'Ahmed Raza', 'Ghani Muhammad'][i],
-        rollNumber: `R${String(idx).padStart(4, '0')}`,
-        class: allClasses[(i + 4) % 10],
-        section: String.fromCharCode(65 + (i % 5)),
-        phone: `0300-000000${i + 1}`,
-        cnic: `35201-${String(9000000 + i)}-${i}`,
-        consumerNumber: generateConsumerNumber('1001', String(idx)),
-        billId: `SCH-GHS-${String(idx).padStart(5, '0')}`,
-        status: 'active' as const,
-        billerId: '1',
-        balance: 0,
-        admissionDate: '2025-03-01',
-        gender: i % 2 === 0 ? 'male' as const : 'female' as const,
-        dateOfBirth: `2012-0${i + 1}-15`,
-        address: `House ${idx}, Street ${i + 1}, Peshawar`,
-        usesBusService,
-        busServiceStartMonth: usesBusService ? `2025-0${(i % 3) + 1}` : null,
-        busServiceEndMonth: null,
-        busMonthlyFee: usesBusService ? [1200, 1500, 1800][i % 3] : 0,
-      };
-    });
-    syncStudentDirectory([...studentList, ...newStudents]);
-    setBulkDialogOpen(false);
-    toast.success('5 students imported and assigned to their classes');
+  const handleBulkUpload = async () => {
+    const sampleStudents = [
+      { name: 'Ali Hassan', fatherName: 'Hassan Ali', class: 'Class 5', section: 'E', gender: 'male' as const, dateOfBirth: '2012-01-15', phone: '0300-0000001', cnic: '35201-9000000-0' },
+      { name: 'Ayesha Siddiqui', fatherName: 'Siddiqui Sahib', class: 'Class 6', section: 'A', gender: 'female' as const, dateOfBirth: '2012-02-15', phone: '0300-0000002', cnic: '35201-9000001-1' },
+      { name: 'Hamza Tariq', fatherName: 'Tariq Khan', class: 'Class 7', section: 'B', gender: 'male' as const, dateOfBirth: '2012-03-15', phone: '0300-0000003', cnic: '35201-9000002-2' },
+      { name: 'Maryam Ahmed', fatherName: 'Ahmed Raza', class: 'Class 8', section: 'C', gender: 'female' as const, dateOfBirth: '2012-04-15', phone: '0300-0000004', cnic: '35201-9000003-3' },
+      { name: 'Usman Ghani', fatherName: 'Ghani Muhammad', class: 'Class 9', section: 'D', gender: 'male' as const, dateOfBirth: '2012-05-15', phone: '0300-0000005', cnic: '35201-9000004-4' },
+    ];
+
+    try {
+      for (const s of sampleStudents) {
+        const usesBus = sampleStudents.indexOf(s) % 2 === 0;
+        await api.createStudent({
+          ...s,
+          rollNumber: `R${String(studentList.length + sampleStudents.indexOf(s) + 1).padStart(4, '0')}`,
+          status: 'active',
+          billerId: '1',
+          balance: 0,
+          admissionDate: '2025-03-01',
+          address: `House ${sampleStudents.indexOf(s) + 1}, Peshawar`,
+          usesBusService: usesBus,
+          busServiceStartMonth: usesBus ? '2025-01' : null,
+          busServiceEndMonth: null,
+          busMonthlyFee: usesBus ? 1500 : 0,
+        });
+      }
+      refreshStudents();
+      setBulkDialogOpen(false);
+      toast.success('5 students imported and assigned to their classes');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Bulk import failed');
+    }
   };
 
   const downloadTemplate = () => {
@@ -310,6 +354,10 @@ const StudentList = () => {
     URL.revokeObjectURL(url);
     toast.success('Template downloaded');
   };
+
+  if (studentsLoading) {
+    return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">

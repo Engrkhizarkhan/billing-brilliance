@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { eteaPostings } from '@/data/mockData';
+import { useEffect, useState } from 'react';
 import { ETEAPosting } from '@/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { FilterBar } from '@/components/FilterBar';
@@ -13,10 +12,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Plus, Megaphone, Users, Calendar, MoreHorizontal, Eye, Copy } from 'lucide-react';
+import { Plus, Megaphone, Users, Calendar, MoreHorizontal, Eye, Copy, Loader2 } from 'lucide-react';
 import { formatPKR } from '@/lib/formatters';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { notifyPaymentUpdate } from '@/store/paymentStore';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
 
 const initialForm = {
   title: '',
@@ -27,15 +28,6 @@ const initialForm = {
   startDate: '',
   endDate: '',
   testDate: '',
-};
-
-const getNextPostingId = (items: ETEAPosting[]) => {
-  const highestNumericId = items.reduce((highest, item) => {
-    const parsed = Number.parseInt(item.id.replace(/\D/g, ''), 10);
-    return Number.isNaN(parsed) ? highest : Math.max(highest, parsed);
-  }, 0);
-
-  return `ep${highestNumericId + 1}`;
 };
 
 const toFormValues = (posting: ETEAPosting) => ({
@@ -50,7 +42,8 @@ const toFormValues = (posting: ETEAPosting) => ({
 });
 
 const ETEAPostings = () => {
-  const [postings, setPostings] = useState<ETEAPosting[]>(eteaPostings);
+  const { data: postingsData, loading, refetch } = useApiQuery(() => api.fetchPostings(), []);
+  const [postings, setPostings] = useState<ETEAPosting[]>([]);
   const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
@@ -60,14 +53,12 @@ const ETEAPostings = () => {
   const [pageSize, setPageSize] = useState(25);
   const [form, setForm] = useState(initialForm);
 
+  useEffect(() => {
+    if (postingsData) setPostings(postingsData as ETEAPosting[]);
+  }, [postingsData]);
+
   const filtered = postings.filter(p => p.title.toLowerCase().includes(search.toLowerCase()) || p.department.toLowerCase().includes(search.toLowerCase()));
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
-
-  const syncPostings = (nextPostings: ETEAPosting[]) => {
-    eteaPostings.splice(0, eteaPostings.length, ...nextPostings);
-    setPostings(nextPostings);
-    notifyPaymentUpdate();
-  };
 
   const handleOpenCreate = () => {
     setEditingPostingId(null);
@@ -75,47 +66,45 @@ const ETEAPostings = () => {
     setAddOpen(true);
   };
 
-  const handleAddOrUpdate = () => {
+  const handleAddOrUpdate = async () => {
     if (!form.title.trim()) {
       toast.error('Posting title is required');
       return;
     }
 
-    if (editingPostingId) {
-      const nextPostings = postings.map((item) =>
-          item.id === editingPostingId
-            ? {
-                ...item,
-                title: form.title.trim(),
-                type: form.type,
-                department: form.department.trim(),
-                totalSeats: Number.parseInt(form.totalSeats, 10) || 0,
-                applicationFee: Number.parseInt(form.applicationFee, 10) || 0,
-                startDate: form.startDate,
-                endDate: form.endDate,
-                testDate: form.testDate,
-              }
-            : item
-      );
-      syncPostings(nextPostings);
-      toast.success(`Posting "${form.title.trim()}" updated`);
-    } else {
-      const newPosting: ETEAPosting = {
-        id: getNextPostingId(postings),
-        title: form.title.trim(),
-        type: form.type,
-        department: form.department.trim(),
-        totalSeats: Number.parseInt(form.totalSeats, 10) || 0,
-        applicationFee: Number.parseInt(form.applicationFee, 10) || 0,
-        startDate: form.startDate,
-        endDate: form.endDate,
-        testDate: form.testDate,
-        status: 'draft',
-        applicationsReceived: 0,
-      };
+    try {
+      if (editingPostingId) {
+        await api.updatePosting(editingPostingId, {
+          title: form.title.trim(),
+          type: form.type,
+          department: form.department.trim(),
+          totalSeats: Number.parseInt(form.totalSeats, 10) || 0,
+          applicationFee: Number.parseInt(form.applicationFee, 10) || 0,
+          startDate: form.startDate,
+          endDate: form.endDate,
+          testDate: form.testDate,
+        });
+        toast.success(`Posting "${form.title.trim()}" updated`);
+      } else {
+        await api.createPosting({
+          title: form.title.trim(),
+          type: form.type,
+          department: form.department.trim(),
+          totalSeats: Number.parseInt(form.totalSeats, 10) || 0,
+          applicationFee: Number.parseInt(form.applicationFee, 10) || 0,
+          startDate: form.startDate,
+          endDate: form.endDate,
+          testDate: form.testDate,
+          status: 'draft',
+          applicationsReceived: 0,
+        });
+        toast.success(`Posting "${form.title.trim()}" created as draft`);
+      }
 
-      syncPostings([...postings, newPosting]);
-      toast.success(`Posting "${newPosting.title}" created as draft`);
+      await refetch();
+      notifyPaymentUpdate();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save posting');
     }
 
     setAddOpen(false);
@@ -134,19 +123,25 @@ const ETEAPostings = () => {
     setAddOpen(true);
   };
 
-  const handleClone = (posting: ETEAPosting) => {
-    const clonedPosting: ETEAPosting = {
-      ...posting,
-      id: getNextPostingId(postings),
-      title: `${posting.title} (Copy)`,
-      status: 'draft',
-      applicationsReceived: 0,
-    };
-
-    syncPostings([clonedPosting, ...postings]);
-    setPage(1);
-    toast.success(`Posting cloned as "${clonedPosting.title}"`);
+  const handleClone = async (posting: ETEAPosting) => {
+    try {
+      await api.createPosting({
+        ...posting,
+        id: undefined,
+        title: `${posting.title} (Copy)`,
+        status: 'draft',
+        applicationsReceived: 0,
+      });
+      await refetch();
+      notifyPaymentUpdate();
+      setPage(1);
+      toast.success(`Posting cloned as "${posting.title} (Copy)"`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to clone posting');
+    }
   };
+
+  if (loading && postings.length === 0) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
   return (
     <div className="space-y-6 animate-fade-in">

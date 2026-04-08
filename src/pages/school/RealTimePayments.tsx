@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { transactions } from '@/data/mockData';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
 import { usePaymentStore } from '@/store/paymentStore';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,14 +26,19 @@ const RealTimePayments = () => {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [liveClock, setLiveClock] = useState(() => new Date());
   const [lastLiveUpdateAt, setLastLiveUpdateAt] = useState<string | null>(null);
+  const sessionStartRef = useRef(new Date());
+
+  const { data: txnData, refetch: refetchTxns } = useApiQuery(() => api.fetchTransactions({}), [paymentVersion]);
+  const transactions = (txnData || []) as Array<{ id: string; transactionId: string; consumerNumber: string; amount: number; status: string; date: string; billerName: string; createdAt?: string }>;
 
   useEffect(() => {
     if (!autoRefresh) return;
     const intervalId = window.setInterval(() => {
       setLiveClock(new Date());
-    }, 5000);
+      void refetchTxns();
+    }, 10000);
     return () => window.clearInterval(intervalId);
-  }, [autoRefresh]);
+  }, [autoRefresh, refetchTxns]);
 
   useEffect(() => {
     if (paymentVersion === 0) return;
@@ -43,17 +49,24 @@ const RealTimePayments = () => {
 
   const realtimeTransactions = useMemo(
     () => transactions.filter((transaction) => transaction.status === 'completed').slice(0, 20),
-    [paymentVersion, liveClock]
+    [transactions]
+  );
+
+  const sessionLiveIds = useMemo(
+    () => new Set(transactions
+      .filter((t) => t.createdAt && new Date(t.createdAt) >= sessionStartRef.current)
+      .map((t) => t.id)),
+    [transactions]
   );
 
   const sessionRealtimePayments = useMemo(
-    () => transactions.filter((transaction) => transaction.status === 'completed' && transaction.id.startsWith('txn-')),
-    [paymentVersion, liveClock]
+    () => realtimeTransactions.filter((t) => sessionLiveIds.has(t.id)),
+    [realtimeTransactions, sessionLiveIds]
   );
 
   const todayKey = liveClock.toISOString().slice(0, 10);
-  const todaysRealtimeTransactions = realtimeTransactions.filter((transaction) => transaction.date.slice(0, 10) === todayKey);
-  const todaysRealtimeAmount = todaysRealtimeTransactions.reduce((sum, transaction) => sum + transaction.amount, 0);
+  const todaysRealtimeTransactions = realtimeTransactions.filter((transaction) => (transaction.date ? String(transaction.date).slice(0, 10) : '') === todayKey);
+  const todaysRealtimeAmount = todaysRealtimeTransactions.reduce((sum, transaction) => sum + Number(transaction.amount), 0);
   const lastRealtimePayment = sessionRealtimePayments[0] || null;
 
   return (
@@ -128,7 +141,7 @@ const RealTimePayments = () => {
                       <TableCell className="font-mono text-xs">{transaction.consumerNumber}</TableCell>
                       <TableCell className="font-semibold text-success">{formatPKR(transaction.amount)}</TableCell>
                       <TableCell>
-                        {transaction.id.startsWith('txn-') ? (
+                        {sessionLiveIds.has(transaction.id) ? (
                           <span className="inline-flex items-center rounded-md bg-success/15 px-2 py-0.5 text-[11px] font-medium text-success">Live</span>
                         ) : (
                           <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">Historical</span>

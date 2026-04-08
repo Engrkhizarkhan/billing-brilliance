@@ -10,14 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  createPayment,
-  expireOverduePayments,
   generateWebhookSignature,
-  getPaymentStatus,
-  healthCheck,
-  listPaymentNotifications,
-  listPayments,
-  processPaymentCallback,
   eteaPaymentControllerConfig,
 } from '@/services/eteaPaymentController';
 import { formatPKR } from '@/lib/formatters';
@@ -27,10 +20,15 @@ import {
   EteaCreatePaymentResponse,
   EteaHealthResponse,
   EteaPaymentCallbackResponse,
+  EteaPaymentRecord,
+  EteaPaymentNotification,
   EteaPaymentStatus,
   EteaPaymentStatusResponse,
 } from '@/types';
 import { toast } from 'sonner';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import { Copy, Loader2 } from 'lucide-react';
 
 const getDefaultDueDate = () => {
   const target = new Date();
@@ -88,13 +86,20 @@ const ETEAPayments = () => {
   }, [queryApplicationId]);
 
   useEffect(() => {
-    const expired = expireOverduePayments();
-    if (expired > 0) {
-      toast.info(`${expired} pending payment record(s) expired`);
-    }
+    const doExpire = async () => {
+      try {
+        const res = await api.expireOverduePayments();
+        const expired = (res.data as { expired: number })?.expired || 0;
+        if (expired > 0) {
+          toast.info(`${expired} pending payment record(s) expired`);
+          refetchPayments();
+        }
+      } catch { /* ignore */ }
+    };
+    doExpire();
   }, [paymentVersion]);
 
-  const handleCreatePayment = () => {
+  const handleCreatePayment = async () => {
     if (!createForm.applicant_id.trim()) {
       toast.error('applicant_id is required');
       return;
@@ -121,24 +126,17 @@ const ETEAPayments = () => {
     }
 
     try {
-      const created = createPayment(
-        {
-          applicantId: createForm.applicant_id,
-          applicationId: createForm.application_id,
-          postingId: createForm.posting_id,
-          amount: createForm.amount,
-          dueDate: createForm.due_date,
-          description: createForm.description || undefined,
-          customerName: createForm.customer_name || createForm.applicant_id,
-          applicant_id: createForm.applicant_id,
-          application_id: createForm.application_id,
-          posting_id: createForm.posting_id,
-          due_date: createForm.due_date,
-          customer_name: createForm.customer_name || createForm.applicant_id,
-        },
-        { apiKey, sourceIp }
-      );
+      const res = await api.createEteaPayment({
+        applicantId: createForm.applicant_id,
+        applicationId: createForm.application_id,
+        postingId: createForm.posting_id,
+        amount: createForm.amount,
+        dueDate: createForm.due_date,
+        description: createForm.description || undefined,
+        customerName: createForm.customer_name || createForm.applicant_id,
+      });
 
+      const created = res.data as EteaCreatePaymentResponse;
       setCreateResult(created);
       setLookupApplicationId(created.payment.applicationId);
       setLookupResult({
@@ -152,20 +150,22 @@ const ETEAPayments = () => {
         transaction_id: `TXN-${Date.now()}`,
       }));
 
+      await refetchPayments();
       toast.success(`Payment request created (${created.paymentId})`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to create payment request');
     }
   };
 
-  const handleLookup = () => {
+  const handleLookup = async () => {
     if (!lookupApplicationId.trim()) {
       toast.error('application_id is required');
       return;
     }
 
     try {
-      const status = getPaymentStatus(lookupApplicationId.trim(), { apiKey, sourceIp });
+      const res = await api.getEteaPaymentStatus(lookupApplicationId.trim());
+      const status = res.data as EteaPaymentStatusResponse;
       setLookupResult(status);
       if (status.status === 'not_found') {
         toast.error('No payment record found for this application');
@@ -177,7 +177,7 @@ const ETEAPayments = () => {
     }
   };
 
-  const handleProcessCallback = () => {
+  const handleProcessCallback = async () => {
     if (!callbackForm.bill_id.trim()) {
       toast.error('bill_id is required for callback');
       return;
@@ -198,17 +198,22 @@ const ETEAPayments = () => {
       const webhookSignature = generateWebhookSignature(callbackPayload);
       const idempotencyKey = `cb:${callbackPayload.billId}:${callbackPayload.status}:${callbackPayload.transactionId}`;
 
-      const callback = processPaymentCallback(
-        callbackPayload,
-        { apiKey, sourceIp, webhookSignature, idempotencyKey }
-      );
+      const res = await api.processEteaPaymentCallback({
+        ...callbackPayload,
+        webhookSignature,
+        idempotencyKey,
+      });
 
+      const callback = res.data as EteaPaymentCallbackResponse;
       setCallbackResult(callback);
       if (callback.payment) {
-        const refreshed = getPaymentStatus(callback.payment.applicationId, { apiKey, sourceIp });
-        setLookupResult(refreshed);
+        const lookupRes = await api.getEteaPaymentStatus(callback.payment.applicationId);
+        setLookupResult(lookupRes.data as EteaPaymentStatusResponse);
         setLookupApplicationId(callback.payment.applicationId);
       }
+
+      await refetchPayments();
+      await refetchNotifications();
 
       if (!callback.acknowledged) {
         toast.error(callback.message);
@@ -220,13 +225,19 @@ const ETEAPayments = () => {
     }
   };
 
-  const handleHealthCheck = () => {
-    const healthResponse = healthCheck();
-    setHealth(healthResponse);
-    toast.success('Health check passed');
+  const handleHealthCheck = async () => {
+    try {
+      const res = await api.eteaHealthCheck();
+      const healthResponse = res.data as EteaHealthResponse;
+      setHealth(healthResponse);
+      toast.success('Health check passed');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Health check failed');
+    }
   };
 
-  const paymentRecords = useMemo(() => listPayments(), [paymentVersion]);
+  const { data: paymentsData, loading: loadingPayments, refetch: refetchPayments } = useApiQuery(() => api.listEteaPayments(), [paymentVersion]);
+  const paymentRecords = (paymentsData || []) as EteaPaymentRecord[];
 
   const filteredPayments = useMemo(() => {
     const query = search.toLowerCase();
@@ -237,6 +248,7 @@ const ETEAPayments = () => {
         payment.applicantId.toLowerCase().includes(query) ||
         payment.postingId.toLowerCase().includes(query) ||
         payment.billId.toLowerCase().includes(query) ||
+        (payment.consumerNumber || '').toLowerCase().includes(query) ||
         payment.transactionId?.toLowerCase().includes(query);
       const matchesStatus = statusFilter === 'all' || payment.status === statusFilter;
       return Boolean(matchesSearch && matchesStatus);
@@ -245,7 +257,8 @@ const ETEAPayments = () => {
 
   const paginatedPayments = filteredPayments.slice((page - 1) * pageSize, page * pageSize);
 
-  const notifications = useMemo(() => listPaymentNotifications(), [paymentVersion]);
+  const { data: notificationsData, refetch: refetchNotifications } = useApiQuery(() => api.listEteaPaymentNotifications(), [paymentVersion]);
+  const notifications = (notificationsData || []) as EteaPaymentNotification[];
 
   const oneBillPayload = createResult
     ? {
@@ -256,6 +269,8 @@ const ETEAPayments = () => {
         callback_url: createResult.oneBillRequest.callbackUrl,
       }
     : null;
+
+  if (loadingPayments && paymentRecords.length === 0) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -378,6 +393,25 @@ const ETEAPayments = () => {
                 <p className="text-xs text-muted-foreground">status</p>
                 <div className="mt-1"><StatusBadge status={createResult.status} /></div>
               </div>
+              {createResult.consumerNumber ? (
+                <div className="md:col-span-3 rounded-lg border-2 border-primary/30 bg-primary/5 p-3">
+                  <p className="text-xs font-medium text-primary mb-1">1BILL Consumer Number — give this to the applicant to pay via ATM or mobile banking</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-mono text-lg font-bold tracking-widest">{createResult.consumerNumber}</p>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => {
+                        navigator.clipboard.writeText(createResult.consumerNumber!);
+                        toast.success('Consumer number copied');
+                      }}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
               <div className="md:col-span-3 rounded-lg border bg-card p-3">
                 <p className="text-xs text-muted-foreground mb-2">Generated 1Bill Create-Bill Payload</p>
                 <pre className="text-xs overflow-auto whitespace-pre-wrap">
@@ -502,7 +536,7 @@ const ETEAPayments = () => {
       </Card>
 
       <FilterBar
-        searchPlaceholder="Search payments by payment_id, application_id, applicant_id, posting_id, bill_id, or transaction_id..."
+        searchPlaceholder="Search payments by payment_id, application_id, applicant_id, posting_id, consumer #, bill_id, or transaction_id..."
         onSearch={(value) => {
           setSearch(value);
           setPage(1);
@@ -533,6 +567,7 @@ const ETEAPayments = () => {
               <TableHead>application_id</TableHead>
               <TableHead>applicant_id</TableHead>
               <TableHead>posting_id</TableHead>
+              <TableHead>consumer #</TableHead>
               <TableHead>bill_id</TableHead>
               <TableHead>amount</TableHead>
               <TableHead>status</TableHead>
@@ -544,7 +579,7 @@ const ETEAPayments = () => {
           <TableBody>
             {paginatedPayments.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center text-sm text-muted-foreground py-6">
+                <TableCell colSpan={11} className="text-center text-sm text-muted-foreground py-6">
                   No payment records match your filters.
                 </TableCell>
               </TableRow>
@@ -555,6 +590,19 @@ const ETEAPayments = () => {
                   <TableCell className="font-mono text-xs">{payment.applicationId}</TableCell>
                   <TableCell className="font-mono text-xs">{payment.applicantId}</TableCell>
                   <TableCell className="font-mono text-xs">{payment.postingId}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {payment.consumerNumber ? (
+                      <div className="flex items-center gap-1">
+                        <span className="tracking-wider">{payment.consumerNumber}</span>
+                        <button
+                          className="text-muted-foreground hover:text-foreground"
+                          onClick={() => { navigator.clipboard.writeText(payment.consumerNumber!); toast.success('Copied'); }}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </TableCell>
                   <TableCell className="font-mono text-xs break-all">{payment.billId}</TableCell>
                   <TableCell className="font-mono text-sm">{formatPKR(payment.amount)}</TableCell>
                   <TableCell><StatusBadge status={payment.status} /></TableCell>

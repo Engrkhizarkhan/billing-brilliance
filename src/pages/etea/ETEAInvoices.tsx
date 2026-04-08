@@ -5,7 +5,10 @@ import { TablePagination } from '@/components/TablePagination';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatPKR } from '@/lib/formatters';
 import { usePaymentStore } from '@/store/paymentStore';
-import { listPayments } from '@/services/eteaPaymentController';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import { EteaPaymentRecord } from '@/types';
+import { Loader2 } from 'lucide-react';
 
 const mapPaymentToInvoiceStatus = (status: 'pending' | 'paid' | 'failed' | 'expired'): 'paid' | 'pending' | 'overdue' => {
   if (status === 'paid') return 'paid';
@@ -20,8 +23,11 @@ const ETEAInvoices = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
+  const { data: paymentsData, loading } = useApiQuery(() => api.listEteaPayments(), [paymentVersion]);
+  const rawPayments = (paymentsData || []) as EteaPaymentRecord[];
+
   const invoiceRows = useMemo(
-    () => listPayments().map((payment) => ({
+    () => rawPayments.map((payment) => ({
       id: payment.id,
       invoiceNumber: payment.billId,
       applicationId: payment.applicationId,
@@ -31,7 +37,7 @@ const ETEAInvoices = () => {
       status: mapPaymentToInvoiceStatus(payment.status),
       dueDate: payment.dueDate,
     })),
-    [paymentVersion]
+    [rawPayments]
   );
 
   const filteredRows = invoiceRows.filter((row) => {
@@ -46,6 +52,8 @@ const ETEAInvoices = () => {
   });
 
   const paginatedRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
+
+  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
   return (
     <div className="space-y-6 animate-fade-in">

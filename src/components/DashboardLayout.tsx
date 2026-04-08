@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Users, CreditCard, BarChart3, Building2,
   GraduationCap, BookOpen, Award, Receipt, Wallet, Briefcase, UserPlus,
   LogOut, Menu, X, DollarSign, ChevronRight, Settings, Sun, Moon,
-  AlertTriangle, FileText, Shield, ClipboardList, Megaphone, Activity
+  AlertTriangle, FileText, Shield, ClipboardList, Megaphone, Activity, Wifi
 } from 'lucide-react';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -26,17 +26,18 @@ interface NavItem {
 const navItems: Record<UserRole, NavItem[]> = {
   admin: [
     { label: 'Dashboard', path: '/admin', icon: LayoutDashboard, group: 'Overview' },
-    { label: 'Schools', path: '/admin/billers', icon: Building2, badge: '5', group: 'Management' },
+    { label: 'Billers', path: '/admin/billers', icon: Building2, group: 'Management' },
     { label: 'Users', path: '/admin/users', icon: Users, group: 'Management' },
-    { label: 'Transactions', path: '/admin/transactions', icon: CreditCard, badge: '20', group: 'Finance' },
+    { label: 'Transactions', path: '/admin/transactions', icon: CreditCard, group: 'Finance' },
     { label: 'Cash Flow', path: '/admin/cashflow', icon: DollarSign, group: 'Finance' },
     { label: 'Reports', path: '/admin/reports', icon: BarChart3, group: 'Analytics' },
     { label: 'Audit Trail', path: '/admin/audit', icon: ClipboardList, group: 'Analytics' },
     { label: 'API Health', path: '/admin/api-health', icon: Shield, group: 'System' },
+    { label: '1LINK Sandbox', path: '/admin/onelink-sandbox', icon: Wifi, group: 'System' },
   ],
   school: [
     { label: 'Dashboard', path: '/school', icon: LayoutDashboard, group: 'Overview' },
-    { label: 'Students', path: '/school/students', icon: GraduationCap, badge: '50', group: 'Students' },
+    { label: 'Students', path: '/school/students', icon: GraduationCap, group: 'Students' },
     { label: 'Fee Structure', path: '/school/fee-plans', icon: BookOpen, group: 'Finance' },
     { label: 'Fee Ledger', path: '/school/fee-ledger', icon: FileText, group: 'Finance' },
     { label: 'Billing', path: '/school/billing', icon: Receipt, group: 'Finance' },
@@ -52,7 +53,7 @@ const navItems: Record<UserRole, NavItem[]> = {
   etea: [
     { label: 'Dashboard', path: '/etea', icon: LayoutDashboard, group: 'Overview' },
     { label: 'Postings', path: '/etea/postings', icon: Megaphone, group: 'Management' },
-    { label: 'Application References', path: '/etea/applicants', icon: UserPlus, badge: '15', group: 'Management' },
+    { label: 'Application References', path: '/etea/applicants', icon: UserPlus, group: 'Management' },
     { label: 'Payments', path: '/etea/payments', icon: Wallet, group: 'Finance' },
     { label: 'Real-Time Payments', path: '/etea/realtime-payments', icon: Activity, group: 'Finance' },
     { label: 'Reports', path: '/etea/reports', icon: BarChart3, group: 'Analytics' },

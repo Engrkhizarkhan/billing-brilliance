@@ -1,6 +1,7 @@
-import { Fragment, useMemo, useState } from 'react';
-import { scholarships as initialScholarships, studentScholarshipAssignments as initialAssignments, students as studentDirectory } from '@/data/mockData';
-import { Scholarship, StudentScholarshipAssignment } from '@/types';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import { Scholarship, Student, StudentScholarshipAssignment } from '@/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -10,11 +11,16 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { ChevronDown, ChevronRight, Plus, Power, UserPlus, X, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Power, UserPlus, X, Search, Loader2 } from 'lucide-react';
 
 const Scholarships = () => {
-  const [list, setList] = useState<Scholarship[]>(initialScholarships);
-  const [assignments, setAssignments] = useState<StudentScholarshipAssignment[]>(initialAssignments);
+  const { data: scholarshipsData, loading: scholarshipsLoading, refetch: refetchScholarships } = useApiQuery(() => api.fetchScholarships({}), []);
+  const { data: assignmentsData, refetch: refetchAssignments } = useApiQuery(() => api.fetchAllScholarshipAssignments(), []);
+  const { data: studentsData, loading: studentsLoading } = useApiQuery(() => api.fetchStudents({ pageSize: 9999 }), []);
+  const studentDirectory = (studentsData || []) as Student[];
+
+  const [list, setList] = useState<Scholarship[]>([]);
+  const [assignments, setAssignments] = useState<StudentScholarshipAssignment[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [studentLookup, setStudentLookup] = useState('');
@@ -31,20 +37,18 @@ const Scholarships = () => {
     effectiveFrom: new Date().toISOString().split('T')[0],
   });
 
-  const syncScholarships = (next: Scholarship[]) => {
-    setList(next);
-    initialScholarships.splice(0, initialScholarships.length, ...next);
-  };
+  useEffect(() => {
+    if (scholarshipsData) setList(scholarshipsData as Scholarship[]);
+  }, [scholarshipsData]);
 
-  const syncAssignments = (next: StudentScholarshipAssignment[]) => {
-    setAssignments(next);
-    initialAssignments.splice(0, initialAssignments.length, ...next);
-  };
+  useEffect(() => {
+    if (assignmentsData) setAssignments(assignmentsData as StudentScholarshipAssignment[]);
+  }, [assignmentsData]);
 
   const classOptions = useMemo(() => {
     return Array.from(new Set(studentDirectory.map((student) => student.class)))
       .sort((a, b) => Number(a.replace(/\D/g, '')) - Number(b.replace(/\D/g, '')));
-  }, []);
+  }, [studentDirectory]);
 
   const sectionOptions = useMemo(() => {
     return Array.from(
@@ -54,7 +58,7 @@ const Scholarships = () => {
           .map((student) => student.section)
       )
     ).sort((a, b) => a.localeCompare(b));
-  }, [assignmentForm.className]);
+  }, [assignmentForm.className, studentDirectory]);
 
   const activeAssignments = useMemo(
     () => assignments.filter((assignment) => assignment.status === 'active'),
@@ -117,7 +121,7 @@ const Scholarships = () => {
       student.class === assignmentForm.className &&
       (assignmentForm.section === 'all' || student.section === assignmentForm.section)
     ).length;
-  }, [assignmentForm]);
+  }, [assignmentForm, studentDirectory]);
 
   const filteredStudentDirectory = useMemo(() => {
     const query = studentLookup.trim().toLowerCase();
@@ -131,44 +135,43 @@ const Scholarships = () => {
         );
 
     return source.slice(0, 120);
-  }, [studentLookup]);
+  }, [studentLookup, studentDirectory]);
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!form.name || !form.value || !form.startDate || (!form.isLifetime && !form.endDate)) {
       toast.error('Please complete all required scholarship fields');
       return;
     }
 
-    const s: Scholarship = {
-      id: `sch${list.length + 1}`,
-      name: form.name,
-      type: form.type,
-      value: Number(form.value),
-      startDate: form.startDate,
-      endDate: form.isLifetime ? null : form.endDate,
-      isLifetime: form.isLifetime,
-      status: 'active',
-    };
-    syncScholarships([...list, s]);
-    setDialogOpen(false);
-    setForm({ name: '', type: 'percentage', value: '', startDate: '', endDate: '', isLifetime: false });
-    toast.success(`Scholarship "${form.name}" created. Discount will be applied to invoices.`);
+    try {
+      await api.createScholarship({
+        name: form.name,
+        type: form.type,
+        value: Number(form.value),
+        startDate: form.startDate,
+        endDate: form.isLifetime ? null : form.endDate,
+        isLifetime: form.isLifetime,
+      });
+      refetchScholarships();
+      setDialogOpen(false);
+      setForm({ name: '', type: 'percentage', value: '', startDate: '', endDate: '', isLifetime: false });
+      toast.success(`Scholarship "${form.name}" created. Discount will be applied to invoices.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to create scholarship');
+    }
   };
 
-  const deactivateScholarship = (id: string) => {
-    const next = list.map((s) => {
-      if (s.id !== id) return s;
-      return {
-        ...s,
-        status: 'inactive',
-        endDate: s.isLifetime ? null : (s.endDate || new Date().toISOString().split('T')[0]),
-      };
-    });
-    syncScholarships(next);
-    toast.success('Scholarship deactivated');
+  const deactivateScholarship = async (id: string) => {
+    try {
+      await api.updateScholarshipStatus(id, 'inactive');
+      refetchScholarships();
+      toast.success('Scholarship deactivated');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to deactivate scholarship');
+    }
   };
 
-  const assignScholarship = () => {
+  const assignScholarship = async () => {
     if (!assignmentForm.scholarshipId) {
       toast.error('Please select a scholarship to assign');
       return;
@@ -194,41 +197,46 @@ const Scholarships = () => {
     }
 
     const toCreate = targetStudentIds
-      .filter((studentId) => !activeAssignmentKeySet.has(`${studentId}::${assignmentForm.scholarshipId}`))
-      .map((studentId, index) => ({
-        id: `ssa-${Date.now()}-${index}`,
-        studentId,
-        scholarshipId: assignmentForm.scholarshipId,
-        effectiveFrom: assignmentForm.effectiveFrom,
-        assignedAt: new Date().toISOString().split('T')[0],
-        status: 'active' as const,
-      }));
+      .filter((studentId) => !activeAssignmentKeySet.has(`${studentId}::${assignmentForm.scholarshipId}`));
 
     if (toCreate.length === 0) {
       toast.info('Selected students are already assigned to this scholarship');
       return;
     }
 
-    syncAssignments([...assignments, ...toCreate]);
-    setAssignDialogOpen(false);
-    setStudentLookup('');
-    setAssignmentForm({
-      scholarshipId: '',
-      scope: 'student',
-      studentId: '',
-      className: 'Class 1',
-      section: 'all',
-      effectiveFrom: new Date().toISOString().split('T')[0],
-    });
-    toast.success(`${toCreate.length} student(s) assigned to scholarship`);
+    try {
+      for (const studentId of toCreate) {
+        await api.createScholarshipAssignment({
+          studentId,
+          scholarshipId: assignmentForm.scholarshipId,
+          effectiveFrom: assignmentForm.effectiveFrom,
+        });
+      }
+      refetchAssignments();
+      setAssignDialogOpen(false);
+      setStudentLookup('');
+      setAssignmentForm({
+        scholarshipId: '',
+        scope: 'student',
+        studentId: '',
+        className: 'Class 1',
+        section: 'all',
+        effectiveFrom: new Date().toISOString().split('T')[0],
+      });
+      toast.success(`${toCreate.length} student(s) assigned to scholarship`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to assign scholarship');
+    }
   };
 
-  const unassignScholarship = (assignmentId: string) => {
-    const next = assignments.map((assignment) =>
-      assignment.id === assignmentId ? { ...assignment, status: 'inactive' } : assignment
-    );
-    syncAssignments(next);
-    toast.success('Scholarship assignment removed');
+  const unassignScholarship = async (assignmentId: string) => {
+    try {
+      await api.updateScholarshipAssignment(assignmentId, 'inactive');
+      refetchAssignments();
+      toast.success('Scholarship assignment removed');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to remove assignment');
+    }
   };
 
   const toggleScholarshipAssignments = (scholarshipId: string) => {
@@ -249,7 +257,6 @@ const Scholarships = () => {
         !query ||
         row.student.name.toLowerCase().includes(query) ||
         row.student.rollNumber.toLowerCase().includes(query) ||
-        row.student.cnic.includes(assignmentSearchTerm) ||
         row.student.consumerNumber.includes(assignmentSearchTerm);
 
       const matchesClass = assignmentClassFilter === 'all' || row.student.class === assignmentClassFilter;
@@ -257,6 +264,10 @@ const Scholarships = () => {
       return matchesSearch && matchesClass;
     });
   };
+
+  if (scholarshipsLoading || studentsLoading) {
+    return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -546,6 +557,9 @@ const Scholarships = () => {
                                 )}
                               </TableBody>
                             </Table>
+                            {studentDirectory.length > 10 && (
+                              <p className="text-[11px] text-muted-foreground px-1">Showing 10 of {studentDirectory.length} students. Use the search to find more.</p>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>

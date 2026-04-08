@@ -1,36 +1,72 @@
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { Bell, Check, CreditCard, UserPlus, AlertTriangle, X } from 'lucide-react';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Bell, Check, CreditCard, UserPlus, AlertTriangle, X, Shield, Loader2 } from 'lucide-react';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import { AppNotification } from '@/types';
 
-interface Notification {
-  id: string;
-  title: string;
-  body: string;
-  type: 'payment' | 'applicant' | 'alert';
-  time: string;
-  read: boolean;
-}
+const iconMap = {
+  payment: CreditCard,
+  applicant: UserPlus,
+  alert: AlertTriangle,
+  system: Shield,
+};
+const colorMap = {
+  payment: 'text-success',
+  applicant: 'text-primary',
+  alert: 'text-warning',
+  system: 'text-muted-foreground',
+};
 
-const initialNotifications: Notification[] = [
-  { id: '1', title: 'Payment Received', body: 'Ali Raza paid ₨ 5,000 — Tuition Fee', type: 'payment', time: '2 min ago', read: false },
-  { id: '2', title: 'New Applicant', body: 'Tariq Mehmood submitted application for MDCAT 2025', type: 'applicant', time: '15 min ago', read: false },
-  { id: '3', title: 'Bill Overdue', body: '3 students have dues older than 30 days', type: 'alert', time: '1 hour ago', read: false },
-  { id: '4', title: 'Payment Received', body: 'Sara Ali paid ₨ 15,000 — Monthly Fee', type: 'payment', time: '2 hours ago', read: true },
-  { id: '5', title: 'Bulk Import Complete', body: '25 students imported successfully', type: 'applicant', time: '3 hours ago', read: true },
-];
+const formatRelativeTime = (value: string) => {
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return value;
 
-const iconMap = { payment: CreditCard, applicant: UserPlus, alert: AlertTriangle };
-const colorMap = { payment: 'text-success', applicant: 'text-primary', alert: 'text-warning' };
+  const diffMs = Date.now() - timestamp;
+  const diffMinutes = Math.max(1, Math.floor(diffMs / 60000));
+  if (diffMinutes < 60) return `${diffMinutes} min ago`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+
+  return new Date(value).toLocaleDateString('en-PK', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+};
 
 export const NotificationCenter = () => {
-  const [notifications, setNotifications] = useState(initialNotifications);
-  const unread = notifications.filter(n => !n.read).length;
+  const { data, loading, refetch } = useApiQuery(() => api.fetchNotifications(), []);
+  const notifications = (data || []) as AppNotification[];
+  const unread = notifications.filter((notification) => !notification.isRead).length;
 
-  const markRead = (id: string) => setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-  const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-  const clearAll = () => setNotifications([]);
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      void refetch();
+    }, 60000);
+
+    return () => window.clearInterval(intervalId);
+  }, [refetch]);
+
+  const markRead = async (id: string) => {
+    await api.markNotificationRead(id);
+    await refetch();
+  };
+
+  const markAllRead = async () => {
+    await api.markAllNotificationsRead();
+    await refetch();
+  };
+
+  const clearAll = async () => {
+    await api.clearNotifications();
+    await refetch();
+  };
 
   return (
     <Popover>
@@ -60,26 +96,30 @@ export const NotificationCenter = () => {
             )}
           </div>
         </div>
-        <ScrollArea className="max-h-80">
-          {notifications.length === 0 ? (
+        <div className="max-h-80 overflow-y-auto">
+          {loading ? (
+            <div className="py-8 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading notifications...
+            </div>
+          ) : notifications.length === 0 ? (
             <div className="py-8 text-center text-sm text-muted-foreground">No notifications</div>
           ) : (
-            notifications.map(n => {
+            notifications.map((n) => {
               const Icon = iconMap[n.type];
               return (
-                <button key={n.id} onClick={() => markRead(n.id)} className={`w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-muted/50 transition-colors border-b border-border/50 ${!n.read ? 'bg-primary/[0.02]' : ''}`}>
+                <button key={n.id} onClick={() => void markRead(n.id)} className={`w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-muted/50 transition-colors border-b border-border/50 ${!n.isRead ? 'bg-primary/[0.02]' : ''}`}>
                   <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${colorMap[n.type]}`} />
                   <div className="flex-1 min-w-0">
-                    <p className={`text-xs font-medium ${!n.read ? 'text-foreground' : 'text-muted-foreground'}`}>{n.title}</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{n.body}</p>
-                    <p className="text-[10px] text-muted-foreground/60 mt-1">{n.time}</p>
+                    <p className={`text-xs font-medium ${!n.isRead ? 'text-foreground' : 'text-muted-foreground'}`}>{n.title}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{n.message}</p>
+                    <p className="text-[10px] text-muted-foreground/60 mt-1">{formatRelativeTime(n.createdAt)}</p>
                   </div>
-                  {!n.read && <span className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />}
+                  {!n.isRead && <span className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />}
                 </button>
               );
             })
           )}
-        </ScrollArea>
+        </div>
       </PopoverContent>
     </Popover>
   );

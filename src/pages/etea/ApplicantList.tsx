@@ -1,5 +1,4 @@
-import { useMemo, useState } from 'react';
-import { applicants, eteaPostings } from '@/data/mockData';
+import { useEffect, useMemo, useState } from 'react';
 import { StatusBadge } from '@/components/StatusBadge';
 import { FilterBar } from '@/components/FilterBar';
 import { ExportButton } from '@/components/ExportButton';
@@ -7,11 +6,14 @@ import { TablePagination } from '@/components/TablePagination';
 import { EmptyState } from '@/components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Eye, MoreHorizontal, UserPlus, Wallet } from 'lucide-react';
+import { Eye, Loader2, MoreHorizontal, UserPlus, Wallet } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { resolvePostingById } from '@/lib/eteaFinance';
+import { resolvePostingById, setEteaFinanceCache } from '@/lib/eteaFinance';
 import { useNavigate } from 'react-router-dom';
 import { usePaymentStore } from '@/store/paymentStore';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import { Applicant, EteaPosting } from '@/types';
 
 type ReferenceStatus = 'submitted' | 'fee_pending' | 'fee_paid' | 'external';
 type ReferenceStatusFilter = 'all' | ReferenceStatus;
@@ -39,8 +41,15 @@ const normalizeReferenceStatus = (status: string): ReferenceStatus => {
 
 const ApplicantList = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
-  const applicantList = useMemo(() => [...applicants], [paymentVersion]);
+  const { data: applicantsData, loading: loadingApplicants } = useApiQuery(() => api.fetchApplicants({}), [paymentVersion]);
+  const { data: postingsData, loading: loadingPostings } = useApiQuery(() => api.fetchPostings(), []);
+  const applicantList = (applicantsData || []) as Applicant[];
+  const postingsList = (postingsData || []) as EteaPosting[];
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (postingsData) setEteaFinanceCache(postingsData as EteaPosting[], []);
+  }, [postingsData]);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ReferenceStatusFilter>('all');
@@ -53,13 +62,13 @@ const ApplicantList = () => {
     applicantList.forEach((applicant) => {
       optionMap.set(applicant.serviceId, resolvePostingById(applicant.serviceId).title);
     });
-    eteaPostings.forEach((posting) => {
+    postingsList.forEach((posting) => {
       if (posting.status !== 'closed') {
         optionMap.set(posting.id, posting.title);
       }
     });
     return Array.from(optionMap.entries()).map(([value, label]) => ({ value, label }));
-  }, [applicantList]);
+  }, [applicantList, postingsList]);
 
   const statusFilterOptions = useMemo(() => {
     const counts: Record<ReferenceStatus, number> = {
@@ -93,6 +102,8 @@ const ApplicantList = () => {
   });
 
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  if (loadingApplicants || loadingPostings) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
   return (
     <div className="space-y-6 animate-fade-in">

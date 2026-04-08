@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { students, applicants, transactions, eteaPostings } from '@/data/mockData';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import { Student, Applicant, Transaction, ETEAPosting } from '@/types';
 import { GraduationCap, UserPlus, CreditCard, Search, Megaphone } from 'lucide-react';
 
 export const GlobalSearch = () => {
@@ -18,10 +20,21 @@ export const GlobalSearch = () => {
 
   const [query, setQuery] = useState('');
 
-  const filteredStudents = query.length > 1 ? students.filter(s => s.name.toLowerCase().includes(query.toLowerCase()) || s.consumerNumber.includes(query)).slice(0, 5) : [];
-  const filteredApplicants = query.length > 1 ? applicants.filter(a => a.name.toLowerCase().includes(query.toLowerCase()) || a.cnic.includes(query)).slice(0, 5) : [];
-  const filteredPostings = query.length > 1 ? eteaPostings.filter(p => p.title.toLowerCase().includes(query.toLowerCase()) || p.department.toLowerCase().includes(query.toLowerCase())).slice(0, 5) : [];
-  const filteredTxns = query.length > 1 ? transactions.filter(t => t.transactionId.toLowerCase().includes(query.toLowerCase()) || t.consumerNumber.includes(query)).slice(0, 5) : [];
+  // Fetch data only when dialog is open
+  const { data: studentsData } = useApiQuery(() => open ? api.fetchStudents({ pageSize: 500 }) : Promise.resolve({ data: [] }), [open]);
+  const { data: applicantsData } = useApiQuery(() => open ? api.fetchApplicants({ pageSize: 500 }) : Promise.resolve({ data: [] }), [open]);
+  const { data: postingsData } = useApiQuery(() => open ? api.fetchPostings({}) : Promise.resolve({ data: [] }), [open]);
+  const { data: txnData } = useApiQuery(() => open ? api.fetchTransactions({ pageSize: 500 }) : Promise.resolve({ data: [] }), [open]);
+
+  const studentsList = (studentsData || []) as Student[];
+  const applicantsList = (applicantsData || []) as Applicant[];
+  const postingsList = (postingsData || []) as ETEAPosting[];
+  const transactionsList = (txnData || []) as Transaction[];
+
+  const filteredStudents = useMemo(() => query.length > 1 ? studentsList.filter(s => s.name.toLowerCase().includes(query.toLowerCase()) || s.consumerNumber.includes(query)).slice(0, 5) : [], [query, studentsList]);
+  const filteredApplicants = useMemo(() => query.length > 1 ? applicantsList.filter(a => a.name.toLowerCase().includes(query.toLowerCase()) || a.cnic.includes(query)).slice(0, 5) : [], [query, applicantsList]);
+  const filteredPostings = useMemo(() => query.length > 1 ? postingsList.filter(p => p.title.toLowerCase().includes(query.toLowerCase()) || p.department.toLowerCase().includes(query.toLowerCase())).slice(0, 5) : [], [query, postingsList]);
+  const filteredTxns = useMemo(() => query.length > 1 ? transactionsList.filter(t => t.transactionId.toLowerCase().includes(query.toLowerCase()) || t.consumerNumber.includes(query)).slice(0, 5) : [], [query, transactionsList]);
 
   return (
     <>

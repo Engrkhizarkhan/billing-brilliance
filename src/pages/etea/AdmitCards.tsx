@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { applicants as initialApplicants, eteaPostings } from '@/data/mockData';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -7,18 +6,27 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Printer, Share2, ShieldCheck } from 'lucide-react';
+import { Loader2, Printer, Share2, ShieldCheck } from 'lucide-react';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import { Applicant, EteaPosting } from '@/types';
 
 const AdmitCards = () => {
   const [search, setSearch] = useState('');
   const [deliveryChannel, setDeliveryChannel] = useState<'email' | 'sms' | 'portal'>('portal');
-  const admitted = useMemo(() => initialApplicants.filter((a) => a.rollNumber), []);
+  const { data: applicantsData, loading: loadingApplicants } = useApiQuery(() => api.fetchApplicants({}), []);
+  const { data: postingsData, loading: loadingPostings } = useApiQuery(() => api.fetchPostings(), []);
+  const allApplicants = (applicantsData || []) as Applicant[];
+  const postingsList = (postingsData || []) as EteaPosting[];
+  const admitted = useMemo(() => allApplicants.filter((a) => a.rollNumber), [allApplicants]);
 
   const filtered = admitted.filter((a) => a.name.toLowerCase().includes(search.toLowerCase()) || (a.rollNumber || '').includes(search));
 
   const handleSend = (name: string) => {
     toast.success(`${name} — admit card sent via ${deliveryChannel}`);
   };
+
+  if (loadingApplicants || loadingPostings) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -61,7 +69,7 @@ const AdmitCards = () => {
                         <div className="text-xs text-muted-foreground">{row.cnic}</div>
                       </TableCell>
                       <TableCell className="space-y-1">
-                        <p className="text-sm font-medium">{eteaPostings.find((p) => p.id === row.serviceId)?.title}</p>
+                        <p className="text-sm font-medium">{postingsList.find((p) => p.id === row.serviceId)?.title}</p>
                         <p className="text-xs text-muted-foreground">Bill #{row.billId}</p>
                       </TableCell>
                       <TableCell>

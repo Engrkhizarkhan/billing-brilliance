@@ -1,5 +1,12 @@
-import { applicants, eteaPostings, services } from '@/data/mockData';
-import { Applicant } from '@/types';
+import { Applicant, ETEAPosting, Service } from '@/types';
+
+let _postingsCache: ETEAPosting[] = [];
+let _servicesCache: Service[] = [];
+
+export const setEteaFinanceCache = (postings: ETEAPosting[], services: Service[]) => {
+  _postingsCache = postings;
+  _servicesCache = services;
+};
 
 export const ETEA_CONSUMER_PREFIX = '1234562001';
 
@@ -16,7 +23,7 @@ export const isEteaConsumerNumber = (consumerNumber: string) =>
   consumerNumber.startsWith(ETEA_CONSUMER_PREFIX);
 
 export const resolveApplicantPosting = (applicant: Applicant): ResolvedEteaPosting => {
-  const posting = eteaPostings.find((item) => item.id === applicant.serviceId);
+  const posting = _postingsCache.find((item) => item.id === applicant.serviceId);
   if (posting) {
     return {
       id: posting.id,
@@ -26,7 +33,7 @@ export const resolveApplicantPosting = (applicant: Applicant): ResolvedEteaPosti
     };
   }
 
-  const service = services.find((item) => item.id === applicant.serviceId);
+  const service = _servicesCache.find((item) => item.id === applicant.serviceId);
   if (service) {
     return {
       id: service.id,
@@ -45,7 +52,7 @@ export const resolveApplicantPosting = (applicant: Applicant): ResolvedEteaPosti
 };
 
 export const resolvePostingById = (id: string) => {
-  const posting = eteaPostings.find((item) => item.id === id);
+  const posting = _postingsCache.find((item) => item.id === id);
   if (posting) {
     return {
       id: posting.id,
@@ -55,7 +62,7 @@ export const resolvePostingById = (id: string) => {
     };
   }
 
-  const service = services.find((item) => item.id === id);
+  const service = _servicesCache.find((item) => item.id === id);
   if (service) {
     return {
       id: service.id,
@@ -91,5 +98,5 @@ export const estimateDueDateFromAppliedDate = (appliedDate: string, days = 10) =
   return parsed.toISOString().slice(0, 10);
 };
 
-export const getEteaApplicants = () =>
-  applicants.filter((applicant) => isEteaConsumerNumber(applicant.consumerNumber));
+export const getEteaApplicants = (allApplicants: Applicant[]) =>
+  allApplicants.filter((applicant) => isEteaConsumerNumber(applicant.consumerNumber));

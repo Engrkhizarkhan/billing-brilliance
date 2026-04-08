@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
-import { students } from '@/data/mockData';
-import { feePlans } from '@/data/mockData';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import type { Student, FeePlan, PaymentPlanAssignment } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -11,40 +12,24 @@ import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/StatusBadge';
 import { FilterBar } from '@/components/FilterBar';
 import { toast } from 'sonner';
-import { Plus, GraduationCap, CheckCircle2, Search, Pencil, Trash2 } from 'lucide-react';
+import { Plus, GraduationCap, CheckCircle2, Search, Pencil, Trash2, Loader2 } from 'lucide-react';
 
 const allClasses = ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
 
-interface PaymentAssignment {
-  id: string;
-  studentName: string;
-  consumerNumber: string;
-  className: string;
-  sectionName: string;
-  planName: string;
-  amount: number;
-  frequency: string;
-  status: 'active' | 'pending' | 'completed';
-  assignedVia: 'class' | 'individual';
-  assignedDate: string;
-  nextDue: string;
-}
-
-const initialAssignments: PaymentAssignment[] = [
-  { id: 'pa1', studentName: 'Ahmed Khan', consumerNumber: students[0].consumerNumber, className: students[0].class, sectionName: students[0].section, planName: 'Standard Monthly', amount: 15000, frequency: 'monthly', status: 'active', assignedVia: 'class', assignedDate: '2025-01-15', nextDue: '2025-04-10' },
-  { id: 'pa2', studentName: 'Sara Ali', consumerNumber: students[1].consumerNumber, className: students[1].class, sectionName: students[1].section, planName: 'Premium Monthly', amount: 25000, frequency: 'monthly', status: 'active', assignedVia: 'class', assignedDate: '2025-01-15', nextDue: '2025-04-05' },
-  { id: 'pa3', studentName: 'Hassan Raza', consumerNumber: students[2].consumerNumber, className: students[2].class, sectionName: students[2].section, planName: 'Quarterly Plan', amount: 42000, frequency: 'quarterly', status: 'pending', assignedVia: 'individual', assignedDate: '2025-02-01', nextDue: '2025-04-01' },
-  { id: 'pa4', studentName: 'Fatima Noor', consumerNumber: students[3].consumerNumber, className: students[3].class, sectionName: students[3].section, planName: 'Standard Monthly', amount: 15000, frequency: 'monthly', status: 'active', assignedVia: 'class', assignedDate: '2025-01-15', nextDue: '2025-04-10' },
-  { id: 'pa5', studentName: 'Bilal Ahmed', consumerNumber: students[4].consumerNumber, className: students[4].class, sectionName: students[4].section, planName: 'Annual Plan', amount: 150000, frequency: 'yearly', status: 'completed', assignedVia: 'individual', assignedDate: '2025-01-01', nextDue: '2026-01-15' },
-];
-
 const PaymentPrograms = () => {
-  const [assignments, setAssignments] = useState<PaymentAssignment[]>(initialAssignments);
+  const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({}), []);
+  const { data: feePlansData, loading: lf } = useApiQuery(() => api.fetchFeePlans(), []);
+  const { data: assignmentsData, loading: la, refetch: refetchAssignments } = useApiQuery(() => api.fetchPaymentPlanAssignments(), []);
+  const students = (studentsData || []) as Student[];
+  const feePlans = (feePlansData || []) as FeePlan[];
+  const assignments = (assignmentsData || []) as PaymentPlanAssignment[];
+  const pageLoading = ls || lf || la;
+  const [assigning, setAssigning] = useState(false);
   const [search, setSearch] = useState('');
   const [classAssignOpen, setClassAssignOpen] = useState(false);
   const [singleAssignOpen, setSingleAssignOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [editAssignment, setEditAssignment] = useState<PaymentAssignment | null>(null);
+  const [editAssignment, setEditAssignment] = useState<PaymentPlanAssignment | null>(null);
   const [editForm, setEditForm] = useState({ planId: '' });
   const [selectedClassPlan, setSelectedClassPlan] = useState('');
   const [selectedIndividualPlan, setSelectedIndividualPlan] = useState('');
@@ -60,10 +45,10 @@ const PaymentPrograms = () => {
   const filtered = assignments.filter((a) => {
     const query = search.toLowerCase();
     const matchSearch =
-      a.studentName.toLowerCase().includes(query) ||
-      a.planName.toLowerCase().includes(query) ||
-      a.className.toLowerCase().includes(query) ||
-      a.consumerNumber.includes(search);
+      (a.studentName || '').toLowerCase().includes(query) ||
+      (a.planName || '').toLowerCase().includes(query) ||
+      (a.className || '').toLowerCase().includes(query) ||
+      (a.consumerNumber || '').includes(search);
     const matchClass = assignmentClassFilter === 'all' || a.className === assignmentClassFilter;
     const matchStatus = assignmentStatusFilter === 'all' || a.status === assignmentStatusFilter;
     const matchFrequency = assignmentFrequencyFilter === 'all' || a.frequency === assignmentFrequencyFilter;
@@ -75,7 +60,7 @@ const PaymentPrograms = () => {
     const map: Record<string, number> = {};
     students.forEach((s) => { map[s.class] = (map[s.class] || 0) + 1; });
     return map;
-  }, []);
+  }, [students]);
 
   const individualSections = useMemo(() => {
     const pool = studentClassFilter === 'all' ? students : students.filter((student) => student.class === studentClassFilter);
@@ -98,11 +83,11 @@ const PaymentPrograms = () => {
   }, [studentSearch, studentClassFilter, studentSectionFilter]);
 
   const existingAssignmentKeys = useMemo(
-    () => new Set(assignments.map((assignment) => `${assignment.consumerNumber}::${assignment.planName}`)),
+    () => new Set(assignments.map((a) => `${a.studentId}::${a.feePlanId}`)),
     [assignments]
   );
 
-  const handleClassAssign = () => {
+  const handleClassAssign = async () => {
     if (!selectedClassPlan || selectedClasses.length === 0) {
       toast.error('Select a plan and at least one class');
       return;
@@ -111,36 +96,39 @@ const PaymentPrograms = () => {
     if (!plan) return;
 
     const classStudents = students.filter((s) => selectedClasses.includes(s.class));
-    const eligibleStudents = classStudents.filter((student) => !existingAssignmentKeys.has(`${student.consumerNumber}::${plan.name}`));
+    const eligibleStudents = classStudents.filter((student) => !existingAssignmentKeys.has(`${student.id}::${plan.id}`));
 
     if (eligibleStudents.length === 0) {
       toast.info('Selected classes already have this plan assigned for all students');
       return;
     }
 
-    const newAssignments: PaymentAssignment[] = eligibleStudents.map((student, i) => ({
-      id: `pa-class-${Date.now()}-${i}`,
-      studentName: student.name,
-      consumerNumber: student.consumerNumber,
-      className: student.class,
-      sectionName: student.section,
-      planName: plan.name,
-      amount: plan.amount,
-      frequency: plan.frequency,
-      status: 'active' as const,
-      assignedVia: 'class' as const,
-      assignedDate: new Date().toISOString().split('T')[0],
-      nextDue: `2025-04-${String(plan.dueDay).padStart(2, '0')}`,
-    }));
-
-    setAssignments([...assignments, ...newAssignments]);
-    setClassAssignOpen(false);
-    setSelectedClassPlan('');
-    setSelectedClasses([]);
-    toast.success(`${plan.name} assigned to ${newAssignments.length} students across ${selectedClasses.length} class(es)`);
+    setAssigning(true);
+    try {
+      const results = await Promise.allSettled(
+        eligibleStudents.map((student) =>
+          api.createPaymentPlanAssignment({ studentId: student.id, feePlanId: plan.id, assignedVia: 'class' })
+        )
+      );
+      const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+      const skipped = results.filter((r) => r.status === 'rejected').length;
+      await refetchAssignments();
+      setClassAssignOpen(false);
+      setSelectedClassPlan('');
+      setSelectedClasses([]);
+      if (skipped === 0) {
+        toast.success(`${plan.name} assigned to ${succeeded} students across ${selectedClasses.length} class(es)`);
+      } else {
+        toast.success(`${plan.name} assigned to ${succeeded} student(s). ${skipped} already had this plan.`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to assign plan');
+    } finally {
+      setAssigning(false);
+    }
   };
 
-  const handleSingleAssign = () => {
+  const handleSingleAssign = async () => {
     if (!selectedIndividualPlan || selectedStudents.length === 0) {
       toast.error('Select a plan and at least one student');
       return;
@@ -152,38 +140,36 @@ const PaymentPrograms = () => {
       .map((sid) => students.find((student) => student.id === sid))
       .filter((student): student is (typeof students)[number] => Boolean(student));
 
-    const eligibleStudents = chosenStudents.filter((student) => !existingAssignmentKeys.has(`${student.consumerNumber}::${plan.name}`));
+    const eligibleIds = chosenStudents
+      .filter((student) => !existingAssignmentKeys.has(`${student.id}::${plan.id}`))
+      .map((student) => student.id);
 
-    if (eligibleStudents.length === 0) {
+    if (eligibleIds.length === 0) {
       toast.info('Selected students already have this payment plan');
       return;
     }
 
-    const newAssignments: PaymentAssignment[] = eligibleStudents.map((student, i) => {
-      return {
-        id: `pa-single-${Date.now()}-${i}`,
-        studentName: student.name,
-        consumerNumber: student.consumerNumber,
-        className: student.class,
-        sectionName: student.section,
-        planName: plan.name,
-        amount: plan.amount,
-        frequency: plan.frequency,
-        status: 'active' as const,
-        assignedVia: 'individual' as const,
-        assignedDate: new Date().toISOString().split('T')[0],
-        nextDue: `2025-04-${String(plan.dueDay).padStart(2, '0')}`,
-      };
-    });
-
-    setAssignments([...assignments, ...newAssignments]);
-    setSingleAssignOpen(false);
-    setSelectedIndividualPlan('');
-    setSelectedStudents([]);
-    setStudentSearch('');
-    setStudentClassFilter('all');
-    setStudentSectionFilter('all');
-    toast.success(`Payment plan assigned to ${newAssignments.length} student(s)`);
+    setAssigning(true);
+    try {
+      const results = await Promise.allSettled(
+        eligibleIds.map((studentId) =>
+          api.createPaymentPlanAssignment({ studentId, feePlanId: plan.id, assignedVia: 'individual' })
+        )
+      );
+      const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+      await refetchAssignments();
+      setSingleAssignOpen(false);
+      setSelectedIndividualPlan('');
+      setSelectedStudents([]);
+      setStudentSearch('');
+      setStudentClassFilter('all');
+      setStudentSectionFilter('all');
+      toast.success(`Payment plan assigned to ${succeeded} student(s)`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to assign plan');
+    } finally {
+      setAssigning(false);
+    }
   };
 
   const toggleClass = (cls: string) => {
@@ -201,40 +187,49 @@ const PaymentPrograms = () => {
 
   const totalStudentsSelected = selectedClasses.reduce((acc, cls) => acc + (classCounts[cls] || 0), 0);
 
-  const openEdit = (assignment: PaymentAssignment) => {
+  const openEdit = (assignment: PaymentPlanAssignment) => {
     setEditAssignment(assignment);
-    const planMatch = feePlans.find((p) => p.name === assignment.planName);
-    setEditForm({ planId: planMatch?.id || '' });
+    setEditForm({ planId: assignment.feePlanId });
     setEditOpen(true);
   };
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editAssignment) return;
-    const plan = feePlans.find((p) => p.id === editForm.planId);
-    if (!plan) {
+    if (!editForm.planId) {
       toast.error('Choose a fee plan');
       return;
     }
-    setAssignments((prev) => prev.map((a) => (a.id === editAssignment.id ? {
-      ...a,
-      planName: plan.name,
-      amount: plan.amount,
-      frequency: plan.frequency,
-      status: a.status,
-      nextDue: a.nextDue,
-    } : a)));
-    toast.success('Assignment updated');
-    setEditOpen(false);
-    setEditAssignment(null);
+    setAssigning(true);
+    try {
+      await api.updatePaymentPlanAssignment(editAssignment.id, { feePlanId: editForm.planId });
+      await refetchAssignments();
+      toast.success('Assignment updated');
+      setEditOpen(false);
+      setEditAssignment(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update assignment');
+    } finally {
+      setAssigning(false);
+    }
   };
 
-  const deleteAssignment = (id: string) => {
-    setAssignments((prev) => prev.filter((a) => a.id !== id));
-    toast.success('Assignment removed');
+  const deleteAssignment = async (id: string) => {
+    setAssigning(true);
+    try {
+      await api.deletePaymentPlanAssignment(id);
+      await refetchAssignments();
+      toast.success('Assignment removed');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to remove assignment');
+    } finally {
+      setAssigning(false);
+    }
   };
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {pageLoading && <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin" /></div>}
+      {!pageLoading && <>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-header">Payment Programs</h1>
@@ -477,23 +472,23 @@ const PaymentPrograms = () => {
           <TableBody>
             {filtered.map((a) => (
               <TableRow key={a.id} className="hover:bg-muted/30">
-                <TableCell className="font-medium text-sm">{a.studentName}</TableCell>
+                <TableCell className="font-medium text-sm">{a.studentName || '—'}</TableCell>
                 <TableCell>
                   <span className="text-xs font-medium bg-primary/8 text-primary px-2 py-0.5 rounded-md">{a.className} {a.sectionName}</span>
                 </TableCell>
                 <TableCell><span className="text-xs capitalize bg-muted px-2 py-0.5 rounded-md">{a.assignedVia}</span></TableCell>
-                <TableCell className="font-mono text-[11px] text-muted-foreground">{a.consumerNumber}</TableCell>
-                <TableCell className="text-sm">{a.planName}</TableCell>
-                <TableCell className="text-sm font-mono">₨ {a.amount.toLocaleString()}</TableCell>
-                <TableCell className="text-sm capitalize">{a.frequency}</TableCell>
+                <TableCell className="font-mono text-[11px] text-muted-foreground">{a.consumerNumber || '—'}</TableCell>
+                <TableCell className="text-sm">{a.planName || '—'}</TableCell>
+                <TableCell className="text-sm font-mono">₨ {(a.amount || 0).toLocaleString()}</TableCell>
+                <TableCell className="text-sm capitalize">{a.frequency || '—'}</TableCell>
                 <TableCell><StatusBadge status={a.status} /></TableCell>
-                <TableCell className="text-sm text-muted-foreground">{a.nextDue}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{a.nextDueDate || '—'}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => openEdit(a)}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => openEdit(a)} disabled={assigning}>
                       <Pencil className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-destructive" onClick={() => deleteAssignment(a.id)}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-destructive" onClick={() => deleteAssignment(a.id)} disabled={assigning}>
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -528,6 +523,7 @@ const PaymentPrograms = () => {
           )}
         </DialogContent>
       </Dialog>
+      </>}
     </div>
   );
 };

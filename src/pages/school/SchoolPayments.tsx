@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react';
-import { getSchoolPaymentHistory, students } from '@/data/mockData';
+import { useMemo, useState, useEffect } from 'react';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
 import { billInquiry, billPayment, onebillConfig } from '@/services/onebillService';
 import { reconcileBillPayment } from '@/services/paymentReconciliation';
 import { usePaymentStore } from '@/store/paymentStore';
+import type { Student } from '@/types';
 import { FilterBar } from '@/components/FilterBar';
 import { TablePagination } from '@/components/TablePagination';
 import { EmptyState } from '@/components/EmptyState';
@@ -12,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FeeSlip } from '@/components/FeeSlip';
-import { CreditCard, Activity } from 'lucide-react';
+import { CreditCard, Activity, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatPKR } from '@/lib/formatters';
 import type { BillInquiryResponse, PaymentChannel } from '@/types';
@@ -25,8 +27,13 @@ const monthLabelFromKey = (monthKey: string) => {
 const SchoolPayments = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
 
+  const { data: studentsData, loading: lsLoad } = useApiQuery(() => api.fetchStudents({}), []);
+  const { data: paymentHistoryRaw, loading: lpLoad } = useApiQuery(() => api.fetchPaymentHistory(), [paymentVersion]);
+  const students = (studentsData || []) as Student[];
+  const pageLoading = lsLoad || lpLoad;
+
   const [inquiryForm, setInquiryForm] = useState({
-    consumerNumber: students[0]?.consumerNumber || '',
+    consumerNumber: '',
     studentRef: '',
     voucherNumber: '',
   });
@@ -42,17 +49,17 @@ const SchoolPayments = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  const paymentHistory = useMemo(() => getSchoolPaymentHistory(), [paymentVersion]);
+  const paymentHistory = useMemo(() => (paymentHistoryRaw || []) as Array<{ id: string; studentName: string; rollNumber: string; consumerNumber: string; billId: string; amount: number; date: string; reference: string; note: string; className: string; section: string }>, [paymentHistoryRaw]);
 
   const classOptions = useMemo(
     () => Array.from(new Set(students.map((student) => student.class))).sort((a, b) => Number(a.replace(/\D/g, '')) - Number(b.replace(/\D/g, ''))),
-    []
+    [students]
   );
 
   const sectionOptions = useMemo(() => {
     const pool = classFilter === 'all' ? students : students.filter((student) => student.class === classFilter);
     return Array.from(new Set(pool.map((student) => student.section))).sort((a, b) => a.localeCompare(b));
-  }, [classFilter]);
+  }, [classFilter, students]);
 
   const monthOptions = useMemo(
     () => Array.from(new Set(paymentHistory.map((record) => record.date.slice(0, 7)))).sort((a, b) => b.localeCompare(a)),
@@ -105,7 +112,10 @@ const SchoolPayments = () => {
         notes: paymentNote,
       });
       reconcileBillPayment(result);
-      toast.success('Payment marked paid');
+      setInquiryResult(null);
+      setInquiryForm({ consumerNumber: '', studentRef: '', voucherNumber: '' });
+      setPaymentNote('');
+      toast.success('Payment posted successfully');
     } catch (error) {
       console.error(error);
       toast.error('Payment failed');
@@ -189,11 +199,12 @@ const SchoolPayments = () => {
               </div>
             </div>
             {inquiryResult && (
-              <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm grid grid-cols-2 md:grid-cols-4 gap-2">
+              <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm grid grid-cols-2 md:grid-cols-5 gap-2">
                 <div><p className="text-[11px] text-muted-foreground">Status</p><p className="font-semibold capitalize">{inquiryResult.status}</p></div>
-                <div><p className="text-[11px] text-muted-foreground">Amount</p><p className="font-semibold">{formatPKR(inquiryResult.amount || 0)}</p></div>
-                <div><p className="text-[11px] text-muted-foreground">Due Date</p><p className="font-medium">{inquiryResult.dueDate || '-'}</p></div>
-                <div><p className="text-[11px] text-muted-foreground">Invoice</p><p className="font-mono text-xs">{inquiryResult.invoiceNumber || '-'}</p></div>
+                <div><p className="text-[11px] text-muted-foreground">Total Due</p><p className="font-semibold">{formatPKR(inquiryResult.amount || 0)}</p></div>
+                <div><p className="text-[11px] text-muted-foreground">Pending Bills</p><p className="font-semibold">{inquiryResult.pendingCount ?? 0} invoice(s)</p></div>
+                <div><p className="text-[11px] text-muted-foreground">Earliest Due</p><p className="font-medium">{inquiryResult.dueDate || '-'}</p></div>
+                <div><p className="text-[11px] text-muted-foreground">Invoice Ref</p><p className="font-mono text-xs">{inquiryResult.invoiceNumber || '-'}</p></div>
               </div>
             )}
           </CardContent>

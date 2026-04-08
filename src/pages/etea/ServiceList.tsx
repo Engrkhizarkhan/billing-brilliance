@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { services as initialServices } from '@/data/mockData';
+import { useEffect, useState } from 'react';
 import { Service } from '@/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
@@ -10,26 +9,38 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Plus } from 'lucide-react';
+import { Plus, Loader2 } from 'lucide-react';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
 
 const ServiceList = () => {
-  const [list, setList] = useState<Service[]>(initialServices);
+  const { data: servicesData, loading, refetch } = useApiQuery(() => api.fetchServices(), []);
+  const [list, setList] = useState<Service[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({ name: '', paymentType: 'one-time' as Service['paymentType'], amount: '' });
 
-  const handleCreate = () => {
-    const s: Service = {
-      id: `srv${list.length + 1}`,
-      name: form.name,
-      paymentType: form.paymentType,
-      amount: Number(form.amount),
-      status: 'active',
-    };
-    setList([...list, s]);
-    setDialogOpen(false);
-    setForm({ name: '', paymentType: 'one-time', amount: '' });
-    toast.success(`Service "${form.name}" created`);
+  useEffect(() => {
+    if (servicesData) setList(servicesData as Service[]);
+  }, [servicesData]);
+
+  const handleCreate = async () => {
+    try {
+      await api.createService({
+        name: form.name,
+        paymentType: form.paymentType,
+        amount: Number(form.amount),
+        status: 'active',
+      });
+      await refetch();
+      setDialogOpen(false);
+      setForm({ name: '', paymentType: 'one-time', amount: '' });
+      toast.success(`Service "${form.name}" created`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create service');
+    }
   };
+
+  if (loading && list.length === 0) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
   return (
     <div className="space-y-6 animate-fade-in">

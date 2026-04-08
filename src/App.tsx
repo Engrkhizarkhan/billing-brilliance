@@ -2,6 +2,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useEffect, useState } from "react";
+import { useAuthStore } from "@/store/authStore";
+import { Loader2 } from "lucide-react";
 import LoginPage from "./pages/LoginPage";
 import DashboardLayout from "./components/DashboardLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -33,18 +36,31 @@ import ETEAReports from "./pages/etea/ETEAReports";
 import ETEASettings from "./pages/etea/ETEASettings";
 import AuditTrail from "./pages/admin/AuditTrail";
 import ApiHealth from "./pages/admin/ApiHealth";
+import OneLinkSandbox from "./pages/admin/OneLinkSandbox";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="/login" element={<LoginPage />} />
+const AppRoutes = () => {
+  const [restoring, setRestoring] = useState(true);
+  const restoreSession = useAuthStore((s) => s.restoreSession);
+
+  useEffect(() => {
+    restoreSession().finally(() => setRestoring(false));
+  }, [restoreSession]);
+
+  if (restoring) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <Routes>
+      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/login" element={<LoginPage />} />
           
           <Route path="/admin" element={<DashboardLayout />}>
             <Route index element={<AdminDashboard />} />
@@ -55,6 +71,7 @@ const App = () => (
             <Route path="reports" element={<Reports />} />
             <Route path="audit" element={<AuditTrail />} />
             <Route path="api-health" element={<ApiHealth />} />
+            <Route path="onelink-sandbox" element={<OneLinkSandbox />} />
           </Route>
 
           <Route path="/school" element={<DashboardLayout />}>
@@ -87,6 +104,15 @@ const App = () => (
 
           <Route path="*" element={<NotFound />} />
         </Routes>
+  );
+};
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Sonner />
+      <BrowserRouter>
+        <AppRoutes />
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

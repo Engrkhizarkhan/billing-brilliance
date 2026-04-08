@@ -1,5 +1,4 @@
-import { useMemo, useState } from 'react';
-import { applicants as initialApplicants, eteaPostings } from '@/data/mockData';
+import { useEffect, useMemo, useState } from 'react';
 import { Applicant } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,7 +10,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { FilterBar } from '@/components/FilterBar';
 import { StatusBadge } from '@/components/StatusBadge';
 import { toast } from 'sonner';
-import { CheckCircle2, ClipboardList, Hash, Send } from 'lucide-react';
+import { CheckCircle2, ClipboardList, Hash, Loader2, Send } from 'lucide-react';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import { EteaPosting } from '@/types';
 
 const centers = ['Peshawar', 'Mardan', 'Abbottabad', 'Swat', 'Kohat', 'Bannu'];
 const timeSlots = ['09:00 AM', '11:30 AM', '02:30 PM'];
@@ -26,14 +28,24 @@ const RollAssignment = () => {
   const [search, setSearch] = useState('');
   const [postingFilter, setPostingFilter] = useState('all');
   const [stageFilter, setStageFilter] = useState<'all' | 'pending' | 'scheduled' | 'assigned'>('pending');
-  const [rows, setRows] = useState<Assignment[]>(() =>
-    initialApplicants.map((applicant, idx) => ({
-      ...applicant,
-      slot: applicant.rollNumber ? timeSlots[idx % timeSlots.length] : undefined,
-      center: applicant.testCenter,
-      admitCardSent: applicant.rollNumber ? true : false,
-    }))
-  );
+  const { data: applicantsData, loading: loadingApplicants } = useApiQuery(() => api.fetchApplicants({}), []);
+  const { data: postingsData, loading: loadingPostings } = useApiQuery(() => api.fetchPostings(), []);
+  const allApplicants = (applicantsData || []) as Applicant[];
+  const postingsList = (postingsData || []) as EteaPosting[];
+  const [rows, setRows] = useState<Assignment[]>([]);
+
+  useEffect(() => {
+    if (allApplicants.length > 0 && rows.length === 0) {
+      setRows(
+        allApplicants.map((applicant, idx) => ({
+          ...applicant,
+          slot: applicant.rollNumber ? timeSlots[idx % timeSlots.length] : undefined,
+          center: applicant.testCenter,
+          admitCardSent: applicant.rollNumber ? true : false,
+        }))
+      );
+    }
+  }, [allApplicants]);
 
   const filtered = useMemo(() => {
     return rows.filter((row) => {
@@ -68,8 +80,10 @@ const RollAssignment = () => {
   const sendAdmitCard = (id: string) => {
     setRows((prev) => prev.map((row) => (row.id === id ? { ...row, admitCardSent: true } : row)));
     const applicant = rows.find((r) => r.id === id);
-    toast.success(applicant ? `${applicant.name} — admit card queued (mock)` : 'Admit card queued');
+    toast.success(applicant ? `${applicant.name} — admit card queued` : 'Admit card queued');
   };
+
+  if (loadingApplicants || loadingPostings) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -97,7 +111,7 @@ const RollAssignment = () => {
               filters={[{
                 key: 'posting',
                 label: 'Posting',
-                options: eteaPostings.map((p) => ({ value: p.id, label: p.title }))
+                options: postingsList.map((p) => ({ value: p.id, label: p.title }))
               }]}
               onFilterChange={(_, value) => setPostingFilter(value === 'all' ? 'all' : value)}
             />
@@ -140,7 +154,7 @@ const RollAssignment = () => {
                         <div className="text-xs text-muted-foreground font-mono">{row.cnic}</div>
                       </TableCell>
                       <TableCell className="space-y-1">
-                        <p className="text-sm font-medium">{eteaPostings.find((p) => p.id === row.serviceId)?.title || '—'}</p>
+                        <p className="text-sm font-medium">{postingsList.find((p) => p.id === row.serviceId)?.title || '—'}</p>
                         <p className="text-xs text-muted-foreground">Bill #{row.billId}</p>
                       </TableCell>
                       <TableCell>

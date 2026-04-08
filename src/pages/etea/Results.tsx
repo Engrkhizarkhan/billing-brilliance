@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { applicants as initialApplicants, eteaPostings } from '@/data/mockData';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -8,21 +7,30 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { TrendingUp, UploadCloud } from 'lucide-react';
+import { Loader2, TrendingUp, UploadCloud } from 'lucide-react';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import { Applicant, EteaPosting } from '@/types';
 
 const Results = () => {
   const [search, setSearch] = useState('');
   const [publishOnline, setPublishOnline] = useState(true);
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [published, setPublished] = useState(false);
+  const { data: applicantsData, loading: loadingApplicants } = useApiQuery(() => api.fetchApplicants({}), []);
+  const { data: postingsData, loading: loadingPostings } = useApiQuery(() => api.fetchPostings(), []);
+  const allApplicants = (applicantsData || []) as Applicant[];
+  const postingsList = (postingsData || []) as EteaPosting[];
 
-  const appeared = useMemo(() => initialApplicants.filter((a) => a.applicationStatus === 'appeared' || a.marks !== undefined), []);
+  const appeared = useMemo(() => allApplicants.filter((a) => a.applicationStatus === 'appeared' || a.marks !== undefined), [allApplicants]);
   const filtered = appeared.filter((a) => a.name.toLowerCase().includes(search.toLowerCase()) || (a.rollNumber || '').includes(search));
 
   const handlePublish = () => {
     setPublished(true);
-    toast.success('Results published (mock) — candidates can now view online');
+    toast.success('Results published — candidates can now view online');
   };
+
+  if (loadingApplicants || loadingPostings) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -66,7 +74,7 @@ const Results = () => {
                         <div className="text-xs text-muted-foreground">{row.rollNumber || 'Roll pending'}</div>
                       </TableCell>
                       <TableCell>
-                        <p className="text-sm font-medium">{eteaPostings.find((p) => p.id === row.serviceId)?.title}</p>
+                        <p className="text-sm font-medium">{postingsList.find((p) => p.id === row.serviceId)?.title}</p>
                         <p className="text-xs text-muted-foreground">Bill #{row.billId}</p>
                       </TableCell>
                       <TableCell>

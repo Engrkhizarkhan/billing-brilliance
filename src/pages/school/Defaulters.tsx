@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
-import { students, getStudentFinancialSnapshot } from '@/data/mockData';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import type { Student } from '@/types';
 import { FilterBar } from '@/components/FilterBar';
 import { ExportButton } from '@/components/ExportButton';
 import { TablePagination } from '@/components/TablePagination';
 import { EmptyState } from '@/components/EmptyState';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, MessageSquare } from 'lucide-react';
+import { AlertTriangle, MessageSquare, Loader2 } from 'lucide-react';
 import { formatPKR } from '@/lib/formatters';
 import { toast } from 'sonner';
 
@@ -17,13 +19,22 @@ const Defaulters = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
+  const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({ pageSize: 9999 }), []);
+  const { data: summaryData, loading: li } = useApiQuery(() => api.fetchStudentFinancialSummary(), []);
+  const students = (studentsData || []) as Student[];
+  const loading = ls || li;
+
   const financialByStudentId = useMemo(() => {
-    const map = new Map<string, ReturnType<typeof getStudentFinancialSnapshot>>();
-    students.forEach((student) => {
-      map.set(student.id, getStudentFinancialSnapshot(student.id));
+    const summaries = (summaryData || []) as import('@/types').StudentFinancialSummary[];
+    const map = new Map<string, { totalDue: number; overdueMonths: number; riskTier: string }>();
+    summaries.forEach((s) => {
+      const overdueMonths = Number(s.overdueMonths) || 0;
+      const totalDue = parseFloat(String(s.totalDue)) || 0;
+      const riskTier = overdueMonths >= 3 ? 'critical' : overdueMonths >= 2 ? 'high-risk' : overdueMonths >= 1 ? 'watch' : 'none';
+      map.set(s.studentId, { totalDue, overdueMonths, riskTier });
     });
     return map;
-  }, []);
+  }, [summaryData]);
 
   const classOptions = useMemo(
     () => Array.from(new Set(students.map((student) => student.class))).sort((a, b) => Number(a.replace(/\D/g, '')) - Number(b.replace(/\D/g, ''))),
@@ -37,11 +48,14 @@ const Defaulters = () => {
       if (!financial || financial.totalDue <= 0) return null;
       return { student, financial };
     })
-    .filter((item): item is { student: (typeof students)[number]; financial: ReturnType<typeof getStudentFinancialSnapshot> } => item !== null);
+    .filter((item): item is { student: Student; financial: { totalDue: number; overdueMonths: number; riskTier: string } } => item !== null);
 
   const filtered = defaulters.filter((item) => {
     const query = search.toLowerCase();
-    const matchSearch = item.student.name.toLowerCase().includes(query) || item.student.cnic.includes(search);
+    const matchSearch = item.student.name.toLowerCase().includes(query)
+      || item.student.cnic.includes(search)
+      || item.student.consumerNumber.includes(search)
+      || (item.student.rollNumber || '').toLowerCase().includes(query);
     const matchClass = classFilter === 'all' || item.student.class === classFilter;
     const matchRisk = riskFilter === 'all' || item.financial.riskTier === riskFilter;
     return matchSearch && matchClass && matchRisk;
@@ -50,6 +64,8 @@ const Defaulters = () => {
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const totalDue = filtered.reduce((sum, item) => sum + item.financial.totalDue, 0);
+
+  if (loading) return <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin" /></div>;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -67,7 +83,7 @@ const Defaulters = () => {
       </div>
 
       <FilterBar
-        searchPlaceholder="Search defaulters by name or CNIC..."
+        searchPlaceholder="Search by name, consumer #, roll #, or CNIC..."
         onSearch={v => { setSearch(v); setPage(1); }}
         filters={[
           {
@@ -100,12 +116,13 @@ const Defaulters = () => {
             <TableHeader>
               <TableRow>
                 <TableHead className="text-xs font-semibold">Student</TableHead>
+                <TableHead className="text-xs font-semibold">Consumer #</TableHead>
                 <TableHead className="text-xs font-semibold">Father Name</TableHead>
                 <TableHead className="text-xs font-semibold">Class</TableHead>
                 <TableHead className="text-xs font-semibold">CNIC</TableHead>
                 <TableHead className="text-xs font-semibold">Phone</TableHead>
                 <TableHead className="text-xs font-semibold text-right">Amount Due</TableHead>
-                <TableHead className="text-xs font-semibold text-right">Overdue</TableHead>
+                <TableHead className="text-xs font-semibold text-right">Overdue Months</TableHead>
                 <TableHead className="text-xs font-semibold">Risk</TableHead>
                 <TableHead className="text-xs font-semibold w-16">Actions</TableHead>
               </TableRow>
@@ -114,6 +131,7 @@ const Defaulters = () => {
               {paginated.map(({ student, financial }) => (
                 <TableRow key={student.id} className="hover:bg-muted/30">
                   <TableCell className="font-medium text-sm">{student.name}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{student.consumerNumber}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{student.fatherName}</TableCell>
                   <TableCell><span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md">{student.class} {student.section}</span></TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">{student.cnic}</TableCell>

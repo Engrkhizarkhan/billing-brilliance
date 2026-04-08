@@ -1,23 +1,39 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useEteaSecurityStore } from '@/store/eteaSecurityStore';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import { useAuthStore } from '@/store/authStore';
+import { EteaRequestSecurityContext } from '@/types';
+import { Copy, Eye, EyeOff } from 'lucide-react';
 
 const ETEASettings = () => {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [keyVisible, setKeyVisible] = useState(false);
 
-  const storedApiKey = useEteaSecurityStore((state) => state.apiKey);
+  const { user } = useAuthStore();
+
   const storedSourceIp = useEteaSecurityStore((state) => state.sourceIp);
-  const setApiKey = useEteaSecurityStore((state) => state.setApiKey);
   const setSourceIp = useEteaSecurityStore((state) => state.setSourceIp);
 
-  const [securityApiKey, setSecurityApiKey] = useState(storedApiKey);
   const [securitySourceIp, setSecuritySourceIp] = useState(storedSourceIp);
+  const [savingSecurityContext, setSavingSecurityContext] = useState(false);
+  const { data: securityContextData } = useApiQuery(() => api.fetchSetting<EteaRequestSecurityContext>('etea_security_context'), []);
+
+  useEffect(() => {
+    const securityContext = securityContextData as EteaRequestSecurityContext | null;
+    if (!securityContext) return;
+
+    const nextSourceIp = securityContext.sourceIp || storedSourceIp;
+    setSecuritySourceIp(nextSourceIp);
+    setSourceIp(nextSourceIp);
+  }, [securityContextData, setSourceIp, storedSourceIp]);
 
   const resetForm = () => {
     setCurrentPassword('');
@@ -25,7 +41,7 @@ const ETEASettings = () => {
     setConfirmPassword('');
   };
 
-  const handleUpdatePassword = () => {
+  const handleUpdatePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
       toast.error('All password fields are required');
       return;
@@ -46,31 +62,41 @@ const ETEASettings = () => {
       return;
     }
 
-    toast.success('Password updated successfully (mock)');
-    resetForm();
+    try {
+      await api.changePassword(currentPassword, newPassword);
+      toast.success('Password updated successfully');
+      resetForm();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to update password');
+    }
   };
 
-  const handleSaveSecurityContext = () => {
-    if (!securityApiKey.trim()) {
-      toast.error('API key is required');
-      return;
-    }
-
+  const handleSaveSecurityContext = async () => {
     if (!securitySourceIp.trim()) {
       toast.error('Source IP is required');
       return;
     }
 
-    setApiKey(securityApiKey);
-    setSourceIp(securitySourceIp);
-    toast.success('API Security Context updated');
+    setSavingSecurityContext(true);
+    try {
+      const payload = {
+        sourceIp: securitySourceIp.trim(),
+      };
+      await api.saveSetting('etea_security_context', payload);
+      setSourceIp(payload.sourceIp);
+      toast.success('API security context updated');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to save security context');
+    } finally {
+      setSavingSecurityContext(false);
+    }
   };
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="page-header">Settings</h1>
-        <p className="page-description">Update your account password.</p>
+        <p className="page-description">Update your account password and ETEA payment security context.</p>
       </div>
 
       <Card className="max-w-2xl">
@@ -117,7 +143,7 @@ const ETEASettings = () => {
             />
           </div>
 
-          <Button className="rounded-lg" onClick={handleUpdatePassword}>
+          <Button className="rounded-lg" onClick={() => void handleUpdatePassword()}>
             Update Password
           </Button>
         </CardContent>
@@ -125,22 +151,52 @@ const ETEASettings = () => {
 
       <Card className="max-w-2xl">
         <CardHeader>
+          <CardTitle>API Key</CardTitle>
+          <CardDescription>
+            This key is issued by the platform for your organization. Provide it to external integrations (e.g. 1BILL) that need to call the ETEA payment API directly. Dashboard users authenticated via their account do not need to enter this key.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-2">
+            <Label>Your Organization API Key</Label>
+            <div className="flex gap-2">
+              <Input
+                value={keyVisible ? (user?.tenantApiKey || 'Not available — contact platform admin') : '•'.repeat(32)}
+                readOnly
+                className="rounded-lg font-mono text-sm bg-muted/40"
+              />
+              <Button variant="outline" size="sm" onClick={() => setKeyVisible((v) => !v)}>
+                {keyVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!user?.tenantApiKey}
+                onClick={() => {
+                  void navigator.clipboard.writeText(user?.tenantApiKey || '');
+                  toast.success('API key copied to clipboard');
+                }}
+              >
+                <Copy className="w-4 h-4" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">To regenerate this key, contact the platform administrator.</p>
+          </div>
+          <div className="rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground space-y-1">
+            <p>External integrations must include this key as the <code>X-API-Key</code> request header.</p>
+            <p>Internal dashboard users authenticate via their login credentials — no key required.</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="max-w-2xl">
+        <CardHeader>
           <CardTitle>API Security Context</CardTitle>
           <CardDescription>
-            Configure API key and source IP for ETEA payment-controller calls. Protocol is fixed to HTTPS and callback flow enforces signature + idempotency controls.
+            Configure source IP for ETEA payment-controller calls. Protocol is fixed to HTTPS and callback flow enforces signature + idempotency controls.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="api-key">API Key</Label>
-            <Input
-              id="api-key"
-              value={securityApiKey}
-              onChange={(event) => setSecurityApiKey(event.target.value)}
-              className="rounded-lg"
-            />
-          </div>
-
           <div className="space-y-2">
             <Label htmlFor="source-ip">Source IP (Whitelisted)</Label>
             <Input
@@ -165,7 +221,7 @@ const ETEASettings = () => {
             <p>- Callback idempotency protection</p>
           </div>
 
-          <Button className="rounded-lg" onClick={handleSaveSecurityContext}>
+          <Button className="rounded-lg" onClick={() => void handleSaveSecurityContext()} disabled={savingSecurityContext}>
             Save Security Context
           </Button>
         </CardContent>

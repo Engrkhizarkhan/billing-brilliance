@@ -1,11 +1,14 @@
 import { StatCard } from '@/components/StatCard';
-import { GraduationCap, Receipt, Wallet, Award, Users, AlertTriangle, Calendar, TrendingUp } from 'lucide-react';
-import { students, feeCollectionByHead, monthlyCollectionTarget, getSchoolPaymentHistory, getStudentFinancialSnapshot } from '@/data/mockData';
+import { GraduationCap, Receipt, Wallet, Users, AlertTriangle, Calendar, TrendingUp, Loader2 } from 'lucide-react';
+import { feeCollectionByHead } from '@/data/chartData';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 import { useMemo } from 'react';
 import { formatPKR } from '@/lib/formatters';
 import { useNavigate } from 'react-router-dom';
 import { usePaymentStore } from '@/store/paymentStore';
+import type { Student, Invoice } from '@/types';
 
 const CHART_COLORS = ['hsl(221, 83%, 53%)', 'hsl(160, 84%, 39%)', 'hsl(38, 92%, 50%)', 'hsl(271, 55%, 55%)', 'hsl(0, 72%, 51%)'];
 
@@ -13,28 +16,68 @@ const SchoolDashboard = () => {
   const navigate = useNavigate();
   const paymentVersion = usePaymentStore((state) => state.version);
 
+  const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({}), []);
+  const { data: invoicesData, loading: li } = useApiQuery(() => api.fetchInvoices({}), [paymentVersion]);
+  const { data: paymentHistoryData, loading: lp } = useApiQuery(() => api.fetchPaymentHistory(), [paymentVersion]);
+
+  const students = (studentsData || []) as Student[];
+  const invoices = (invoicesData || []) as Invoice[];
+  const paymentHistory = (paymentHistoryData || []) as Array<{ id: string; studentName: string; amount: number; date: string; note: string }>;
+  const loading = ls || li || lp;
+
   const classSummary = useMemo(() => {
     const map: Record<string, number> = {};
     students.forEach((s) => { map[s.class] = (map[s.class] || 0) + 1; });
     return Object.entries(map).map(([name, count]) => ({ name: name.replace('Class ', 'C'), count })).sort((a, b) => a.name.localeCompare(b.name));
-  }, []);
+  }, [students]);
 
-  const studentSnapshots = useMemo(
-    () => students.map((student) => ({ student, snapshot: getStudentFinancialSnapshot(student.id) })),
-    [paymentVersion]
+  const defaulterInfo = useMemo(() => {
+    let totalOutstanding = 0;
+    let defaultersCount = 0;
+    students.forEach((student) => {
+      const due = invoices.filter((inv) => inv.consumerNumber === student.consumerNumber && (inv.status === 'overdue' || inv.status === 'pending')).reduce((sum, inv) => sum + Number(inv.amount), 0);
+      if (due > 0) { totalOutstanding += due; defaultersCount += 1; }
+    });
+    return { totalOutstanding, defaultersCount };
+  }, [students, invoices]);
+
+  const currentMonthKey = new Date().toISOString().slice(0, 7);
+
+  const collectedThisMonth = useMemo(
+    () => paymentHistory.filter((p) => p.date?.slice(0, 7) === currentMonthKey).reduce((sum, p) => sum + Number(p.amount || 0), 0),
+    [paymentHistory, currentMonthKey]
   );
 
-  const paymentHistory = useMemo(() => getSchoolPaymentHistory(), [paymentVersion]);
+  const monthlyCollectionData = useMemo(() => {
+    const map: Record<string, number> = {};
+    paymentHistory.forEach((p) => {
+      if (!p.date) return;
+      const key = p.date.slice(0, 7);
+      map[key] = (map[key] || 0) + Number(p.amount || 0);
+    });
+    const months: { month: string; collected: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const key = d.toISOString().slice(0, 7);
+      months.push({ month: d.toLocaleDateString('en-US', { month: 'short' }), collected: map[key] || 0 });
+    }
+    return months;
+  }, [paymentHistory]);
 
-  const latestPaymentDate = paymentHistory[0]?.date || null;
-  const latestDayPayments = latestPaymentDate ? paymentHistory.filter((payment) => payment.date === latestPaymentDate) : [];
+  // "Latest day" = the most recent distinct date in payment history (date may be ISO timestamp)
+  const latestPaymentDate = paymentHistory[0]?.date?.slice(0, 10) || null;
+  const latestDayPayments = latestPaymentDate
+    ? paymentHistory.filter((payment) => payment.date?.slice(0, 10) === latestPaymentDate)
+    : [];
 
-  const totalOutstanding = studentSnapshots.reduce((sum, item) => sum + item.snapshot.totalDue, 0);
-  const defaultersCount = studentSnapshots.filter((item) => item.snapshot.totalDue > 0).length;
+  const { totalOutstanding, defaultersCount } = defaulterInfo;
   const todayPayments = latestDayPayments.length;
   const latestDayAmount = latestDayPayments.reduce((sum, payment) => sum + payment.amount, 0);
 
   const recentPayments = paymentHistory.slice(0, 5);
+
+  if (loading) return <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin" /></div>;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -45,7 +88,7 @@ const SchoolDashboard = () => {
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <div className="cursor-pointer" onClick={() => navigate('/school/students')}><StatCard title="Total Students" value={students.length} icon={GraduationCap} trend="5 new this month" trendUp /></div>
-        <StatCard title="Collected This Month" value={formatPKR(920000)} icon={Wallet} trend="10% vs last month" trendUp />
+        <StatCard title="Collected This Month" value={formatPKR(collectedThisMonth)} icon={Wallet} trend={collectedThisMonth > 0 ? 'from payment history' : 'No payments this month'} trendUp={collectedThisMonth > 0} />
         <div className="cursor-pointer" onClick={() => navigate('/school/defaulters')}><StatCard title="Outstanding" value={formatPKR(totalOutstanding)} icon={AlertTriangle} trend={`${defaultersCount} defaulters`} trendUp={false} /></div>
         <StatCard title="Defaulters" value={defaultersCount} icon={Users} />
         <StatCard title="Latest Day Payments" value={todayPayments} icon={Calendar} trend={latestPaymentDate ? `${formatPKR(latestDayAmount)} on ${latestPaymentDate}` : 'No payments yet'} trendUp={todayPayments > 0} />
@@ -59,7 +102,7 @@ const SchoolDashboard = () => {
             <span className="metric-change-up">↑ 10%</span>
           </div>
           <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={monthlyCollectionTarget}>
+            <BarChart data={monthlyCollectionData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 13%, 91%)" />
               <XAxis dataKey="month" fontSize={11} tick={{ fill: 'hsl(220, 9%, 46%)' }} />
               <YAxis fontSize={11} tickFormatter={(v) => `${v / 1000}K`} tick={{ fill: 'hsl(220, 9%, 46%)' }} />

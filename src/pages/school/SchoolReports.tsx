@@ -1,19 +1,28 @@
 import { useMemo } from 'react';
 import { StatCard } from '@/components/StatCard';
-import { revenueData, monthlyCollectionTarget, feeCollectionByHead, invoices, students, getStudentFinancialSnapshot } from '@/data/mockData';
+import { revenueData, monthlyCollectionTarget, feeCollectionByHead } from '@/data/chartData';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import type { Student, Invoice } from '@/types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { Wallet, AlertTriangle, BarChart3, Receipt } from 'lucide-react';
+import { Wallet, AlertTriangle, BarChart3, Receipt, Loader2 } from 'lucide-react';
 import { formatPKR } from '@/lib/formatters';
 
 const CHART_COLORS = ['hsl(221, 83%, 53%)', 'hsl(160, 84%, 39%)', 'hsl(38, 92%, 50%)', 'hsl(271, 55%, 55%)', 'hsl(0, 72%, 51%)'];
 
-const invoiceStatusData = [
-  { status: 'Paid', count: invoices.filter((invoice) => invoice.status === 'paid').length },
-  { status: 'Pending', count: invoices.filter((invoice) => invoice.status === 'pending').length },
-  { status: 'Overdue', count: invoices.filter((invoice) => invoice.status === 'overdue').length },
-];
-
 const SchoolReports = () => {
+  const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({}), []);
+  const { data: invoicesData, loading: li } = useApiQuery(() => api.fetchInvoices({}), []);
+  const students = (studentsData || []) as Student[];
+  const invoices = (invoicesData || []) as Invoice[];
+  const loading = ls || li;
+
+  const invoiceStatusData = useMemo(() => [
+    { status: 'Paid', count: invoices.filter((invoice) => invoice.status === 'paid').length },
+    { status: 'Pending', count: invoices.filter((invoice) => invoice.status === 'pending').length },
+    { status: 'Overdue', count: invoices.filter((invoice) => invoice.status === 'overdue').length },
+  ], [invoices]);
+
   const totalCollected = monthlyCollectionTarget.reduce((sum, month) => sum + month.collected, 0);
   const paidInvoiceCount = invoices.filter((invoice) => invoice.status === 'paid').length;
   const pendingInvoiceCount = invoices.filter((invoice) => invoice.status === 'pending').length;
@@ -21,14 +30,17 @@ const SchoolReports = () => {
 
   const defaultersByClass = useMemo(() => {
     const classMap: Record<string, number> = {};
-    students.filter((student) => getStudentFinancialSnapshot(student.id).totalDue > 0).forEach((student) => {
-      classMap[student.class] = (classMap[student.class] || 0) + 1;
+    students.forEach((student) => {
+      const due = invoices.filter((inv) => inv.consumerNumber === student.consumerNumber && (inv.status === 'overdue' || inv.status === 'pending')).reduce((sum, inv) => sum + inv.amount, 0);
+      if (due > 0) classMap[student.class] = (classMap[student.class] || 0) + 1;
     });
 
     return Object.entries(classMap)
       .map(([className, count]) => ({ className: className.replace('Class ', 'C'), count }))
       .sort((a, b) => a.className.localeCompare(b.className));
-  }, []);
+  }, [students, invoices]);
+
+  if (loading) return <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin" /></div>;
 
   return (
     <div className="space-y-6 animate-fade-in">

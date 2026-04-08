@@ -1,33 +1,166 @@
 import { StatCard } from '@/components/StatCard';
 import { StatusBadge } from '@/components/StatusBadge';
-import { DollarSign, CreditCard, Clock, AlertTriangle, Building2, TrendingUp, Activity, Shield, FileText } from 'lucide-react';
-import { billers, revenueData, paymentSuccessData, transactionVolumeData, transactions, students, invoices } from '@/data/mockData';
+import { DollarSign, CreditCard, AlertTriangle, Building2, Activity, Shield, FileText, Loader2 } from 'lucide-react';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { usePaymentStore } from '@/store/paymentStore';
 import { useMemo } from 'react';
+import type { Biller } from '@/types';
+
+type StudentRecord = { id: string; tenantId?: string | null; billerId?: string | null };
+type InvoiceRecord = { id: string; tenantId?: string | null; billerId?: string | null; amount: number; status: 'pending' | 'paid' | 'overdue' | string };
+type TransactionRecord = {
+  id: string;
+  tenantId?: string | null;
+  transactionId: string;
+  consumerNumber: string;
+  amount: number;
+  status: 'completed' | 'pending' | 'failed' | string;
+  date: string;
+  billerName: string;
+};
+
+const toMonthKey = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
+
+const toMonthLabel = (monthKey: string) => {
+  const [year, month] = monthKey.split('-').map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'short' });
+};
+
+const resolveTenantId = (record: { tenantId?: string | null; billerId?: string | null }) => record.tenantId || record.billerId || null;
 
 const AdminDashboard = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
-  const recentTransactions = useMemo(() => transactions.slice(0, 5), [paymentVersion]);
+  const { data: billers, loading: lb } = useApiQuery(() => api.fetchBillers({ pageSize: 100 }), []);
+  const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({ pageSize: 100 }), []);
+  const { data: invoicesData, loading: li } = useApiQuery(() => api.fetchInvoices({ pageSize: 100 }), [paymentVersion]);
+  const { data: txnData, loading: lt } = useApiQuery(() => api.fetchTransactions({ pageSize: 5000 }), [paymentVersion]);
+
+  const allBillers = (billers || []) as Biller[];
+  const students = (studentsData || []) as StudentRecord[];
+  const invoices = (invoicesData || []) as InvoiceRecord[];
+  const transactions = (txnData || []) as TransactionRecord[];
+
+  const loading = lb || ls || li || lt;
+
+  const recentTransactions = useMemo(
+    () => [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5),
+    [transactions]
+  );
+
+  const revenueData = useMemo(() => {
+    const byMonth = new Map<string, number>();
+    transactions
+      .filter((t) => t.status === 'completed')
+      .forEach((t) => {
+        const key = toMonthKey(t.date);
+        if (!key) return;
+        byMonth.set(key, (byMonth.get(key) || 0) + Number(t.amount || 0));
+      });
+
+    return Array.from(byMonth.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-6)
+      .map(([month, revenue]) => ({ month: toMonthLabel(month), revenue }));
+  }, [transactions]);
+
+  const paymentSuccessData = useMemo(() => {
+    const byMonth = new Map<string, { success: number; failed: number }>();
+    transactions.forEach((t) => {
+      const key = toMonthKey(t.date);
+      if (!key) return;
+      const current = byMonth.get(key) || { success: 0, failed: 0 };
+      if (t.status === 'completed') current.success += 1;
+      else if (t.status === 'failed' || t.status === 'pending') current.failed += 1;
+      byMonth.set(key, current);
+    });
+
+    return Array.from(byMonth.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-6)
+      .map(([month, stats]) => ({ month: toMonthLabel(month), ...stats }));
+  }, [transactions]);
+
+  const transactionVolumeData = useMemo(() => {
+    const byMonth = new Map<string, number>();
+    transactions.forEach((t) => {
+      const key = toMonthKey(t.date);
+      if (!key) return;
+      byMonth.set(key, (byMonth.get(key) || 0) + 1);
+    });
+
+    return Array.from(byMonth.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-6)
+      .map(([month, volume]) => ({ month: toMonthLabel(month), volume }));
+  }, [transactions]);
+
   const tenantSummary = useMemo(() => {
-    return billers.map((biller) => {
-      const studentCount = students.filter((s) => s.billerId === biller.id).length;
-      const invoiceCount = invoices.filter((inv) => inv.billerId === biller.id).length;
-      const txnCount = transactions.filter((t) => t.billerName === biller.name).length;
-      const revenue = invoices
-        .filter((inv) => inv.billerId === biller.id && inv.status === 'paid')
-        .reduce((sum, inv) => sum + inv.amount, 0);
+    return allBillers.map((biller) => {
+      const studentCount = students.filter((s) => resolveTenantId(s) === biller.id).length;
+      const invoiceCount = invoices.filter((inv) => resolveTenantId(inv) === biller.id).length;
+      const txnCount = transactions.filter((t) => (t.tenantId && t.tenantId === biller.id) || t.billerName === biller.name).length;
+      const revenue = transactions
+        .filter((t) => t.status === 'completed' && ((t.tenantId && t.tenantId === biller.id) || t.billerName === biller.name))
+        .reduce((sum, t) => sum + Number(t.amount || 0), 0);
       return { ...biller, studentCount, invoiceCount, txnCount, revenue };
     });
-  }, []);
+  }, [allBillers, students, invoices, transactions]);
 
-  const totals = useMemo(() => ({
-    tenants: billers.length,
-    activeTenants: billers.filter((b) => b.status === 'active').length,
-    students: students.length,
-    invoices: invoices.length,
-  }), []);
+  const totals = useMemo(() => {
+    const totalRevenue = transactions
+      .filter((t) => t.status === 'completed')
+      .reduce((sum, t) => sum + Number(t.amount || 0), 0);
+
+    const totalPayments = transactions.filter((t) => t.status === 'completed').length;
+    const pendingAmount = invoices
+      .filter((i) => i.status === 'pending')
+      .reduce((sum, i) => sum + Number(i.amount || 0), 0);
+    const overdueAmount = invoices
+      .filter((i) => i.status === 'overdue')
+      .reduce((sum, i) => sum + Number(i.amount || 0), 0);
+
+    return {
+      tenants: allBillers.length,
+      activeTenants: allBillers.filter((b) => b.status === 'active').length,
+      students: students.length,
+      invoices: invoices.length,
+      totalRevenue,
+      totalPayments,
+      pendingAmount,
+      overdueAmount,
+    };
+  }, [allBillers, students, invoices, transactions]);
+
+  const revenueTrendPercent = useMemo(() => {
+    if (revenueData.length < 2) return 0;
+    const current = revenueData[revenueData.length - 1].revenue;
+    const previous = revenueData[revenueData.length - 2].revenue;
+    if (!previous) return 0;
+    return ((current - previous) / previous) * 100;
+  }, [revenueData]);
+
+  const latestSuccessRate = useMemo(() => {
+    if (paymentSuccessData.length === 0) return 0;
+    const latest = paymentSuccessData[paymentSuccessData.length - 1];
+    const total = latest.success + latest.failed;
+    if (!total) return 0;
+    return Math.round((latest.success / total) * 100);
+  }, [paymentSuccessData]);
+
+  const txnGrowth = useMemo(() => {
+    if (transactionVolumeData.length < 2) return 0;
+    return transactionVolumeData[transactionVolumeData.length - 1].volume - transactionVolumeData[transactionVolumeData.length - 2].volume;
+  }, [transactionVolumeData]);
+
+  if (loading) return <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -47,9 +180,9 @@ const AdminDashboard = () => {
         <StatCard title="Tenants" value={totals.tenants.toString()} icon={Building2} trend={`${totals.activeTenants} active`} trendUp />
         <StatCard title="Students" value={totals.students.toString()} icon={Shield} trend="Across all tenants" trendUp />
         <StatCard title="Invoices" value={totals.invoices.toString()} icon={FileText} trend="Cross-tenant" trendUp />
-        <StatCard title="Total Revenue" value="₨ 7.9M" icon={DollarSign} trend="12% vs last month" trendUp />
-        <StatCard title="Total Payments" value="3,410" icon={CreditCard} trend="8% vs last month" trendUp />
-        <StatCard title="Overdue" value="₨ 450K" icon={AlertTriangle} trend="3% increase" trendUp={false} />
+        <StatCard title="Total Revenue" value={`₨ ${Math.round(totals.totalRevenue).toLocaleString()}`} icon={DollarSign} trend={`${Math.abs(revenueTrendPercent).toFixed(1)}% vs last month`} trendUp={revenueTrendPercent >= 0} />
+        <StatCard title="Total Payments" value={totals.totalPayments.toLocaleString()} icon={CreditCard} trend="Completed transactions" trendUp />
+        <StatCard title="Overdue" value={`₨ ${Math.round(totals.overdueAmount).toLocaleString()}`} icon={AlertTriangle} trend={`Pending: ₨ ${Math.round(totals.pendingAmount).toLocaleString()}`} trendUp={false} />
       </div>
 
       <div className="dashboard-card">
@@ -91,7 +224,9 @@ const AdminDashboard = () => {
         <div className="dashboard-card">
           <div className="flex items-center justify-between mb-4">
             <h3 className="section-title">Monthly Revenue</h3>
-            <span className="metric-change-up">↑ 12%</span>
+            <span className={revenueTrendPercent >= 0 ? 'metric-change-up' : 'metric-change-down'}>
+              {revenueTrendPercent >= 0 ? '↑' : '↓'} {Math.abs(revenueTrendPercent).toFixed(1)}%
+            </span>
           </div>
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={revenueData}>
@@ -113,7 +248,7 @@ const AdminDashboard = () => {
         <div className="dashboard-card">
           <div className="flex items-center justify-between mb-4">
             <h3 className="section-title">Payment Success Rate</h3>
-            <span className="metric-change-up">↑ 93%</span>
+            <span className="metric-change-up">{latestSuccessRate}%</span>
           </div>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={paymentSuccessData}>
@@ -130,7 +265,9 @@ const AdminDashboard = () => {
         <div className="dashboard-card">
           <div className="flex items-center justify-between mb-4">
             <h3 className="section-title">Transaction Volume</h3>
-            <span className="metric-change-up">↑ 680</span>
+            <span className={txnGrowth >= 0 ? 'metric-change-up' : 'metric-change-down'}>
+              {txnGrowth >= 0 ? '↑' : '↓'} {Math.abs(txnGrowth)}
+            </span>
           </div>
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={transactionVolumeData}>

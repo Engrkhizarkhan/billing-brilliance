@@ -8,10 +8,10 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { Lock, Mail, Building2, GraduationCap, Briefcase, Shield, ArrowRight, CheckCircle2 } from 'lucide-react';
 
-const roles: { value: UserRole; label: string; desc: string; icon: React.ElementType; email: string }[] = [
-  { value: 'admin', label: 'Admin', desc: 'Platform management', icon: Shield, email: 'admin@example.com' },
-  { value: 'school', label: 'School', desc: 'Fee & student management', icon: GraduationCap, email: 'school@example.com' },
-  { value: 'etea', label: 'ETEA', desc: 'Posting & payment management', icon: Briefcase, email: 'etea@example.com' },
+const roles: { value: UserRole; label: string; desc: string; icon: React.ElementType }[] = [
+  { value: 'admin', label: 'Admin', desc: 'Platform management', icon: Shield },
+  { value: 'school', label: 'School', desc: 'Fee & student management', icon: GraduationCap },
+  { value: 'etea', label: 'ETEA', desc: 'Posting & payment management', icon: Briefcase },
 ];
 
 const features = [
@@ -112,7 +112,7 @@ const LoginPage = () => {
                 <button
                   key={r.value}
                   type="button"
-                  onClick={() => { setRole(r.value); setEmail(r.email); }}
+                  onClick={() => setRole(r.value)}
                   className={`flex flex-col items-center gap-1.5 p-3.5 rounded-xl border-2 transition-all text-center ${
                     role === r.value
                       ? 'border-primary bg-primary/5 shadow-sm shadow-primary/10'
@@ -137,7 +137,7 @@ const LoginPage = () => {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@company.com"
+                    placeholder={role === 'admin' ? 'admin@company.com' : role === 'school' ? 'user@school.edu' : 'user@etea.gov.pk'}
                     className="pl-10 h-11 text-sm rounded-xl"
                     required
                   />
@@ -167,11 +167,10 @@ const LoginPage = () => {
             </Button>
 
             <div className="rounded-xl bg-muted/60 border border-border p-4">
-              <p className="text-[11px] font-semibold text-foreground mb-1.5">Demo credentials</p>
-              <div className="space-y-0.5">
-                <p className="text-[11px] text-muted-foreground font-mono">admin@ / school@ / etea@example.com</p>
-                <p className="text-[11px] text-muted-foreground font-mono">Password: 123456</p>
-              </div>
+              <p className="text-[11px] font-semibold text-foreground mb-1.5">Access</p>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Use the credentials provisioned for your role. Platform-admin access is protected and managed from the server environment.
+              </p>
             </div>
           </form>
         </div>

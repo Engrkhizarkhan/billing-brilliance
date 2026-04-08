@@ -9,8 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Plus, Pencil, PauseCircle, Ban, RefreshCcw } from 'lucide-react';
-import { mockApi } from '@/lib/mockApi';
+import { Plus, Pencil, RefreshCcw, Copy, Eye, EyeOff, KeyRound } from 'lucide-react';
+import { api } from '@/lib/api';
 
 const billerTypeLabels: Record<Biller['type'], string> = {
   school: 'School',
@@ -35,11 +35,29 @@ const BillerManagement = () => {
   const [editBiller, setEditBiller] = useState<Biller | null>(null);
   const [editForm, setEditForm] = useState(emptyBillerForm);
   const [loading, setLoading] = useState(false);
+  const [visibleKeyId, setVisibleKeyId] = useState<string | null>(null);
+
+  const copyApiKey = (key: string) => {
+    void navigator.clipboard.writeText(key);
+    toast.success('API key copied to clipboard');
+  };
+
+  const handleRegenerateKey = async (id: string) => {
+    if (!window.confirm('Regenerate API key? The old key will stop working immediately.')) return;
+    setLoading(true);
+    const res = await api.regenerateBillerApiKey(id);
+    if (res.data) {
+      setBillerList((prev) => prev.map((b) => (b.id === id ? res.data : b)));
+      if (editBiller?.id === id) setEditBiller(res.data);
+      toast.success('API key regenerated');
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const response = await mockApi.fetchBillers({});
+      const response = await api.fetchBillers({});
       setBillerList(response.data);
       setLoading(false);
     };
@@ -59,7 +77,7 @@ const BillerManagement = () => {
       return;
     }
     setLoading(true);
-    const response = await mockApi.createBiller({ name: form.name, email: form.email, phone: form.phone, type: form.type });
+    const response = await api.createBiller({ name: form.name, email: form.email, phone: form.phone, type: form.type });
     setBillerList((prev) => [...prev, response.data]);
     setDialogOpen(false);
     setForm(emptyBillerForm);
@@ -86,7 +104,7 @@ const BillerManagement = () => {
     }
 
     setLoading(true);
-    const updated = await mockApi.updateBiller(editBiller.id, {
+    const updated = await api.updateBiller(editBiller.id, {
       name: editForm.name,
       type: editForm.type,
       email: editForm.email,
@@ -106,7 +124,7 @@ const BillerManagement = () => {
 
   const updateStatus = async (id: string, status: Biller['status']) => {
     setLoading(true);
-    const updated = await mockApi.updateBillerStatus(id, status);
+    const updated = await api.updateBillerStatus(id, status);
     if (updated.data) {
       setBillerList((prev) => prev.map((b) => (b.id === id ? updated.data : b)));
       if (editBiller?.id === id) {
@@ -122,7 +140,7 @@ const BillerManagement = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-header">Biller Management</h1>
-          <p className="page-description">Manage billers and organizations. New schools get auto-generated biller codes.</p>
+          <p className="page-description">Manage billers and organizations. New billers get auto-generated biller codes.</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
@@ -178,6 +196,27 @@ const BillerManagement = () => {
                 <div><Label>Biller Code</Label><Input value={editBiller.billerCode} disabled /></div>
                 <div><Label>Email</Label><Input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} /></div>
                 <div><Label>Phone</Label><Input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} /></div>
+                {editBiller.apiKey && (
+                  <div>
+                    <Label>API Key <span className="text-xs text-muted-foreground">(for external integrations)</span></Label>
+                    <div className="flex gap-2 mt-1">
+                      <Input
+                        value={visibleKeyId === editBiller.id ? editBiller.apiKey : '•'.repeat(24)}
+                        readOnly
+                        className="font-mono text-xs"
+                      />
+                      <Button type="button" variant="outline" size="sm" onClick={() => setVisibleKeyId(visibleKeyId === editBiller.id ? null : editBiller.id)}>
+                        {visibleKeyId === editBiller.id ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" onClick={() => copyApiKey(editBiller.apiKey!)}>
+                        <Copy className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <Button type="button" variant="ghost" size="sm" className="mt-1 text-xs text-destructive" onClick={() => void handleRegenerateKey(editBiller.id)} disabled={loading}>
+                      <KeyRound className="w-3.5 h-3.5 mr-1" /> Regenerate Key
+                    </Button>
+                  </div>
+                )}
                 <Button onClick={saveBillerEdit} className="w-full" disabled={loading}>Save Changes</Button>
               </div>
             )}
@@ -215,7 +254,7 @@ const BillerManagement = () => {
       />
 
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <RefreshCcw className="w-3.5 h-3.5" /> Data is session-only mock. Codes auto-increment and statuses persist in-memory.
+        <RefreshCcw className="w-3.5 h-3.5" /> Changes are stored in the live backend. Status changes apply immediately across the platform.
       </div>
 
       <div className="table-container">
@@ -227,6 +266,7 @@ const BillerManagement = () => {
               <TableHead>Code</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Phone</TableHead>
+              <TableHead>API Key</TableHead>
               <TableHead>Created</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Actions</TableHead>
@@ -240,6 +280,23 @@ const BillerManagement = () => {
                 <TableCell className="font-mono">{b.billerCode}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{b.email}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{b.phone}</TableCell>
+                <TableCell>
+                  {b.apiKey ? (
+                    <div className="flex items-center gap-1">
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {visibleKeyId === b.id ? b.apiKey : `${b.apiKey.slice(0, 8)}••••`}
+                      </span>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setVisibleKeyId(visibleKeyId === b.id ? null : b.id)}>
+                        {visibleKeyId === b.id ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyApiKey(b.apiKey!)}>
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
+                </TableCell>
                 <TableCell className="text-xs text-muted-foreground">{b.createdAt}</TableCell>
                 <TableCell><StatusBadge status={b.status} /></TableCell>
                 <TableCell>
@@ -247,16 +304,6 @@ const BillerManagement = () => {
                     <Button variant="ghost" size="sm" onClick={() => openEditBiller(b)} disabled={loading} aria-label={`Edit ${b.name}`}>
                       <Pencil className="w-4 h-4" />
                     </Button>
-                    {b.status !== 'suspended' && (
-                      <Button variant="ghost" size="sm" onClick={() => updateStatus(b.id, 'suspended')} disabled={loading}>
-                        <PauseCircle className="w-4 h-4" />
-                      </Button>
-                    )}
-                    {b.status !== 'banned' && (
-                      <Button variant="ghost" size="sm" onClick={() => updateStatus(b.id, 'banned')} disabled={loading}>
-                        <Ban className="w-4 h-4 text-destructive" />
-                      </Button>
-                    )}
                     {b.status !== 'active' && (
                       <Button variant="ghost" size="sm" onClick={() => updateStatus(b.id, 'active')} disabled={loading}>
                         <RefreshCcw className="w-4 h-4" />

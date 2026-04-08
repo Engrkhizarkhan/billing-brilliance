@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Activity } from 'lucide-react';
+import { Activity, Loader2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { listPayments } from '@/services/eteaPaymentController';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import { EteaPaymentRecord } from '@/types';
 import { usePaymentStore } from '@/store/paymentStore';
 import { formatPKR } from '@/lib/formatters';
 
@@ -42,16 +44,19 @@ const ETEARealtimePayments = () => {
     setLastLiveUpdateAt(now.toISOString());
   }, [paymentVersion]);
 
+  const { data: paymentsData, loading } = useApiQuery(() => api.listEteaPayments(), [paymentVersion, liveClock]);
+  const allPayments = (paymentsData || []) as EteaPaymentRecord[];
+
   const paidPayments = useMemo(
     () =>
-      listPayments()
+      allPayments
         .filter((payment) => payment.status === 'paid')
         .sort((left, right) => {
           const leftTime = new Date(left.paidAt || left.createdAt).getTime();
           const rightTime = new Date(right.paidAt || right.createdAt).getTime();
           return rightTime - leftTime;
         }),
-    [paymentVersion, liveClock]
+    [allPayments]
   );
 
   const todayKey = liveClock.toISOString().slice(0, 10);
@@ -60,6 +65,8 @@ const ETEARealtimePayments = () => {
   );
   const todaysTotal = todaysPaidPayments.reduce((sum, payment) => sum + payment.amount, 0);
   const lastPayment = paidPayments[0] || null;
+
+  if (loading && allPayments.length === 0) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
   return (
     <div className="space-y-6 animate-fade-in">

@@ -1,19 +1,27 @@
 import { StatCard } from '@/components/StatCard';
-import { Receipt, Wallet, Activity, Megaphone, CheckCircle2 } from 'lucide-react';
-import { eteaPostings } from '@/data/mockData';
+import { Receipt, Wallet, Activity, Megaphone, CheckCircle2, Loader2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { formatPKR } from '@/lib/formatters';
 import { useNavigate } from 'react-router-dom';
-import { useMemo } from 'react';
-import { resolvePostingById } from '@/lib/eteaFinance';
+import { useEffect, useMemo } from 'react';
+import { resolvePostingById, setEteaFinanceCache } from '@/lib/eteaFinance';
 import { usePaymentStore } from '@/store/paymentStore';
-import { listPayments } from '@/services/eteaPaymentController';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import { EteaPaymentRecord, EteaPosting } from '@/types';
 
 const ETEADashboard = () => {
   const navigate = useNavigate();
   const paymentVersion = usePaymentStore((state) => state.version);
 
-  const paymentRecords = useMemo(() => listPayments(), [paymentVersion]);
+  const { data: paymentsData, loading: loadingPayments } = useApiQuery(() => api.listEteaPayments(), [paymentVersion]);
+  const paymentRecords = (paymentsData || []) as EteaPaymentRecord[];
+
+  const { data: postingsData, loading: loadingPostings } = useApiQuery(() => api.fetchPostings({}), []);
+
+  useEffect(() => {
+    if (postingsData) setEteaFinanceCache(postingsData as EteaPosting[], []);
+  }, [postingsData]);
 
   const pipelineData = useMemo(
     () => [
@@ -73,7 +81,9 @@ const ETEADashboard = () => {
 
   const pendingPayments = paymentRecords.filter((payment) => payment.status === 'pending').length;
   const verifiedTransactions = paymentRecords.filter((payment) => payment.status === 'paid' && payment.transactionId).length;
-  const activePostings = eteaPostings.filter((posting) => posting.status === 'active').length;
+  const activePostings = ((postingsData || []) as EteaPosting[]).filter((posting) => posting.status === 'active').length;
+
+  if (loadingPayments || loadingPostings) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
   return (
     <div className="space-y-6 animate-fade-in">

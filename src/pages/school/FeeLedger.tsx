@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { students, generateLedger, getActiveScholarshipsForStudent, getStudentFinancialSnapshot, updateStudentBusService } from '@/data/mockData';
-import { LedgerEntry } from '@/types';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import { LedgerEntry, Student, StudentFinancialSnapshot } from '@/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
@@ -13,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatPKR } from '@/lib/formatters';
-import { FileText, AlertTriangle, CheckCircle2, BusFront, School, Search } from 'lucide-react';
+import { FileText, AlertTriangle, CheckCircle2, BusFront, School, Search, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePaymentStore } from '@/store/paymentStore';
 
@@ -27,9 +28,9 @@ const monthLabelFromKey = (monthKey: string) => {
 const isTuitionEntry = (entry: LedgerEntry) => entry.feeHeadId === 'fh1' || /tuition/i.test(entry.description);
 const isBusEntry = (entry: LedgerEntry) => entry.feeHeadId === 'fh2' || /transport|bus/i.test(entry.description);
 
-const grossTuitionForEntry = (entry: LedgerEntry) => entry.grossTuition ?? (isTuitionEntry(entry) ? entry.debit : 0);
-const scholarshipDiscountForEntry = (entry: LedgerEntry) => entry.scholarshipDiscount ?? 0;
-const netTuitionForEntry = (entry: LedgerEntry) => entry.netTuition ?? (isTuitionEntry(entry) ? entry.debit : 0);
+const grossTuitionForEntry = (entry: LedgerEntry) => Number(entry.grossTuition ?? (isTuitionEntry(entry) ? entry.debit : 0));
+const scholarshipDiscountForEntry = (entry: LedgerEntry) => Number(entry.scholarshipDiscount ?? 0);
+const netTuitionForEntry = (entry: LedgerEntry) => Number(entry.netTuition ?? (isTuitionEntry(entry) ? entry.debit : 0));
 const currentMonthKey = () => new Date().toISOString().slice(0, 7);
 
 const feeHeadLabel = (entry: LedgerEntry) => {
@@ -42,7 +43,7 @@ const feeHeadLabel = (entry: LedgerEntry) => {
 
 const FeeLedger = () => {
   const [searchParams] = useSearchParams();
-  const defaultStudent = searchParams.get('student') || students[0]?.id || '';
+  const defaultStudent = searchParams.get('student') || '';
   const [selectedStudent, setSelectedStudent] = useState(defaultStudent);
   const [ledgerVersion, setLedgerVersion] = useState(0);
   const [busDialogOpen, setBusDialogOpen] = useState(false);
@@ -50,16 +51,67 @@ const FeeLedger = () => {
     enabled: false,
     monthlyFee: '1500',
   });
-  const defaultStudentInfo = students.find((s) => s.id === defaultStudent);
-  const [studentQuery, setStudentQuery] = useState(defaultStudentInfo ? `${defaultStudentInfo.name} — ${defaultStudentInfo.class} ${defaultStudentInfo.section} (${defaultStudentInfo.rollNumber})` : '');
+  const [studentQuery, setStudentQuery] = useState('');
   const [showStudentResults, setShowStudentResults] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState('all');
+  const [searchResults, setSearchResults] = useState<Student[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selectedStudentObj, setSelectedStudentObj] = useState<Student | null>(null);
   const paymentVersion = usePaymentStore((state) => state.version);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const student = useMemo(() => students.find(s => s.id === selectedStudent), [selectedStudent, ledgerVersion]);
-  const ledger = useMemo(() => selectedStudent ? generateLedger(selectedStudent) : [], [selectedStudent, ledgerVersion, paymentVersion]);
-  const financialSnapshot = useMemo(() => selectedStudent ? getStudentFinancialSnapshot(selectedStudent) : null, [selectedStudent, ledgerVersion, paymentVersion]);
-  const activeScholarships = useMemo(() => selectedStudent ? getActiveScholarshipsForStudent(selectedStudent) : [], [selectedStudent, ledgerVersion, paymentVersion]);
+  // Load student from URL param on mount (single fetch)
+  useEffect(() => {
+    if (!defaultStudent) return;
+    void api.getStudent(defaultStudent).then((res) => {
+      const s = res?.data;
+      if (s) {
+        setSelectedStudentObj(s);
+        setStudentQuery(`${s.name} — ${s.class} ${s.section} (${s.rollNumber})`);
+      }
+    });
+  }, []);
+
+  const doSearch = useCallback(async (q: string) => {
+    if (q.trim().length < 2) { setSearchResults([]); return; }
+    setSearching(true);
+    try {
+      const res = await api.fetchStudents({ search: q.trim(), pageSize: 15 });
+      setSearchResults((res?.data || []) as Student[]);
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
+  const handleQueryChange = (value: string) => {
+    setStudentQuery(value);
+    setShowStudentResults(true);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => void doSearch(value), 300);
+  };
+
+  useEffect(() => () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); }, []);
+
+  const { data: ledgerData } = useApiQuery(
+    () => selectedStudent ? api.getStudentLedger(selectedStudent) : Promise.resolve({ data: [] }),
+    [selectedStudent, ledgerVersion, paymentVersion]
+  );
+  const ledger = (ledgerData || []) as LedgerEntry[];
+
+  const { data: financialSnapshot } = useApiQuery(
+    () => selectedStudent ? api.getStudentSnapshot(selectedStudent) : Promise.resolve({ data: null as unknown as StudentFinancialSnapshot }),
+    [selectedStudent, ledgerVersion, paymentVersion]
+  );
+
+  const { data: scholarshipsData } = useApiQuery(
+    () => selectedStudent ? api.fetchStudentScholarships(selectedStudent) : Promise.resolve({ data: [] }),
+    [selectedStudent, ledgerVersion]
+  );
+  const activeScholarships = (scholarshipsData || []) as Array<{ name: string }>;
+
+  const student = selectedStudentObj;
 
   useEffect(() => {
     if (!student) return;
@@ -69,18 +121,7 @@ const FeeLedger = () => {
     });
   }, [student]);
 
-  const studentMatches = useMemo(() => {
-    const query = studentQuery.trim().toLowerCase();
-    const source = !query
-      ? students
-      : students.filter((s) =>
-          s.name.toLowerCase().includes(query) ||
-          s.rollNumber.toLowerCase().includes(query) ||
-          s.cnic.includes(query) ||
-          s.consumerNumber.includes(query)
-        );
-    return source.slice(0, 12);
-  }, [studentQuery]);
+  const studentMatches = searchResults;
 
   const monthOptions = useMemo(() => Array.from(new Set(ledger.map((e) => monthKeyFromDate(e.date)))), [ledger]);
 
@@ -89,25 +130,25 @@ const FeeLedger = () => {
     [ledger, selectedMonth]
   );
 
-  const totalDebit = filteredLedger.reduce((sum, e) => sum + e.debit, 0);
-  const totalCredit = filteredLedger.reduce((sum, e) => sum + e.credit, 0);
+  const totalDebit = filteredLedger.reduce((sum, e) => sum + Number(e.debit), 0);
+  const totalCredit = filteredLedger.reduce((sum, e) => sum + Number(e.credit), 0);
   const grossTuitionTotal = filteredLedger.reduce((sum, e) => sum + grossTuitionForEntry(e), 0);
   const scholarshipDiscountTotal = filteredLedger.reduce((sum, e) => sum + scholarshipDiscountForEntry(e), 0);
   const netTuitionTotal = filteredLedger.reduce((sum, e) => sum + netTuitionForEntry(e), 0);
-  const busTotal = filteredLedger.reduce((sum, e) => sum + (isBusEntry(e) ? e.debit : 0), 0);
+  const busTotal = filteredLedger.reduce((sum, e) => sum + (isBusEntry(e) ? Number(e.debit) : 0), 0);
   const outstandingAllMonths = financialSnapshot?.totalDue || 0;
   const overdueMonths = financialSnapshot?.overdueMonths || 0;
 
-  const selectStudent = (studentId: string) => {
-    const chosen = students.find((s) => s.id === studentId);
-    if (!chosen) return;
-    setSelectedStudent(chosen.id);
-    setStudentQuery(`${chosen.name} — ${chosen.class} ${chosen.section} (${chosen.rollNumber})`);
+  const selectStudent = (s: Student) => {
+    setSelectedStudent(s.id);
+    setSelectedStudentObj(s);
+    setStudentQuery(`${s.name} — ${s.class} ${s.section} (${s.rollNumber})`);
     setSelectedMonth('all');
     setShowStudentResults(false);
+    setSearchResults([]);
   };
 
-  const saveBusService = () => {
+  const saveBusService = async () => {
     if (!student) return;
 
     const monthlyFee = Number(busForm.monthlyFee);
@@ -116,42 +157,38 @@ const FeeLedger = () => {
       return;
     }
 
-    if (busForm.enabled) {
-      const startMonth = student.busServiceStartMonth || currentMonthKey();
-      const updated = updateStudentBusService(student.id, {
-        usesBusService: true,
-        busServiceStartMonth: startMonth,
-        busServiceEndMonth: null,
-        busMonthlyFee: Math.round(monthlyFee),
-      });
-
-      if (!updated) {
-        toast.error('Unable to update bus service');
+    try {
+      if (busForm.enabled) {
+        const startMonth = student.busServiceStartMonth || currentMonthKey();
+        await api.updateStudentBusService(student.id, {
+          usesBusService: true,
+          busServiceStartMonth: startMonth,
+          busServiceEndMonth: null,
+          busMonthlyFee: Math.round(monthlyFee),
+        });
+        setLedgerVersion((prev) => prev + 1);
+        setBusDialogOpen(false);
+        toast.success('Bus service enabled');
         return;
       }
 
+      await api.updateStudentBusService(student.id, {
+        usesBusService: false,
+        busServiceStartMonth: student.busServiceStartMonth || null,
+        busServiceEndMonth: currentMonthKey(),
+        busMonthlyFee: student.busMonthlyFee > 0 ? student.busMonthlyFee : Math.round(monthlyFee),
+      });
       setLedgerVersion((prev) => prev + 1);
       setBusDialogOpen(false);
-      toast.success('Bus service enabled');
-      return;
+      toast.success('Bus service disabled');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to update bus service');
     }
-
-    const updated = updateStudentBusService(student.id, {
-      usesBusService: false,
-      busServiceStartMonth: student.busServiceStartMonth || null,
-      busServiceEndMonth: currentMonthKey(),
-      busMonthlyFee: student.busMonthlyFee > 0 ? student.busMonthlyFee : Math.round(monthlyFee),
-    });
-
-    if (!updated) {
-      toast.error('Unable to update bus service');
-      return;
-    }
-
-    setLedgerVersion((prev) => prev + 1);
-    setBusDialogOpen(false);
-    toast.success('Bus service disabled');
   };
+
+  if (false) {
+    return null; // studentsLoading guard removed — search is on-demand
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -230,15 +267,16 @@ const FeeLedger = () => {
                   onFocus={() => setShowStudentResults(true)}
                   onBlur={() => window.setTimeout(() => setShowStudentResults(false), 120)}
                   onChange={(e) => {
-                    setStudentQuery(e.target.value);
-                    setShowStudentResults(true);
+                    handleQueryChange(e.target.value);
                   }}
                 />
               </div>
 
-              {showStudentResults && (
+              {showStudentResults && (studentQuery.trim().length >= 2) && (
                 <div className="absolute z-20 w-full mt-2 rounded-xl border border-border bg-card shadow-lg max-h-64 overflow-y-auto">
-                  {studentMatches.length === 0 ? (
+                  {searching ? (
+                    <p className="text-xs text-muted-foreground p-3 flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" />Searching…</p>
+                  ) : studentMatches.length === 0 ? (
                     <p className="text-xs text-muted-foreground p-3">No student matched your search.</p>
                   ) : (
                     studentMatches.map((candidate) => (
@@ -247,10 +285,10 @@ const FeeLedger = () => {
                         type="button"
                         className="w-full text-left px-3 py-2.5 hover:bg-muted/60 border-b border-border/50 last:border-b-0"
                         onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => selectStudent(candidate.id)}
+                        onClick={() => selectStudent(candidate)}
                       >
                         <p className="text-sm font-medium">{candidate.name}</p>
-                        <p className="text-[11px] text-muted-foreground">{candidate.class} {candidate.section} • {candidate.rollNumber}</p>
+                        <p className="text-[11px] text-muted-foreground">{candidate.class} {candidate.section} • Roll {candidate.rollNumber} • {candidate.consumerNumber}</p>
                       </button>
                     ))
                   )}
@@ -274,7 +312,8 @@ const FeeLedger = () => {
 
           {student && (
             <div className="flex flex-wrap gap-6 text-sm mt-4">
-              <div><span className="text-xs text-muted-foreground block">Bill ID</span><span className="font-mono font-semibold text-primary">{student.billId}</span></div>
+              <div><span className="text-xs text-muted-foreground block">Consumer #</span><span className="font-mono font-semibold text-primary">{student.consumerNumber}</span></div>
+              <div><span className="text-xs text-muted-foreground block">Bill ID</span><span className="font-mono font-semibold">{student.billId}</span></div>
               <div><span className="text-xs text-muted-foreground block">Father</span><span className="font-medium">{student.fatherName}</span></div>
               <div><span className="text-xs text-muted-foreground block">CNIC</span><span className="font-mono text-xs">{student.cnic}</span></div>
               <div><span className="text-xs text-muted-foreground block">Section</span><span className="font-medium">{student.class} {student.section}</span></div>
@@ -351,9 +390,9 @@ const FeeLedger = () => {
                 const grossTuition = grossTuitionForEntry(entry);
                 const scholarshipDiscount = scholarshipDiscountForEntry(entry);
                 const netTuition = netTuitionForEntry(entry);
-                const busFee = isBusEntry(entry) ? entry.debit : 0;
-                const otherCharges = entry.debit > 0
-                  ? Math.max(0, entry.debit - (isTuitionEntry(entry) ? netTuition : 0) - busFee)
+                const busFee = isBusEntry(entry) ? Number(entry.debit) : 0;
+                const otherCharges = Number(entry.debit) > 0
+                  ? Math.max(0, Number(entry.debit) - (isTuitionEntry(entry) ? netTuition : 0) - busFee)
                   : 0;
 
                 return (

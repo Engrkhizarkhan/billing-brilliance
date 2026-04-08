@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { auditLogs } from '@/data/mockData';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
 import { FilterBar } from '@/components/FilterBar';
 import { ExportButton } from '@/components/ExportButton';
 import { TablePagination } from '@/components/TablePagination';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ClipboardList, Plus, Pencil, Trash2, CreditCard } from 'lucide-react';
+import { ClipboardList, Plus, Pencil, Trash2, CreditCard, Loader2 } from 'lucide-react';
 import { usePaymentStore } from '@/store/paymentStore';
 
 const actionIcons: Record<string, React.ElementType> = { create: Plus, update: Pencil, delete: Trash2, payment: CreditCard };
@@ -16,16 +17,18 @@ const AuditTrail = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  void paymentVersion;
+  const { data: auditLogs, loading } = useApiQuery(() => api.fetchAuditLogs({ search: search || undefined }), [paymentVersion, search]);
 
-  const filtered = auditLogs.filter(l => l.details.toLowerCase().includes(search.toLowerCase()) || l.userName.toLowerCase().includes(search.toLowerCase()));
-  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const allLogs = (auditLogs || []) as Array<{ id: string; userId: string; userName: string; action: string; entity: string; entityId: string; details: string; createdAt: string; ipAddress: string }>;
+  const paginated = allLogs.slice((page - 1) * pageSize, page * pageSize);
+
+  if (loading) return <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin" /></div>;
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div><h1 className="page-header">Audit Trail</h1><p className="page-description">Track all system actions across all portals</p></div>
-        <ExportButton data={filtered.map(l => ({ User: l.userName, Action: l.action, Entity: l.entity, Details: l.details, IP: l.ip, Timestamp: l.timestamp }))} filename="audit-trail" />
+        <ExportButton data={allLogs.map(l => ({ User: l.userName, Action: l.action, Entity: l.entity, Details: l.details, IP: l.ipAddress, Timestamp: l.createdAt }))} filename="audit-trail" />
       </div>
       <FilterBar searchPlaceholder="Search audit logs…" onSearch={v => { setSearch(v); setPage(1); }} />
       <div className="table-container">
@@ -51,14 +54,14 @@ const AuditTrail = () => {
                   <TableCell><span className="capitalize text-xs font-medium">{l.action}</span></TableCell>
                   <TableCell><span className="capitalize text-xs bg-muted px-2 py-0.5 rounded-md">{l.entity}</span></TableCell>
                   <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{l.details}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">{l.ip}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{new Date(l.timestamp).toLocaleString()}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{l.ipAddress}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{l.createdAt ? new Date(l.createdAt).toLocaleString() : '—'}</TableCell>
                 </TableRow>
               );
             })}
           </TableBody>
         </Table>
-        <TablePagination total={filtered.length} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
+        <TablePagination total={allLogs.length} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </div>
     </div>
   );

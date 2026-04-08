@@ -6,11 +6,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Ban, Upload, Download, FileText, Plus, RefreshCcw } from 'lucide-react';
 import { toast } from 'sonner';
-import { mockApi } from '@/lib/mockApi';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { User } from '@/types';
+import { Biller, User } from '@/types';
 
 const UserManagement = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -24,15 +25,20 @@ const UserManagement = () => {
     email: '',
     role: 'school' as User['role'],
     password: '',
-    schoolRef: '',
+    tenantId: '',
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
+  const { data: billersData } = useApiQuery(() => api.fetchBillers({ pageSize: 100 }), []);
+
+  const billers = (billersData || []) as Biller[];
+  const schoolTenants = billers.filter((b) => b.type === 'school');
+  const eteaTenants = billers.filter((b) => b.type === 'etea');
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const response = await mockApi.fetchUsers({});
+      const response = await api.fetchUsers({ pageSize: 100 });
       setUsers(response.data);
       setLoading(false);
     };
@@ -48,7 +54,7 @@ const UserManagement = () => {
 
   const banUser = async (id: string) => {
     setLoading(true);
-    const updated = await mockApi.updateUserStatus(id, 'banned');
+    const updated = await api.updateUserStatus(id, 'banned');
     if (updated.data) {
       setUsers((prev) => prev.map((u) => (u.id === id ? updated.data! : u)));
       toast.error('User has been banned');
@@ -58,7 +64,7 @@ const UserManagement = () => {
 
   const unbanUser = async (id: string) => {
     setLoading(true);
-    const updated = await mockApi.updateUserStatus(id, 'active');
+    const updated = await api.updateUserStatus(id, 'active');
     if (updated.data) {
       setUsers((prev) => prev.map((u) => (u.id === id ? updated.data! : u)));
       toast.success('User reinstated');
@@ -72,18 +78,23 @@ const UserManagement = () => {
       return;
     }
 
+    if (createForm.role !== 'admin' && !createForm.tenantId) {
+      toast.error('Please select a tenant for non-admin users');
+      return;
+    }
+
     setLoading(true);
     try {
-      const response = await mockApi.createUser({
+      const response = await api.createUser({
         name: createForm.name,
         email: createForm.email,
         role: createForm.role,
         password: createForm.password || undefined,
-        schoolRef: createForm.role === 'school' ? (createForm.schoolRef || undefined) : undefined,
+        tenantId: createForm.role !== 'admin' ? createForm.tenantId : undefined,
       });
       setUsers((prev) => [...prev, response.data.user]);
       setCreateDialogOpen(false);
-      setCreateForm({ name: '', email: '', role: 'school', password: '', schoolRef: '' });
+      setCreateForm({ name: '', email: '', role: 'school', password: '', tenantId: '' });
 
       if (response.data.user.role === 'school') {
         toast.success(`School user created. Password: ${response.data.defaultPassword}. Ref: ${response.data.user.schoolRef}`);
@@ -98,17 +109,27 @@ const UserManagement = () => {
   };
 
   const handleBulkUpload = async () => {
+    if (!schoolTenants[0] || !eteaTenants[0]) {
+      toast.error('Please create at least one school tenant and one ETEA tenant first');
+      return;
+    }
+
     setLoading(true);
     const bulkPayload = [
-      { name: 'Saad Qureshi', email: 'saad@school.com', role: 'school' as User['role'] },
-      { name: 'Farah Naz', email: 'farah@agency.com', role: 'etea' as User['role'] },
-      { name: 'Kashif Raza', email: 'kashif@school.com', role: 'school' as User['role'] },
+      { name: 'Saad Qureshi', email: 'saad@school.com', role: 'school' as User['role'], tenantId: schoolTenants[0].id },
+      { name: 'Farah Naz', email: 'farah@agency.com', role: 'etea' as User['role'], tenantId: eteaTenants[0].id },
+      { name: 'Kashif Raza', email: 'kashif@school.com', role: 'school' as User['role'], tenantId: schoolTenants[0].id },
     ];
-    const created = await Promise.all(bulkPayload.map((u) => mockApi.createUser(u)));
-    setUsers((prev) => [...prev, ...created.map((c) => c.data.user)]);
-    setBulkDialogOpen(false);
-    toast.success('3 users imported successfully (default passwords set)');
-    setLoading(false);
+    try {
+      const created = await Promise.all(bulkPayload.map((u) => api.createUser(u)));
+      setUsers((prev) => [...prev, ...created.map((c) => c.data.user)]);
+      setBulkDialogOpen(false);
+      toast.success('3 users imported successfully (default passwords set)');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Bulk import failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const downloadTemplate = () => {
@@ -148,7 +169,7 @@ const UserManagement = () => {
                 </div>
                 <div className="space-y-2">
                   <Label>Role</Label>
-                  <Select value={createForm.role} onValueChange={(v) => setCreateForm({ ...createForm, role: v as User['role'] })}>
+                  <Select value={createForm.role} onValueChange={(v) => setCreateForm({ ...createForm, role: v as User['role'], tenantId: '' })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="admin">Admin</SelectItem>
@@ -157,6 +178,19 @@ const UserManagement = () => {
                     </SelectContent>
                   </Select>
                 </div>
+                {createForm.role !== 'admin' && (
+                  <div className="space-y-2">
+                    <Label>Tenant</Label>
+                    <Select value={createForm.tenantId} onValueChange={(v) => setCreateForm({ ...createForm, tenantId: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select tenant" /></SelectTrigger>
+                      <SelectContent>
+                        {(createForm.role === 'school' ? schoolTenants : eteaTenants).map((tenant) => (
+                          <SelectItem key={tenant.id} value={tenant.id}>{tenant.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label>Password (optional)</Label>
                   <Input
@@ -166,16 +200,6 @@ const UserManagement = () => {
                     placeholder="Leave empty to auto-generate"
                   />
                 </div>
-                {createForm.role === 'school' && (
-                  <div className="space-y-2">
-                    <Label>School Reference (optional)</Label>
-                    <Input
-                      value={createForm.schoolRef}
-                      onChange={(e) => setCreateForm({ ...createForm, schoolRef: e.target.value })}
-                      placeholder="e.g. SCH-1001 (leave empty for new)"
-                    />
-                  </div>
-                )}
                 <p className="text-xs text-muted-foreground">Default password is generated per user and shown once on create.</p>
                 <Button className="w-full" onClick={handleCreateUser} disabled={loading}>Create User</Button>
               </div>
@@ -230,7 +254,7 @@ const UserManagement = () => {
       />
 
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <RefreshCcw className="w-3.5 h-3.5" /> Accounts are mock-only; ensure real flows enforce password reset on first login.
+        <RefreshCcw className="w-3.5 h-3.5" /> Accounts are tenant-scoped; school and ETEA users must be linked to a tenant.
       </div>
 
       <div className="table-container">
@@ -254,7 +278,9 @@ const UserManagement = () => {
                 <TableCell className="font-mono text-xs text-muted-foreground">{u.schoolRef || '-'}</TableCell>
                 <TableCell><StatusBadge status={u.status} /></TableCell>
                 <TableCell>
-                  {u.status !== 'banned' ? (
+                  {u.isProtected ? (
+                    <span className="text-xs font-medium text-primary">Protected via env</span>
+                  ) : u.status !== 'banned' ? (
                     <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => banUser(u.id)} disabled={loading}>
                       <Ban className="w-3 h-3 mr-1" /> Ban
                     </Button>

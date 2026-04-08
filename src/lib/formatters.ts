@@ -1,6 +1,7 @@
 // PKR currency formatting
 export const formatPKR = (amount: number): string => {
-  return `₨ ${amount.toLocaleString('en-PK')}`;
+  const n = Number(amount);
+  return `₨ ${(isNaN(n) ? 0 : n).toLocaleString('en-PK')}`;
 };
 
 // CNIC auto-format: XXXXX-XXXXXXX-X

@@ -1,5 +1,4 @@
-import { useMemo, useState } from 'react';
-import { applicants, services } from '@/data/mockData';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -10,7 +9,10 @@ import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/StatusBadge';
 import { FilterBar } from '@/components/FilterBar';
 import { toast } from 'sonner';
-import { Plus, Users, CheckCircle2, Search } from 'lucide-react';
+import { Plus, Users, CheckCircle2, Search, Loader2 } from 'lucide-react';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import { Applicant, Service } from '@/types';
 
 interface ServiceAssignment {
   id: string;
@@ -25,15 +27,24 @@ interface ServiceAssignment {
   nextDue: string;
 }
 
-const initialAssignments: ServiceAssignment[] = [
-  { id: 'sa1', applicantName: 'Tariq Mehmood', cnic: '35201-1234567-1', consumerNumber: applicants[0].consumerNumber, serviceName: 'Visa Processing', amount: 50000, paymentType: 'one-time', status: 'active', assignedDate: '2025-01-15', nextDue: '2025-02-15' },
-  { id: 'sa2', applicantName: 'Nazia Bibi', cnic: '35202-2345678-2', consumerNumber: applicants[1].consumerNumber, serviceName: 'Document Attestation', amount: 30000, paymentType: 'multiple', status: 'pending', assignedDate: '2025-02-01', nextDue: '2025-04-01' },
-  { id: 'sa3', applicantName: 'Rafiq Ahmad', cnic: '35203-3456789-3', consumerNumber: applicants[2].consumerNumber, serviceName: 'Monthly Consultation', amount: 10000, paymentType: 'recurring', status: 'active', assignedDate: '2025-01-01', nextDue: '2025-04-01' },
-  { id: 'sa4', applicantName: 'Saira Bano', cnic: '35204-4567890-4', consumerNumber: applicants[3].consumerNumber, serviceName: 'Immigration Filing', amount: 75000, paymentType: 'one-time', status: 'completed', assignedDate: '2025-01-10', nextDue: '-' },
-];
+const seedAssignments = (apps: Applicant[]): ServiceAssignment[] => {
+  if (apps.length < 4) return [];
+  return [
+    { id: 'sa1', applicantName: 'Tariq Mehmood', cnic: '35201-1234567-1', consumerNumber: apps[0].consumerNumber, serviceName: 'Visa Processing', amount: 50000, paymentType: 'one-time', status: 'active', assignedDate: '2025-01-15', nextDue: '2025-02-15' },
+    { id: 'sa2', applicantName: 'Nazia Bibi', cnic: '35202-2345678-2', consumerNumber: apps[1].consumerNumber, serviceName: 'Document Attestation', amount: 30000, paymentType: 'multiple', status: 'pending', assignedDate: '2025-02-01', nextDue: '2025-04-01' },
+    { id: 'sa3', applicantName: 'Rafiq Ahmad', cnic: '35203-3456789-3', consumerNumber: apps[2].consumerNumber, serviceName: 'Monthly Consultation', amount: 10000, paymentType: 'recurring', status: 'active', assignedDate: '2025-01-01', nextDue: '2025-04-01' },
+    { id: 'sa4', applicantName: 'Saira Bano', cnic: '35204-4567890-4', consumerNumber: apps[3].consumerNumber, serviceName: 'Immigration Filing', amount: 75000, paymentType: 'one-time', status: 'completed', assignedDate: '2025-01-10', nextDue: '-' },
+  ];
+};
 
 const ETEAPaymentPrograms = () => {
-  const [assignments, setAssignments] = useState<ServiceAssignment[]>(initialAssignments);
+  const { data: applicantsData, loading: loadingApplicants } = useApiQuery(() => api.fetchApplicants({}), []);
+  const { data: servicesData, loading: loadingServices } = useApiQuery(() => api.fetchServices(), []);
+  const applicantsList = (applicantsData || []) as Applicant[];
+  const servicesList = (servicesData || []) as Service[];
+
+  const [assignments, setAssignments] = useState<ServiceAssignment[]>([]);
+  const [seeded, setSeeded] = useState(false);
   const [search, setSearch] = useState('');
   const [assignOpen, setAssignOpen] = useState(false);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
@@ -42,6 +53,13 @@ const ETEAPaymentPrograms = () => {
   const [bulkApplicantSearch, setBulkApplicantSearch] = useState('');
   const [singleApplicantSearch, setSingleApplicantSearch] = useState('');
 
+  useEffect(() => {
+    if (!seeded && applicantsList.length >= 4) {
+      setAssignments(seedAssignments(applicantsList));
+      setSeeded(true);
+    }
+  }, [applicantsList, seeded]);
+
   const filtered = assignments.filter((a) =>
     a.applicantName.toLowerCase().includes(search.toLowerCase()) || a.serviceName.toLowerCase().includes(search.toLowerCase())
   );
@@ -49,37 +67,37 @@ const ETEAPaymentPrograms = () => {
   const filteredBulkApplicants = useMemo(() => {
     const query = bulkApplicantSearch.trim().toLowerCase();
     const source = !query
-      ? applicants
-      : applicants.filter((applicant) =>
+      ? applicantsList
+      : applicantsList.filter((applicant) =>
           applicant.name.toLowerCase().includes(query) ||
           applicant.cnic.includes(bulkApplicantSearch) ||
           applicant.consumerNumber.includes(bulkApplicantSearch)
         );
     return source.slice(0, 150);
-  }, [bulkApplicantSearch]);
+  }, [bulkApplicantSearch, applicantsList]);
 
   const filteredSingleApplicants = useMemo(() => {
     const query = singleApplicantSearch.trim().toLowerCase();
     const source = !query
-      ? applicants
-      : applicants.filter((applicant) =>
+      ? applicantsList
+      : applicantsList.filter((applicant) =>
           applicant.name.toLowerCase().includes(query) ||
           applicant.cnic.includes(singleApplicantSearch) ||
           applicant.consumerNumber.includes(singleApplicantSearch)
         );
     return source.slice(0, 150);
-  }, [singleApplicantSearch]);
+  }, [singleApplicantSearch, applicantsList]);
 
   const handleAssign = () => {
     if (!selectedService || selectedApplicants.length === 0) {
       toast.error('Select a service and at least one applicant');
       return;
     }
-    const service = services.find((s) => s.id === selectedService);
+    const service = servicesList.find((s) => s.id === selectedService);
     if (!service) return;
 
     const newAssignments: ServiceAssignment[] = selectedApplicants.map((aid, i) => {
-      const applicant = applicants.find((a) => a.id === aid);
+      const applicant = applicantsList.find((a) => a.id === aid);
       return {
         id: `sa-new-${Date.now()}-${i}`,
         applicantName: applicant?.name || 'Unknown',
@@ -118,6 +136,8 @@ const ETEAPaymentPrograms = () => {
     setSelectedApplicants((prev) => Array.from(new Set([...prev, ...candidateApplicantIds])));
   };
 
+  if (loadingApplicants || loadingServices) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -149,7 +169,7 @@ const ETEAPaymentPrograms = () => {
                   <Select value={selectedService} onValueChange={setSelectedService}>
                     <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Choose a service" /></SelectTrigger>
                     <SelectContent>
-                      {services.filter(s => s.status === 'active').map((s) => (
+                      {servicesList.filter(s => s.status === 'active').map((s) => (
                         <SelectItem key={s.id} value={s.id}>
                           {s.name} — ₨ {s.amount.toLocaleString()} ({s.paymentType})
                         </SelectItem>
@@ -202,7 +222,7 @@ const ETEAPaymentPrograms = () => {
                     <div>
                       <p className="text-xs font-semibold text-primary">Ready to assign</p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {services.find(s => s.id === selectedService)?.name} will be assigned to {selectedApplicants.length} applicant(s)
+                        {servicesList.find(s => s.id === selectedService)?.name} will be assigned to {selectedApplicants.length} applicant(s)
                       </p>
                     </div>
                   </div>
@@ -237,7 +257,7 @@ const ETEAPaymentPrograms = () => {
                   <Select value={selectedService} onValueChange={setSelectedService}>
                     <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Choose a service" /></SelectTrigger>
                     <SelectContent>
-                      {services.filter(s => s.status === 'active').map((s) => (
+                      {servicesList.filter(s => s.status === 'active').map((s) => (
                         <SelectItem key={s.id} value={s.id}>
                           {s.name} — ₨ {s.amount.toLocaleString()}
                         </SelectItem>

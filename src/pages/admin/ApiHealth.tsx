@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { billInquiry, billPayment, fetchBundle, onebillConfig } from '@/services/onebillService';
-import { students } from '@/data/mockData';
+import { api } from '@/lib/api';
+import { useApiQuery } from '@/hooks/useApiQuery';
 import { toast } from 'sonner';
 import { Shield, Activity, Wifi } from 'lucide-react';
 
@@ -13,14 +15,23 @@ const ApiHealth = () => {
   const [inquiryResult, setInquiryResult] = useState('');
   const [paymentResult, setPaymentResult] = useState('');
   const [bundleResult, setBundleResult] = useState('');
+  const [consumerNumber, setConsumerNumber] = useState('');
+  const [pcid, setPcid] = useState('MBLINK01');
   const [loading, setLoading] = useState<string>('');
 
-  const sampleConsumer = students[0]?.consumerNumber || '1234561001000000000001';
+  const { data: studentsData } = useApiQuery(() => api.fetchStudents({ pageSize: 1 }), []);
+  const sampleConsumer = ((studentsData as Array<{ consumerNumber?: string }>) || [])[0]?.consumerNumber || '1234561001000000000001';
+
+  useEffect(() => {
+    if (!consumerNumber) {
+      setConsumerNumber(sampleConsumer);
+    }
+  }, [sampleConsumer, consumerNumber]);
 
   const runInquiry = async () => {
     setLoading('inquiry');
     try {
-      const result = await billInquiry({ consumerNumber: sampleConsumer });
+      const result = await billInquiry({ consumerNumber: consumerNumber.trim() || sampleConsumer });
       setInquiryResult(format(result));
       toast.success('Inquiry ok');
     } catch (error) {
@@ -35,7 +46,7 @@ const ApiHealth = () => {
     setLoading('payment');
     try {
       const result = await billPayment({
-        consumerNumber: sampleConsumer,
+        consumerNumber: consumerNumber.trim() || sampleConsumer,
         amount: 15000,
         transactionId: `TXN-${Date.now()}`,
         paidAt: new Date().toISOString(),
@@ -54,7 +65,7 @@ const ApiHealth = () => {
   const runBundle = async () => {
     setLoading('bundle');
     try {
-      const result = await fetchBundle();
+      const result = await fetchBundle(pcid.trim() || 'MBLINK01');
       setBundleResult(format(result));
       toast.success('FetchBundle ok');
     } catch (error) {
@@ -83,7 +94,7 @@ const ApiHealth = () => {
             <CardTitle className="text-base flex items-center gap-2"><Activity className="w-4 h-4" /> BillInquiry</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-xs text-muted-foreground">Consumer #: {sampleConsumer}</p>
+            <Input value={consumerNumber} onChange={(e) => setConsumerNumber(e.target.value)} placeholder="Enter consumer number" className="font-mono text-xs" />
             <Button size="sm" onClick={runInquiry} disabled={loading === 'inquiry'} className="rounded-lg">{loading === 'inquiry' ? 'Running…' : 'Run Inquiry'}</Button>
             <Textarea value={inquiryResult} readOnly rows={8} className="font-mono text-xs" placeholder="Inquiry response" />
           </CardContent>
@@ -94,7 +105,7 @@ const ApiHealth = () => {
             <CardTitle className="text-base flex items-center gap-2"><Wifi className="w-4 h-4" /> BillPayment</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-xs text-muted-foreground">Marks mock payment paid and updates ledgers</p>
+            <p className="text-xs text-muted-foreground">Posts a payment using the consumer number above</p>
             <Button size="sm" onClick={runPayment} disabled={loading === 'payment'} className="rounded-lg">{loading === 'payment' ? 'Posting…' : 'Run Payment'}</Button>
             <Textarea value={paymentResult} readOnly rows={8} className="font-mono text-xs" placeholder="Payment response" />
           </CardContent>
@@ -105,7 +116,8 @@ const ApiHealth = () => {
             <CardTitle className="text-base flex items-center gap-2"><Activity className="w-4 h-4" /> FetchBundle</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-xs text-muted-foreground">Predefined billing packages for schools</p>
+            <Input value={pcid} onChange={(e) => setPcid(e.target.value)} placeholder="PCID (e.g. MBLINK01)" className="font-mono text-xs" />
+            <p className="text-xs text-muted-foreground">Returns 1LINK FetchBundle format: companyId, responseCode, billerName, bundleDetails</p>
             <Button size="sm" onClick={runBundle} disabled={loading === 'bundle'} className="rounded-lg">{loading === 'bundle' ? 'Fetching…' : 'Run FetchBundle'}</Button>
             <Textarea value={bundleResult} readOnly rows={8} className="font-mono text-xs" placeholder="Bundle response" />
           </CardContent>
