@@ -34,7 +34,7 @@ const generateTokens = (user) => {
 
 const login = async (req, res, next) => {
   try {
-    const { email, password, role } = req.body;
+    const { email, password } = req.body;
 
     const [rows] = await pool.query(
       'SELECT * FROM users WHERE email = ? AND deleted_at IS NULL',
@@ -46,10 +46,6 @@ const login = async (req, res, next) => {
     }
 
     const user = rows[0];
-
-    if (user.role !== role) {
-      throw new AppError('Role mismatch', 401, 'AUTH_FAILED');
-    }
 
     if (user.status !== 'active') {
       throw new AppError('Account is not active', 403, 'ACCOUNT_INACTIVE');

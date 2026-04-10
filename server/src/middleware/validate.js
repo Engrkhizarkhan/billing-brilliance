@@ -3,7 +3,6 @@ const { body, param, query } = require('express-validator');
 const loginValidation = [
   body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-  body('role').isIn(['admin', 'school', 'etea']).withMessage('Role must be admin, school, or etea'),
 ];
 
 const createUserValidation = [

@@ -1,12 +1,12 @@
 import { create } from 'zustand';
-import { UserRole, User } from '@/types';
+import { User } from '@/types';
 import { api } from '@/lib/api';
 import { setTokens, clearTokens, getAccessToken } from '@/lib/apiClient';
 
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string, role: UserRole) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   restoreSession: () => Promise<void>;
 }
@@ -14,8 +14,8 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isAuthenticated: false,
-  login: async (email: string, password: string, role: UserRole) => {
-    const response = await api.login(email, password, role);
+  login: async (email: string, password: string) => {
+    const response = await api.login(email, password);
     if (response.data) {
       setTokens(response.data.token, response.data.refreshToken);
       set({

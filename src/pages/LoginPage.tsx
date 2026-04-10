@@ -1,18 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
-import { UserRole } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Lock, Mail, Building2, GraduationCap, Briefcase, Shield, ArrowRight, CheckCircle2 } from 'lucide-react';
-
-const roles: { value: UserRole; label: string; desc: string; icon: React.ElementType }[] = [
-  { value: 'admin', label: 'Admin', desc: 'Platform management', icon: Shield },
-  { value: 'school', label: 'School', desc: 'Fee & student management', icon: GraduationCap },
-  { value: 'etea', label: 'ETEA', desc: 'Posting & payment management', icon: Briefcase },
-];
+import { Lock, Mail, Building2, CheckCircle2, ArrowRight } from 'lucide-react';
 
 const features = [
   'Multi-biller management with real-time reconciliation',
@@ -24,7 +17,6 @@ const features = [
 const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<UserRole>('admin');
   const [loading, setLoading] = useState(false);
   const login = useAuthStore((s) => s.login);
   const navigate = useNavigate();
@@ -32,11 +24,12 @@ const LoginPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const success = await login(email, password, role);
+    const success = await login(email, password);
     setLoading(false);
     if (success) {
       toast.success('Signed in successfully');
-      navigate(`/${role}`);
+      const user = useAuthStore.getState().user;
+      navigate(`/${user!.role}`);
     } else {
       toast.error('Invalid credentials');
     }
@@ -106,28 +99,6 @@ const LoginPage = () => {
           <p className="text-sm text-muted-foreground mt-1.5 mb-8">Sign in to access your dashboard</p>
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Role selector */}
-            <div className="grid grid-cols-3 gap-2.5">
-              {roles.map((r) => (
-                <button
-                  key={r.value}
-                  type="button"
-                  onClick={() => setRole(r.value)}
-                  className={`flex flex-col items-center gap-1.5 p-3.5 rounded-xl border-2 transition-all text-center ${
-                    role === r.value
-                      ? 'border-primary bg-primary/5 shadow-sm shadow-primary/10'
-                      : 'border-border hover:border-primary/30 hover:bg-muted/50'
-                  }`}
-                >
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${role === r.value ? 'bg-primary/10' : 'bg-muted'}`}>
-                    <r.icon className={`w-4 h-4 ${role === r.value ? 'text-primary' : 'text-muted-foreground'}`} />
-                  </div>
-                  <span className={`text-xs font-semibold ${role === r.value ? 'text-primary' : 'text-foreground'}`}>{r.label}</span>
-                  <span className="text-[10px] text-muted-foreground leading-tight">{r.desc}</span>
-                </button>
-              ))}
-            </div>
-
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label className="text-xs font-semibold">Email address</Label>
@@ -137,7 +108,7 @@ const LoginPage = () => {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder={role === 'admin' ? 'admin@company.com' : role === 'school' ? 'user@school.edu' : 'user@etea.gov.pk'}
+                    placeholder="your@email.com"
                     className="pl-10 h-11 text-sm rounded-xl"
                     required
                   />

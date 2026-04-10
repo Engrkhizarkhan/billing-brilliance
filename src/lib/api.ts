@@ -28,9 +28,9 @@ export type PaginationMeta = { page: number; pageSize: number; total: number };
 
 // ---- Auth ----
 export const api = {
-  async login(email: string, password: string, role: User['role']): Promise<ApiResponse<{ token: string; refreshToken: string; user: User } | null>> {
+  async login(email: string, password: string): Promise<ApiResponse<{ token: string; refreshToken: string; user: User } | null>> {
     try {
-      return await post<ApiResponse<{ token: string; refreshToken: string; user: User }>>('/auth/login', { email, password, role }, { skipAuth: true });
+      return await post<ApiResponse<{ token: string; refreshToken: string; user: User }>>('/auth/login', { email, password }, { skipAuth: true });
     } catch (e) {
       return { data: null, message: e instanceof Error ? e.message : 'Login failed' };
     }

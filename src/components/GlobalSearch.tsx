@@ -3,12 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
+import { useAuthStore } from '@/store/authStore';
 import { Student, Transaction } from '@/types';
 import { GraduationCap, CreditCard, Search } from 'lucide-react';
 
 export const GlobalSearch = () => {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
+  const isAdmin = user?.role === 'admin';
+  const isSchool = user?.role === 'school';
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -20,15 +24,15 @@ export const GlobalSearch = () => {
 
   const [query, setQuery] = useState('');
 
-  // Fetch data only when dialog is open
-  const { data: studentsData } = useApiQuery(() => open ? api.fetchStudents({ pageSize: 500 }) : Promise.resolve({ data: [] }), [open]);
-  const { data: txnData } = useApiQuery(() => open ? api.fetchTransactions({ pageSize: 500 }) : Promise.resolve({ data: [] }), [open]);
+  // Only fetch data relevant to the user's role
+  const { data: studentsData } = useApiQuery(() => open && isSchool ? api.fetchStudents({ pageSize: 500 }) : Promise.resolve({ data: [] }), [open, isSchool]);
+  const { data: txnData } = useApiQuery(() => open && isAdmin ? api.fetchTransactions({ pageSize: 500 }) : Promise.resolve({ data: [] }), [open, isAdmin]);
 
   const studentsList = (studentsData || []) as Student[];
   const transactionsList = (txnData || []) as Transaction[];
 
-  const filteredStudents = useMemo(() => query.length > 1 ? studentsList.filter(s => s.name.toLowerCase().includes(query.toLowerCase()) || s.consumerNumber.includes(query)).slice(0, 5) : [], [query, studentsList]);
-  const filteredTxns = useMemo(() => query.length > 1 ? transactionsList.filter(t => t.transactionId.toLowerCase().includes(query.toLowerCase()) || t.consumerNumber.includes(query)).slice(0, 5) : [], [query, transactionsList]);
+  const filteredStudents = useMemo(() => isSchool && query.length > 1 ? studentsList.filter(s => s.name.toLowerCase().includes(query.toLowerCase()) || s.consumerNumber.includes(query)).slice(0, 5) : [], [query, studentsList, isSchool]);
+  const filteredTxns = useMemo(() => isAdmin && query.length > 1 ? transactionsList.filter(t => t.transactionId.toLowerCase().includes(query.toLowerCase()) || t.consumerNumber.includes(query)).slice(0, 5) : [], [query, transactionsList, isAdmin]);
 
   return (
     <>

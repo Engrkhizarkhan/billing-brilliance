@@ -8,6 +8,7 @@
     "dev": "nodemon src/index.js",
     "migrate": "node src/db/migrate.js",
     "seed": "node src/db/seed.js",
+    "restdb": "node src/db/reset.js",
     "migrate:fresh": "node src/db/migrate.js --fresh",
     "test": "jest --detectOpenHandles --forceExit",
     "test:watch": "jest --watch",

@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
 import { Loader2 } from "lucide-react";
+import type { UserRole } from "@/types";
 import LoginPage from "./pages/LoginPage";
 import DashboardLayout from "./components/DashboardLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -40,6 +41,14 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+/** Redirects unauthenticated users to /login and cross-role intruders to their own dashboard. */
+const ProtectedRoute = ({ requiredRole }: { requiredRole: UserRole }) => {
+  const user = useAuthStore((s) => s.user);
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== requiredRole) return <Navigate to={`/${user.role}`} replace />;
+  return <DashboardLayout />;
+};
+
 const AppRoutes = () => {
   const [restoring, setRestoring] = useState(true);
   const restoreSession = useAuthStore((s) => s.restoreSession);
@@ -61,7 +70,7 @@ const AppRoutes = () => {
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<LoginPage />} />
           
-          <Route path="/admin" element={<DashboardLayout />}>
+          <Route path="/admin" element={<ProtectedRoute requiredRole="admin" />}>
             <Route index element={<AdminDashboard />} />
             <Route path="billers" element={<BillerManagement />} />
             <Route path="users" element={<UserManagement />} />
@@ -73,7 +82,7 @@ const AppRoutes = () => {
             <Route path="onelink-sandbox" element={<OneLinkSandbox />} />
           </Route>
 
-          <Route path="/school" element={<DashboardLayout />}>
+          <Route path="/school" element={<ProtectedRoute requiredRole="school" />}>
             <Route index element={<SchoolDashboard />} />
             <Route path="students" element={<StudentList />} />
             <Route path="fee-plans" element={<FeePlans />} />
@@ -90,7 +99,7 @@ const AppRoutes = () => {
             <Route path="settings" element={<SchoolSettings />} />
           </Route>
 
-          <Route path="/etea" element={<DashboardLayout />}>
+          <Route path="/etea" element={<ProtectedRoute requiredRole="etea" />}>
             <Route index element={<ETEADashboard />} />
             <Route path="invoices" element={<ETEAInvoices />} />
             <Route path="payments" element={<ETEAPayments />} />
