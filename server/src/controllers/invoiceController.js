@@ -97,13 +97,28 @@ const updateInvoiceStatus = async (req, res, next) => {
     const [existing] = await pool.query(`SELECT * FROM invoices ${where}`, params);
     if (existing.length === 0) throw new AppError('Invoice not found', 404);
 
-    const updates = { status };
-    if (status === 'paid') updates.paid_at = new Date();
-
+    const now = new Date();
     await pool.query(
       `UPDATE invoices SET status = ?, paid_at = ? WHERE id = ?`,
-      [status, status === 'paid' ? new Date() : null, req.params.id]
+      [status, status === 'paid' ? now : null, req.params.id]
     );
+
+    // Apply late fee charge to ledger when manually marking paid after due date
+    if (status === 'paid') {
+      const inv = existing[0];
+      const lateFeeAmt = parseFloat(inv.late_fee || 0);
+      const dueDate = new Date(inv.due_date);
+      if (lateFeeAmt > 0 && now > dueDate && !inv.late_fee_applied) {
+        const monthLabel = (inv.month || String(inv.due_date).slice(0, 7));
+        await pool.query(
+          `INSERT INTO ledger_entries (id, tenant_id, student_id, date, description, debit, credit, balance, reference, entry_type)
+           VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, 'late_fee')`,
+          [uuidv4(), req.tenantId || inv.tenant_id, inv.student_id, now.toISOString().slice(0, 10),
+           `Late Fee — ${monthLabel}`, lateFeeAmt, lateFeeAmt, inv.invoice_number]
+        );
+        await pool.query('UPDATE invoices SET late_fee_applied = 1 WHERE id = ?', [req.params.id]);
+      }
+    }
 
     await auditLog(req, 'update', 'invoice', req.params.id, `Invoice status → ${status}`);
     await createRequestNotification(req, {
@@ -119,6 +134,29 @@ const updateInvoiceStatus = async (req, res, next) => {
   }
 };
 
+const deleteInvoice = async (req, res, next) => {
+  try {
+    let where = 'WHERE id = ? AND deleted_at IS NULL';
+    const params = [req.params.id];
+    if (req.tenantId) { where += ' AND tenant_id = ?'; params.push(req.tenantId); }
+
+    const [existing] = await pool.query(`SELECT * FROM invoices ${where}`, params);
+    if (existing.length === 0) throw new AppError('Invoice not found', 404);
+
+    if (existing[0].status !== 'pending') {
+      throw new AppError('Only pending invoices can be deleted', 400);
+    }
+
+    await pool.query('UPDATE invoices SET deleted_at = NOW() WHERE id = ?', [req.params.id]);
+    await auditLog(req, 'delete', 'invoice', req.params.id, `Invoice ${existing[0].invoice_number} deleted`);
+
+    res.json({ data: true, message: `Invoice ${existing[0].invoice_number} deleted` });
+  } catch (err) {
+    next(err);
+  }
+};
+
+
 const generateInvoicesFromAssignments = async (req, res, next) => {
   try {
     const tenantId = req.tenantId || req.body.tenantId;
@@ -127,12 +165,13 @@ const generateInvoicesFromAssignments = async (req, res, next) => {
     const month = String(req.body.month || new Date().toISOString().slice(0, 7));
     const [assignmentRows] = await pool.query(
       `SELECT ppa.id as assignment_id, ppa.student_id, ppa.next_due_date, s.name as student_name, s.consumer_number,
-              fp.id as fee_plan_id, fp.name as fee_plan_name, fp.amount, fp.due_day, fp.late_fee,
+              fp.id as fee_plan_id, fp.name as fee_plan_name, fp.amount, fp.due_day, fp.late_fee, fp.frequency,
               s.uses_bus_service, s.bus_service_start_month, s.bus_service_end_month, s.bus_monthly_fee
        FROM payment_plan_assignments ppa
        JOIN students s ON s.id = ppa.student_id AND s.deleted_at IS NULL
        JOIN fee_plans fp ON fp.id = ppa.fee_plan_id AND fp.deleted_at IS NULL
-       WHERE ppa.tenant_id = ? AND ppa.status = 'active'`,
+       WHERE ppa.tenant_id = ? AND ppa.status = 'active'
+         AND (fp.plan_type = 'tuition' OR fp.plan_type IS NULL)`,
       [tenantId]
     );
 
@@ -228,6 +267,14 @@ const generateInvoicesFromAssignments = async (req, res, next) => {
       }
 
       created += 1;
+
+      // Auto-complete one-time plans so they don't get charged again on the next run
+      if ((assignment.frequency || '').toLowerCase() === 'one-time') {
+        await pool.query(
+          "UPDATE payment_plan_assignments SET status = 'completed' WHERE id = ?",
+          [assignment.assignment_id]
+        );
+      }
     }
 
     await auditLog(req, 'create', 'invoice_batch', month, `Generated ${created} invoice(s) for ${month}`);
@@ -244,4 +291,4 @@ const generateInvoicesFromAssignments = async (req, res, next) => {
   }
 };
 
-module.exports = { fetchInvoices, getInvoice, createInvoice, updateInvoiceStatus, generateInvoicesFromAssignments };
+module.exports = { fetchInvoices, getInvoice, createInvoice, updateInvoiceStatus, deleteInvoice, generateInvoicesFromAssignments };

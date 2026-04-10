@@ -168,7 +168,7 @@ const StudentList = () => {
         studentId: student.id,
         overdueMonths,
         totalDue,
-        lastPaymentDate: null,
+        lastPaymentDate: s?.lastPaymentDate || null,
         scholarshipCount: scholarshipCountByStudentId[student.id] || 0,
         riskTier: overdueMonths >= 3 ? 'critical' : overdueMonths >= 2 ? 'high-risk' : overdueMonths >= 1 ? 'watch' : 'current',
       };

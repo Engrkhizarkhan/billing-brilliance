@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { Plus, Loader2, Pencil, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
-const emptyForm = { name: '', amount: '', frequency: 'monthly' as FeePlan['frequency'], dueDay: '10', lateFee: '' };
+const emptyForm = { name: '', amount: '', frequency: 'monthly' as FeePlan['frequency'], dueDay: '10', lateFee: '', planType: 'tuition' as FeePlan['planType'] };
 
 const FeePlans = () => {
   const { data: plansData, loading, refetch } = useApiQuery(() => api.fetchFeePlans(), []);
@@ -39,6 +39,7 @@ const FeePlans = () => {
       frequency: plan.frequency,
       dueDay: String(plan.dueDay),
       lateFee: String(plan.lateFee),
+      planType: plan.planType || 'tuition',
     });
     setDialogOpen(true);
   };
@@ -59,6 +60,7 @@ const FeePlans = () => {
         frequency: form.frequency,
         dueDay: Number(form.dueDay),
         lateFee: Number(form.lateFee),
+        planType: form.planType,
       };
       if (editingPlan) {
         await api.updateFeePlan(editingPlan.id, payload);
@@ -97,13 +99,35 @@ const FeePlans = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-header">Fee Plans</h1>
-          <p className="page-description">Manage recurring billing plans</p>
+          <p className="page-description">Manage recurring tuition plans and additional service charges (gym, books, stationery)</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditingPlan(null); setForm(emptyForm); } }}>
           <DialogTrigger asChild><Button onClick={openCreate}><Plus className="w-4 h-4 mr-2" />Create Plan</Button></DialogTrigger>
           <DialogContent className="max-w-xl">
             <DialogHeader><DialogTitle>{editingPlan ? 'Edit Fee Plan' : 'Create Fee Plan'}</DialogTitle></DialogHeader>
             <div className="space-y-4 pt-2">
+              <div className="space-y-1.5">
+                <Label>Plan Type</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, planType: 'tuition', frequency: form.planType === 'additional' ? 'monthly' : form.frequency })}
+                    className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${form.planType === 'tuition' ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-border hover:bg-muted'}`}
+                  >
+                    Tuition / Recurring
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, planType: 'additional', frequency: 'one-time' })}
+                    className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${form.planType === 'additional' ? 'bg-amber-500 text-white border-amber-500' : 'bg-background border-border hover:bg-muted'}`}
+                  >
+                    Additional Service
+                  </button>
+                </div>
+                {form.planType === 'additional' && (
+                  <p className="text-[11px] text-amber-600">Additional service charges (gym, books, stationery, etc.) are posted to the student ledger immediately when assigned via Payment Programs.</p>
+                )}
+              </div>
               <div><Label>Plan Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><Label>Fee Amount (₨)</Label><Input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></div>
@@ -115,6 +139,7 @@ const FeePlans = () => {
                       <SelectItem value="monthly">Monthly</SelectItem>
                       <SelectItem value="quarterly">Quarterly</SelectItem>
                       <SelectItem value="yearly">Yearly</SelectItem>
+                      <SelectItem value="one-time">One-time</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -135,6 +160,7 @@ const FeePlans = () => {
           <TableHeader>
             <TableRow>
               <TableHead>Plan Name</TableHead>
+              <TableHead>Type</TableHead>
               <TableHead>Amount</TableHead>
               <TableHead>Frequency</TableHead>
               <TableHead>Due Day</TableHead>
@@ -146,6 +172,11 @@ const FeePlans = () => {
             {plans.map((p) => (
               <TableRow key={p.id}>
                 <TableCell className="font-medium">{p.name}</TableCell>
+                <TableCell>
+                  {p.planType === 'additional'
+                    ? <Badge variant="secondary" className="bg-amber-100 text-amber-700 hover:bg-amber-100">Additional</Badge>
+                    : <Badge variant="secondary" className="bg-blue-100 text-blue-700 hover:bg-blue-100">Tuition</Badge>}
+                </TableCell>
                 <TableCell>₨ {Number(p.amount).toLocaleString()}</TableCell>
                 <TableCell><Badge variant="secondary" className="capitalize">{p.frequency}</Badge></TableCell>
                 <TableCell>{p.dueDay}th</TableCell>

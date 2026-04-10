@@ -10,6 +10,7 @@ import type {
   ETEAPosting,
   FeePlan,
   Invoice,
+  LedgerEntry,
   Service,
   SchoolAccessRole,
   Student,
@@ -158,6 +159,11 @@ export const api = {
     return get('/students/financial-summary');
   },
 
+  async fetchStudentLedgerSummary(params: { page?: number; pageSize?: number; search?: string; className?: string } = {}): Promise<ApiResponse<import('@/types').StudentLedgerSummary[]>> {
+    const q = buildQuery({ page: params.page, pageSize: params.pageSize, search: params.search, className: params.className });
+    return get(`/students/ledger-summary${q}`);
+  },
+
   // ---- Invoices ----
   async fetchInvoices(params: { page?: number; pageSize?: number; status?: string; search?: string; billerId?: string } = {}): Promise<ApiResponse<Invoice[]>> {
     const q = buildQuery({ page: params.page, pageSize: params.pageSize, status: params.status, search: params.search, billerId: params.billerId });
@@ -174,6 +180,10 @@ export const api = {
 
   async updateInvoiceStatus(id: string, status: string): Promise<ApiResponse<Invoice>> {
     return patch<ApiResponse<Invoice>>(`/invoices/${id}/status`, { status });
+  },
+
+  async deleteInvoice(id: string): Promise<ApiResponse<boolean>> {
+    return del<ApiResponse<boolean>>(`/invoices/${id}`);
   },
 
   // ---- Billing (1LINK) ----
@@ -195,8 +205,9 @@ export const api = {
     return get<ApiResponse<unknown[]>>(`/transactions${q}`);
   },
 
-  async fetchPaymentHistory(): Promise<ApiResponse<unknown[]>> {
-    return get<ApiResponse<unknown[]>>('/payment-history');
+  async fetchPaymentHistory(params: { page?: number; pageSize?: number; search?: string; className?: string; channel?: string; month?: string } = {}): Promise<ApiResponse<unknown[]>> {
+    const q = buildQuery(params);
+    return get<ApiResponse<unknown[]>>(`/payment-history${q}`);
   },
 
   // ---- Applicants ----
@@ -293,11 +304,11 @@ export const api = {
     return get<ApiResponse<FeePlan[]>>('/fee-plans');
   },
 
-  async createFeePlan(payload: Pick<FeePlan, 'name' | 'amount' | 'frequency' | 'dueDay' | 'lateFee'>): Promise<ApiResponse<FeePlan>> {
+  async createFeePlan(payload: Pick<FeePlan, 'name' | 'amount' | 'frequency' | 'dueDay' | 'lateFee' | 'planType'>): Promise<ApiResponse<FeePlan>> {
     return post<ApiResponse<FeePlan>>('/fee-plans', payload);
   },
 
-  async updateFeePlan(id: string, payload: Partial<Pick<FeePlan, 'name' | 'amount' | 'frequency' | 'dueDay' | 'lateFee'>>): Promise<ApiResponse<FeePlan>> {
+  async updateFeePlan(id: string, payload: Partial<Pick<FeePlan, 'name' | 'amount' | 'frequency' | 'dueDay' | 'lateFee' | 'planType'>>): Promise<ApiResponse<FeePlan>> {
     return put<ApiResponse<FeePlan>>(`/fee-plans/${id}`, payload);
   },
 
@@ -404,12 +415,21 @@ export const api = {
   async getDashboardStats(): Promise<ApiResponse<{
     totalStudents: number; totalInvoices: number; paidRevenue: number;
     pendingAmount: number; overdueInvoices: number; totalTransactions: number;
+    totalLateFees: number;
   }>> {
     return get('/reports/dashboard');
   },
 
   async getCollectionTrend(): Promise<ApiResponse<{ month: string; total: number }[]>> {
     return get('/reports/collection-trend');
+  },
+
+  async getMonthlyTrend(): Promise<ApiResponse<{ month: string; collected: number }[]>> {
+    return get('/reports/monthly-trend');
+  },
+
+  async getCollectionByFeePlan(): Promise<ApiResponse<{ name: string; value: number }[]>> {
+    return get('/reports/collection-by-fee-plan');
   },
 
   async getPlatformSummary(): Promise<ApiResponse<{

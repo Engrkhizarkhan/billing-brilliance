@@ -119,7 +119,7 @@ const postBillPayment = async (req, res, next) => {
 
     // Apply payment to invoices oldest-first; only mark an invoice paid if fully covered
     const [unpaidInvoices] = await pool.query(
-      "SELECT id, amount FROM invoices WHERE consumer_number = ? AND status != 'paid' AND deleted_at IS NULL ORDER BY due_date ASC",
+      "SELECT id, student_id, amount, due_date, late_fee, late_fee_applied, month FROM invoices WHERE consumer_number = ? AND status != 'paid' AND deleted_at IS NULL ORDER BY due_date ASC",
       [consumerNumber.trim()]
     );
 
@@ -132,6 +132,22 @@ const postBillPayment = async (req, res, next) => {
           [inv.id]
         );
         remaining = parseFloat((remaining - invAmount).toFixed(2));
+
+        // Apply late fee if payment was received after the due date
+        const lateFeeAmt = parseFloat(inv.late_fee || 0);
+        const paymentDate = new Date(paidAt);
+        const dueDate = new Date(inv.due_date);
+        if (lateFeeAmt > 0 && paymentDate > dueDate && !inv.late_fee_applied) {
+          const lateFeeEntryId = uuidv4();
+          const monthLabel = inv.month || inv.due_date.slice(0, 7);
+          await pool.query(
+            `INSERT INTO ledger_entries (id, tenant_id, student_id, date, description, debit, credit, balance, reference, entry_type)
+             VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, 'late_fee')`,
+            [lateFeeEntryId, tenantId, inv.student_id, paidAt,
+             `Late Fee — ${monthLabel}`, lateFeeAmt, lateFeeAmt, transactionId]
+          );
+          await pool.query('UPDATE invoices SET late_fee_applied = 1 WHERE id = ?', [inv.id]);
+        }
       } else {
         break; // partial — leave this and remaining invoices unpaid
       }

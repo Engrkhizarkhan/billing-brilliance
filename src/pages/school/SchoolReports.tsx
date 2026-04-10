@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { StatCard } from '@/components/StatCard';
-import { revenueData, monthlyCollectionTarget, feeCollectionByHead } from '@/data/chartData';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import type { Student, Invoice } from '@/types';
@@ -13,9 +12,17 @@ const CHART_COLORS = ['hsl(221, 83%, 53%)', 'hsl(160, 84%, 39%)', 'hsl(38, 92%, 
 const SchoolReports = () => {
   const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({}), []);
   const { data: invoicesData, loading: li } = useApiQuery(() => api.fetchInvoices({}), []);
+  const { data: statsData, loading: lStats } = useApiQuery(() => api.getDashboardStats(), []);
+  const { data: monthlyTrendData, loading: lTrend } = useApiQuery(() => api.getMonthlyTrend(), []);
+  const { data: feeByPlanData, loading: lFee } = useApiQuery(() => api.getCollectionByFeePlan(), []);
+
   const students = (studentsData || []) as Student[];
   const invoices = (invoicesData || []) as Invoice[];
-  const loading = ls || li;
+  const stats = statsData as { paidRevenue?: number; overdueInvoices?: number } | null;
+  const monthlyTrend = (monthlyTrendData || []) as { month: string; collected: number }[];
+  const feeByPlan = (feeByPlanData || []) as { name: string; value: number }[];
+
+  const loading = ls || li || lStats || lTrend || lFee;
 
   const invoiceStatusData = useMemo(() => [
     { status: 'Paid', count: invoices.filter((invoice) => invoice.status === 'paid').length },
@@ -23,10 +30,10 @@ const SchoolReports = () => {
     { status: 'Overdue', count: invoices.filter((invoice) => invoice.status === 'overdue').length },
   ], [invoices]);
 
-  const totalCollected = monthlyCollectionTarget.reduce((sum, month) => sum + month.collected, 0);
+  const totalCollected = stats?.paidRevenue ?? 0;
   const paidInvoiceCount = invoices.filter((invoice) => invoice.status === 'paid').length;
   const pendingInvoiceCount = invoices.filter((invoice) => invoice.status === 'pending').length;
-  const overdueCount = invoices.filter((invoice) => invoice.status === 'overdue').length;
+  const overdueCount = stats?.overdueInvoices ?? invoices.filter((invoice) => invoice.status === 'overdue').length;
 
   const defaultersByClass = useMemo(() => {
     const classMap: Record<string, number> = {};
@@ -59,37 +66,45 @@ const SchoolReports = () => {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <div className="dashboard-card">
           <h3 className="font-semibold mb-4">Monthly Collection Trend</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={monthlyCollectionTarget}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(214, 32%, 91%)" />
-              <XAxis dataKey="month" fontSize={12} />
-              <YAxis fontSize={12} tickFormatter={(v) => `${v / 1000}K`} />
-              <Tooltip formatter={(v: number) => [formatPKR(v), 'Amount']} />
-              <Bar dataKey="collected" fill="hsl(160, 84%, 39%)" radius={[4, 4, 0, 0]} name="Collected" />
-            </BarChart>
-          </ResponsiveContainer>
+          {monthlyTrend.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-16">No payment data available yet.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={monthlyTrend}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(214, 32%, 91%)" />
+                <XAxis dataKey="month" fontSize={12} />
+                <YAxis fontSize={12} tickFormatter={(v) => `${v / 1000}K`} />
+                <Tooltip formatter={(v: number) => [formatPKR(v), 'Amount']} />
+                <Bar dataKey="collected" fill="hsl(160, 84%, 39%)" radius={[4, 4, 0, 0]} name="Collected" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         <div className="dashboard-card">
-          <h3 className="font-semibold mb-4">Collection by Fee Head</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={feeCollectionByHead}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={105}
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-              >
-                {feeCollectionByHead.map((_, index) => (
-                  <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(v: number) => formatPKR(v)} />
-            </PieChart>
-          </ResponsiveContainer>
+          <h3 className="font-semibold mb-4">Collection by Fee Plan</h3>
+          {feeByPlan.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-16">No fee plans configured.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={feeByPlan}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={105}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                >
+                  {feeByPlan.map((_, index) => (
+                    <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(v: number) => formatPKR(v)} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         <div className="dashboard-card">
@@ -125,15 +140,19 @@ const SchoolReports = () => {
 
       <div className="dashboard-card">
         <h3 className="font-semibold mb-4">Monthly Revenue Trend</h3>
-        <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={revenueData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(214, 32%, 91%)" />
-            <XAxis dataKey="month" fontSize={12} />
-            <YAxis fontSize={12} tickFormatter={(v) => `${v / 1000}K`} />
-            <Tooltip formatter={(v: number) => [formatPKR(v), 'Revenue']} />
-            <Line type="monotone" dataKey="revenue" stroke="hsl(160, 84%, 39%)" strokeWidth={2.5} dot={{ r: 4 }} />
-          </LineChart>
-        </ResponsiveContainer>
+        {monthlyTrend.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-16">No payment data available yet.</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart data={monthlyTrend}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(214, 32%, 91%)" />
+              <XAxis dataKey="month" fontSize={12} />
+              <YAxis fontSize={12} tickFormatter={(v) => `${v / 1000}K`} />
+              <Tooltip formatter={(v: number) => [formatPKR(v), 'Revenue']} />
+              <Line type="monotone" dataKey="collected" stroke="hsl(160, 84%, 39%)" strokeWidth={2.5} dot={{ r: 4 }} name="Revenue" />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
       </div>
     </div>
   );

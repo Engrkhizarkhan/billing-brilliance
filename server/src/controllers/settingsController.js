@@ -54,22 +54,25 @@ const createFeePlan = async (req, res, next) => {
     const tenantId = resolveTenantId(req);
     if (!tenantId) throw new AppError('Tenant ID is required', 400);
 
-    const { name, amount, frequency, dueDay = 10, lateFee = 0 } = req.body;
+    const { name, amount, frequency, dueDay = 10, lateFee = 0, planType = 'tuition' } = req.body;
     if (!name || amount === undefined || !frequency) {
       throw new AppError('Name, amount, and frequency are required', 400);
+    }
+    if (!['tuition', 'additional'].includes(planType)) {
+      throw new AppError('planType must be "tuition" or "additional"', 400);
     }
 
     const id = uuidv4();
     await pool.query(
-      `INSERT INTO fee_plans (id, tenant_id, name, amount, frequency, due_day, late_fee)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [id, tenantId, name, amount, frequency, dueDay, lateFee]
+      `INSERT INTO fee_plans (id, tenant_id, name, amount, frequency, due_day, late_fee, plan_type)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, tenantId, name, amount, frequency, dueDay, lateFee, planType]
     );
 
-    await auditLog(req, 'create', 'fee_plan', id, `Fee plan ${name} created`);
+    await auditLog(req, 'create', 'fee_plan', id, `Fee plan ${name} created (${planType})`);
     await createRequestNotification(req, {
       title: 'Fee plan created',
-      message: `${name} is now available for assignments and invoice generation.`,
+      message: `${name} is now available for assignment via Payment Programs.`,
       type: 'system',
       tenantId,
     });
@@ -91,12 +94,15 @@ const updateFeePlan = async (req, res, next) => {
     );
     if (!existing.length) return res.status(404).json({ message: 'Fee plan not found' });
 
-    const { name, amount, frequency, dueDay, lateFee } = req.body;
+    const { name, amount, frequency, dueDay, lateFee, planType } = req.body;
+    if (planType !== undefined && !['tuition', 'additional'].includes(planType)) {
+      throw new AppError('planType must be "tuition" or "additional"', 400);
+    }
     await pool.query(
       `UPDATE fee_plans SET name = COALESCE(?, name), amount = COALESCE(?, amount),
        frequency = COALESCE(?, frequency), due_day = COALESCE(?, due_day),
-       late_fee = COALESCE(?, late_fee) WHERE id = ?`,
-      [name ?? null, amount ?? null, frequency ?? null, dueDay ?? null, lateFee ?? null, id]
+       late_fee = COALESCE(?, late_fee), plan_type = COALESCE(?, plan_type) WHERE id = ?`,
+      [name ?? null, amount ?? null, frequency ?? null, dueDay ?? null, lateFee ?? null, planType ?? null, id]
     );
     await auditLog(req, 'update', 'fee_plan', id, `Fee plan ${id} updated`);
     const [rows] = await pool.query('SELECT * FROM fee_plans WHERE id = ?', [id]);
@@ -389,7 +395,7 @@ const fetchPaymentPlanAssignments = async (req, res, next) => {
 
     const [rows] = await pool.query(
       `SELECT ppa.*, s.name as student_name, s.consumer_number, s.class as class_name, s.section as section_name,
-              fp.name as plan_name, fp.amount, fp.frequency, fp.due_day
+              fp.name as plan_name, fp.amount, fp.frequency, fp.due_day, fp.plan_type
        FROM payment_plan_assignments ppa
        JOIN students s ON s.id = ppa.student_id
        JOIN fee_plans fp ON fp.id = ppa.fee_plan_id
@@ -423,35 +429,82 @@ const createPaymentPlanAssignment = async (req, res, next) => {
     }
 
     const [students] = await pool.query(
-      'SELECT id, name FROM students WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL',
+      'SELECT id, name, bill_id FROM students WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL',
       [studentId, tenantId]
     );
     if (students.length === 0) throw new AppError('Student not found', 404);
 
     const [plans] = await pool.query(
-      'SELECT id, name, due_day FROM fee_plans WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL',
+      'SELECT id, name, amount, due_day, frequency, plan_type FROM fee_plans WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL',
       [feePlanId, tenantId]
     );
     if (plans.length === 0) throw new AppError('Fee plan not found', 404);
 
-    const [duplicates] = await pool.query(
+    const planType = plans[0].plan_type || 'tuition';
+
+    if (planType === 'tuition') {
+      // Enforce: each student may have at most ONE active/pending tuition fee plan
+      const [existingTuition] = await pool.query(
+        `SELECT ppa.id, fp.name as plan_name FROM payment_plan_assignments ppa
+         JOIN fee_plans fp ON fp.id = ppa.fee_plan_id
+         WHERE ppa.student_id = ? AND ppa.status IN ('active', 'pending') AND fp.plan_type = 'tuition'
+         LIMIT 1`,
+        [studentId]
+      );
+      if (existingTuition.length > 0) {
+        throw new AppError(
+          `Student already has an active tuition fee plan (${existingTuition[0].plan_name}). Remove it first before assigning a new one.`,
+          409
+        );
+      }
+    }
+
+    // Block assigning the exact same plan to the same student twice (applies to all plan types)
+    const [dupCheck] = await pool.query(
       `SELECT id FROM payment_plan_assignments
-       WHERE student_id = ? AND fee_plan_id = ? AND status IN ('active', 'pending')`,
+       WHERE student_id = ? AND fee_plan_id = ? AND status IN ('active', 'pending')
+       LIMIT 1`,
       [studentId, feePlanId]
     );
-    if (duplicates.length > 0) {
-      throw new AppError('Student already has this fee plan assigned', 409);
+    if (dupCheck.length > 0) {
+      throw new AppError(`"${plans[0].name}" is already assigned to this student.`, 409);
     }
 
     const id = uuidv4();
     const resolvedAssignedDate = assignedDate || new Date().toISOString().slice(0, 10);
-    const resolvedNextDueDate = nextDueDate || computeNextDueDate(resolvedAssignedDate, plans[0].due_day);
+    // Compute next_due_date for all plans that have a due_day (even additional/service plans)
+    // Only skip it for one-time frequency plans
+    const isOneTime = (plans[0].frequency || '').toLowerCase() === 'one-time';
+    const resolvedNextDueDate = isOneTime
+      ? null
+      : (nextDueDate || computeNextDueDate(resolvedAssignedDate, plans[0].due_day));
+
+    // One-time plans are immediately completed after being charged once
+    const resolvedStatus = isOneTime ? 'completed' : status;
 
     await pool.query(
       `INSERT INTO payment_plan_assignments (id, tenant_id, student_id, fee_plan_id, status, assigned_via, assigned_date, next_due_date)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, tenantId, studentId, feePlanId, status, assignedVia, resolvedAssignedDate, resolvedNextDueDate]
+      [id, tenantId, studentId, feePlanId, resolvedStatus, assignedVia, resolvedAssignedDate, resolvedNextDueDate]
     );
+
+    // For additional service charges (and one-time tuition), immediately post the ledger entry
+    if (planType === 'additional' || isOneTime) {
+      const [lastEntry] = await pool.query(
+        'SELECT balance FROM ledger_entries WHERE student_id = ? ORDER BY date DESC, created_at DESC LIMIT 1',
+        [studentId]
+      );
+      const prevBalance = lastEntry.length ? parseFloat(lastEntry[0].balance) : 0;
+      const chargeAmount = parseFloat(plans[0].amount);
+      const newBalance = prevBalance + chargeAmount;
+      const ledgerEntryId = uuidv4();
+      await pool.query(
+        `INSERT INTO ledger_entries (id, tenant_id, student_id, date, description, debit, credit, balance, bill_id, entry_type)
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, 'charge')`,
+        [ledgerEntryId, tenantId, studentId, resolvedAssignedDate, plans[0].name, chargeAmount, newBalance, students[0].bill_id]
+      );
+      await pool.query('UPDATE students SET balance = balance + ? WHERE id = ?', [chargeAmount, studentId]);
+    }
 
     await auditLog(req, 'create', 'payment_plan_assignment', id, `${students[0].name} assigned ${plans[0].name}`);
     await createRequestNotification(req, {
@@ -463,7 +516,7 @@ const createPaymentPlanAssignment = async (req, res, next) => {
 
     const [rows] = await pool.query(
       `SELECT ppa.*, s.name as student_name, s.consumer_number, s.class as class_name, s.section as section_name,
-              fp.name as plan_name, fp.amount, fp.frequency, fp.due_day
+              fp.name as plan_name, fp.amount, fp.frequency, fp.due_day, fp.plan_type
        FROM payment_plan_assignments ppa
        JOIN students s ON s.id = ppa.student_id
        JOIN fee_plans fp ON fp.id = ppa.fee_plan_id
@@ -536,7 +589,7 @@ const updatePaymentPlanAssignment = async (req, res, next) => {
 
     const [updated] = await pool.query(
       `SELECT ppa.*, s.name as student_name, s.consumer_number, s.class as class_name, s.section as section_name,
-              fp.name as plan_name, fp.amount, fp.frequency, fp.due_day
+              fp.name as plan_name, fp.amount, fp.frequency, fp.due_day, fp.plan_type
        FROM payment_plan_assignments ppa
        JOIN students s ON s.id = ppa.student_id
        JOIN fee_plans fp ON fp.id = ppa.fee_plan_id

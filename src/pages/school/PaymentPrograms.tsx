@@ -55,6 +55,26 @@ const PaymentPrograms = () => {
     return matchSearch && matchClass && matchStatus && matchFrequency;
   });
 
+  // Group filtered assignments by student so each student is one row
+  const groupedStudents = useMemo(() => {
+    const map = new Map<string, { studentId: string; studentName: string; className: string; sectionName: string; consumerNumber: string; assignedVia: string; plans: PaymentPlanAssignment[] }>();
+    for (const a of filtered) {
+      if (!map.has(a.studentId)) {
+        map.set(a.studentId, {
+          studentId: a.studentId,
+          studentName: a.studentName || '—',
+          className: a.className || '',
+          sectionName: a.sectionName || '',
+          consumerNumber: a.consumerNumber || '—',
+          assignedVia: a.assignedVia,
+          plans: [],
+        });
+      }
+      map.get(a.studentId)!.plans.push(a);
+    }
+    return Array.from(map.values());
+  }, [filtered]);
+
   // Class summary
   const classCounts = useMemo(() => {
     const map: Record<string, number> = {};
@@ -82,8 +102,23 @@ const PaymentPrograms = () => {
     return source.slice(0, 200);
   }, [studentSearch, studentClassFilter, studentSectionFilter]);
 
-  const existingAssignmentKeys = useMemo(
-    () => new Set(assignments.map((a) => `${a.studentId}::${a.feePlanId}`)),
+  // Students who already have any active/pending tuition plan (max 1 tuition per student)
+  const assignedTuitionStudentIds = useMemo(
+    () => new Set(
+      assignments
+        .filter((a) => (a.status === 'active' || a.status === 'pending') && (a.planType === 'tuition' || !a.planType))
+        .map((a) => a.studentId)
+    ),
+    [assignments]
+  );
+
+  // studentId:planId pairs already active/pending — used to block exact duplicate additional plan assigns
+  const assignedStudentPlanPairs = useMemo(
+    () => new Set(
+      assignments
+        .filter((a) => a.status === 'active' || a.status === 'pending')
+        .map((a) => `${a.studentId}:${a.feePlanId}`)
+    ),
     [assignments]
   );
 
@@ -96,10 +131,15 @@ const PaymentPrograms = () => {
     if (!plan) return;
 
     const classStudents = students.filter((s) => selectedClasses.includes(s.class));
-    const eligibleStudents = classStudents.filter((student) => !existingAssignmentKeys.has(`${student.id}::${plan.id}`));
+    const eligibleStudents = classStudents.filter((student) =>
+      plan.planType === 'tuition'
+        ? !assignedTuitionStudentIds.has(student.id)
+        : !assignedStudentPlanPairs.has(`${student.id}:${plan.id}`)
+    );
+    const alreadyAssigned = classStudents.length - eligibleStudents.length;
 
     if (eligibleStudents.length === 0) {
-      toast.info('Selected classes already have this plan assigned for all students');
+      toast.info('All students in the selected classes already have this plan assigned.');
       return;
     }
 
@@ -111,15 +151,16 @@ const PaymentPrograms = () => {
         )
       );
       const succeeded = results.filter((r) => r.status === 'fulfilled').length;
-      const skipped = results.filter((r) => r.status === 'rejected').length;
+      const failed = results.filter((r) => r.status === 'rejected').length;
       await refetchAssignments();
       setClassAssignOpen(false);
       setSelectedClassPlan('');
       setSelectedClasses([]);
-      if (skipped === 0) {
+      const skippedTotal = alreadyAssigned + failed;
+      if (skippedTotal === 0) {
         toast.success(`${plan.name} assigned to ${succeeded} students across ${selectedClasses.length} class(es)`);
       } else {
-        toast.success(`${plan.name} assigned to ${succeeded} student(s). ${skipped} already had this plan.`);
+        toast.success(`${plan.name} assigned to ${succeeded} student(s). ${skippedTotal} skipped (already have this plan).`);
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to assign plan');
@@ -141,11 +182,15 @@ const PaymentPrograms = () => {
       .filter((student): student is (typeof students)[number] => Boolean(student));
 
     const eligibleIds = chosenStudents
-      .filter((student) => !existingAssignmentKeys.has(`${student.id}::${plan.id}`))
+      .filter((student) =>
+        plan.planType === 'tuition'
+          ? !assignedTuitionStudentIds.has(student.id)
+          : !assignedStudentPlanPairs.has(`${student.id}:${plan.id}`)
+      )
       .map((student) => student.id);
 
     if (eligibleIds.length === 0) {
-      toast.info('Selected students already have this payment plan');
+      toast.info('All selected students already have this plan assigned.');
       return;
     }
 
@@ -233,8 +278,8 @@ const PaymentPrograms = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-header">Payment Programs</h1>
-          <p className="page-description">Define expected dues by assigning fee plans to classes or individual students</p>
-          <p className="text-xs text-muted-foreground mt-1">Need actual paid records? Use the Payments page.</p>
+          <p className="page-description">Assign fee plans to classes or individual students</p>
+          <p className="text-xs text-muted-foreground mt-1">Each student can hold only one active tuition plan. Multiple additional service charges (gym, books, stationery) can be assigned simultaneously.</p>
         </div>
         <div className="flex gap-2">
           {/* Class-level assignment (primary action) */}
@@ -246,7 +291,7 @@ const PaymentPrograms = () => {
             </DialogTrigger>
             <DialogContent className="max-w-3xl">
               <DialogHeader><DialogTitle>Assign Plan to Entire Class</DialogTitle></DialogHeader>
-              <p className="text-xs text-muted-foreground -mt-1">Select one or more classes to apply a fee plan to all students at once.</p>
+              <p className="text-xs text-muted-foreground -mt-1">Select one or more classes to apply a fee plan. Students who already have this specific plan will be skipped.</p>
               <div className="grid grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] gap-4 pt-2">
                 <div className="space-y-2 lg:pr-2">
                   <Label className="text-xs font-semibold">Select Fee Plan</Label>
@@ -267,7 +312,7 @@ const PaymentPrograms = () => {
                       <div>
                         <p className="text-xs font-semibold text-primary">Ready to assign</p>
                         <p className="text-[11px] text-muted-foreground mt-0.5">
-                          {feePlans.find(p => p.id === selectedClassPlan)?.name} will be assigned to {totalStudentsSelected} students in {selectedClasses.length} class(es)
+                          {feePlans.find(p => p.id === selectedClassPlan)?.name} will be assigned to eligible students in {selectedClasses.length} class(es). Students already on this plan are skipped.
                         </p>
                       </div>
                     </div>
@@ -330,6 +375,7 @@ const PaymentPrograms = () => {
                         {feePlans.map((p) => (
                           <SelectItem key={p.id} value={p.id}>
                             {p.name} — ₨ {p.amount.toLocaleString()}
+                            {p.planType === 'additional' ? ' (Service)' : ''}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -388,18 +434,26 @@ const PaymentPrograms = () => {
                   {filteredStudentDirectory.length === 0 ? (
                     <p className="text-sm text-muted-foreground p-3">No students match your current search/filter.</p>
                   ) : (
-                    filteredStudentDirectory.map((student) => (
-                      <label key={student.id} className="flex items-start gap-2.5 py-2 px-2.5 rounded-lg hover:bg-muted cursor-pointer">
+                    filteredStudentDirectory.map((student) => {
+                      const selectedPlanObj = feePlans.find((p) => p.id === selectedIndividualPlan);
+                      const hasPlan = selectedPlanObj?.planType === 'tuition'
+                        ? assignedTuitionStudentIds.has(student.id)
+                        : !!selectedIndividualPlan && assignedStudentPlanPairs.has(`${student.id}:${selectedIndividualPlan}`);
+                      return (
+                      <label key={student.id} className={`flex items-start gap-2.5 py-2 px-2.5 rounded-lg cursor-pointer ${hasPlan ? 'opacity-50 cursor-not-allowed' : 'hover:bg-muted'}`}>
                         <Checkbox
                           checked={selectedStudents.includes(student.id)}
-                          onCheckedChange={() => toggleStudent(student.id)}
+                          disabled={hasPlan}
+                          onCheckedChange={() => !hasPlan && toggleStudent(student.id)}
                         />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{student.name}</p>
                           <p className="text-[11px] text-muted-foreground truncate">{student.class} {student.section} • {student.rollNumber} • {student.consumerNumber}</p>
+                          {hasPlan && <p className="text-[10px] text-amber-600 font-medium">{feePlans.find(p => p.id === selectedIndividualPlan)?.planType === 'tuition' ? 'Already has a tuition plan' : 'Already assigned this plan'}</p>}
                         </div>
                       </label>
-                    ))
+                      );
+                    })
                   )}
                 </div>
 
@@ -437,6 +491,7 @@ const PaymentPrograms = () => {
               { value: 'monthly', label: 'Monthly' },
               { value: 'quarterly', label: 'Quarterly' },
               { value: 'yearly', label: 'Yearly' },
+              { value: 'one-time', label: 'One-time' },
             ],
           },
         ]}
@@ -451,7 +506,7 @@ const PaymentPrograms = () => {
         <div className="px-5 py-3 border-b border-border flex items-center justify-between">
           <p className="text-sm font-semibold">
             Assignments
-            <span className="text-muted-foreground font-normal ml-2">({filtered.length})</span>
+            <span className="text-muted-foreground font-normal ml-2">({groupedStudents.length} students · {filtered.length} plans)</span>
           </p>
         </div>
         <Table>
@@ -459,38 +514,56 @@ const PaymentPrograms = () => {
             <TableRow>
               <TableHead className="text-xs font-semibold">Student</TableHead>
               <TableHead className="text-xs font-semibold">Class</TableHead>
-              <TableHead className="text-xs font-semibold">Assigned Via</TableHead>
               <TableHead className="text-xs font-semibold">Consumer #</TableHead>
-              <TableHead className="text-xs font-semibold">Plan</TableHead>
-              <TableHead className="text-xs font-semibold">Amount</TableHead>
-              <TableHead className="text-xs font-semibold">Frequency</TableHead>
-              <TableHead className="text-xs font-semibold">Status</TableHead>
-              <TableHead className="text-xs font-semibold">Next Due</TableHead>
+              <TableHead className="text-xs font-semibold">Fee Plans</TableHead>
               <TableHead className="text-xs font-semibold text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((a) => (
-              <TableRow key={a.id} className="hover:bg-muted/30">
-                <TableCell className="font-medium text-sm">{a.studentName || '—'}</TableCell>
-                <TableCell>
-                  <span className="text-xs font-medium bg-primary/8 text-primary px-2 py-0.5 rounded-md">{a.className} {a.sectionName}</span>
+            {groupedStudents.map((g) => (
+              <TableRow key={g.studentId} className="hover:bg-muted/30 align-top">
+                <TableCell className="font-medium text-sm py-3">{g.studentName}</TableCell>
+                <TableCell className="py-3">
+                  <span className="text-xs font-medium bg-primary/8 text-primary px-2 py-0.5 rounded-md">{g.className} {g.sectionName}</span>
                 </TableCell>
-                <TableCell><span className="text-xs capitalize bg-muted px-2 py-0.5 rounded-md">{a.assignedVia}</span></TableCell>
-                <TableCell className="font-mono text-[11px] text-muted-foreground">{a.consumerNumber || '—'}</TableCell>
-                <TableCell className="text-sm">{a.planName || '—'}</TableCell>
-                <TableCell className="text-sm font-mono">₨ {(a.amount || 0).toLocaleString()}</TableCell>
-                <TableCell className="text-sm capitalize">{a.frequency || '—'}</TableCell>
-                <TableCell><StatusBadge status={a.status} /></TableCell>
-                <TableCell className="text-sm text-muted-foreground">{a.nextDueDate || '—'}</TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => openEdit(a)} disabled={assigning}>
-                      <Pencil className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-destructive" onClick={() => deleteAssignment(a.id)} disabled={assigning}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                <TableCell className="font-mono text-[11px] text-muted-foreground py-3">{g.consumerNumber}</TableCell>
+                <TableCell className="py-2">
+                  <div className="space-y-1.5">
+                    {g.plans.map((a) => {
+                      const isCompletedOneTime = a.status === 'completed' && a.frequency === 'one-time';
+                      return (
+                      <div key={a.id} className={`flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs ${isCompletedOneTime ? 'opacity-50' : ''}`}>
+                        <span className="font-medium text-sm">{a.planName}</span>
+                        {a.planType === 'additional'
+                          ? <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded text-[10px] font-medium">Service</span>
+                          : <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-medium">Tuition</span>}
+                        <span className="font-mono text-muted-foreground">₨ {(a.amount || 0).toLocaleString()}</span>
+                        <span className="capitalize text-muted-foreground">{a.frequency}</span>
+                        {isCompletedOneTime
+                          ? <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded text-[10px] font-medium">Charged</span>
+                          : <StatusBadge status={a.status} />}
+                        {a.nextDueDate
+                          ? <span className="text-muted-foreground">due {a.nextDueDate}</span>
+                          : isCompletedOneTime
+                            ? <span className="text-muted-foreground italic">charged once</span>
+                            : <span className="text-muted-foreground italic">one-time</span>}
+                      </div>
+                      );
+                    })}
+                  </div>
+                </TableCell>
+                <TableCell className="text-right py-2">
+                  <div className="flex flex-col items-end gap-1">
+                    {g.plans.map((a) => (
+                      <div key={a.id} className="flex gap-1">
+                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg" onClick={() => openEdit(a)} disabled={assigning}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg text-destructive" onClick={() => deleteAssignment(a.id)} disabled={assigning}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    ))}
                   </div>
                 </TableCell>
               </TableRow>

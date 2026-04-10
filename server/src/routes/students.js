@@ -11,6 +11,7 @@ router.use(tenantScope);
 
 router.get('/', paginationValidation, handleValidation, studentController.fetchStudents);
 router.get('/financial-summary', studentController.fetchStudentFinancialSummary);
+router.get('/ledger-summary', studentController.fetchStudentLedgerSummary);
 router.get('/:id', idParam, handleValidation, studentController.getStudent);
 router.post('/', createStudentValidation, handleValidation, studentController.createStudent);
 router.put('/:id', idParam, handleValidation, studentController.updateStudent);
@@ -19,5 +20,6 @@ router.put('/:id/bus-service', idParam, handleValidation, studentController.upda
 router.patch('/:id/bus-service', idParam, handleValidation, studentController.updateStudentBusService);
 router.get('/:id/ledger', idParam, handleValidation, studentController.getStudentLedger);
 router.get('/:id/snapshot', idParam, handleValidation, studentController.getStudentSnapshot);
+router.post('/:id/additional-charge', idParam, handleValidation, studentController.createAdditionalCharge);
 
 module.exports = router;

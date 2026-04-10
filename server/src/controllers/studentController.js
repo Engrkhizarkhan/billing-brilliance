@@ -310,19 +310,154 @@ const fetchStudentFinancialSummary = async (req, res, next) => {
       params.push(req.tenantId);
     }
 
-    // One DB query: aggregate total due and distinct overdue months per student
+    // Aggregate total due + overdue months from invoices, last payment date from payments
     const [rows] = await pool.query(
       `SELECT
-         student_id,
-         CAST(COALESCE(SUM(CASE WHEN status != 'paid' THEN amount ELSE 0 END), 0) AS DECIMAL(15,2)) AS total_due,
-         COUNT(DISTINCT CASE WHEN status != 'paid' AND due_date < NOW() THEN month END) AS overdue_months
-       FROM invoices
-       WHERE deleted_at IS NULL ${tenantFilter}
-       GROUP BY student_id`,
+         i.student_id,
+         CAST(COALESCE(SUM(CASE WHEN i.status != 'paid' THEN i.amount ELSE 0 END), 0) AS DECIMAL(15,2)) AS total_due,
+         COUNT(DISTINCT CASE WHEN i.status != 'paid' AND i.due_date < NOW() THEN i.month END) AS overdue_months,
+         (SELECT DATE_FORMAT(MAX(p.date), '%Y-%m-%d')
+          FROM payments p
+          WHERE p.student_id = i.student_id ${req.tenantId ? 'AND p.tenant_id = ?' : ''}
+         ) AS last_payment_date
+       FROM invoices i
+       WHERE i.deleted_at IS NULL ${tenantFilter}
+       GROUP BY i.student_id`,
+      req.tenantId ? [...params, req.tenantId] : params
+    );
+
+    res.json({
+      data: rows.map((r) => ({
+        studentId: r.student_id,
+        totalDue: parseFloat(r.total_due),
+        overdueMonths: Number(r.overdue_months),
+        lastPaymentDate: r.last_payment_date || null,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const ADDITIONAL_CHARGE_LABELS = {
+  gym: 'Gym Fee',
+  books: 'Books Fee',
+  stationery: 'Stationery Fee',
+  library: 'Library Fee',
+  sports: 'Sports Fee',
+  transport: 'Transport Fee',
+  others: 'Other Charges',
+};
+
+const createAdditionalCharge = async (req, res, next) => {
+  try {
+    const tenantId = req.tenantId;
+    if (!tenantId) throw new AppError('Tenant ID is required', 400);
+
+    const studentId = req.params.id;
+    const { chargeType, description, amount, date } = req.body;
+
+    if (!chargeType || amount === undefined) {
+      throw new AppError('chargeType and amount are required', 400);
+    }
+
+    const parsedAmount = parseFloat(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      throw new AppError('Amount must be a positive number', 400);
+    }
+
+    const validTypes = Object.keys(ADDITIONAL_CHARGE_LABELS);
+    if (!validTypes.includes(chargeType)) {
+      throw new AppError(`chargeType must be one of: ${validTypes.join(', ')}`, 400);
+    }
+
+    const [students] = await pool.query(
+      'SELECT id, name, bill_id, consumer_number FROM students WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL',
+      [studentId, tenantId]
+    );
+    if (!students.length) throw new AppError('Student not found', 404);
+
+    const student = students[0];
+    const chargeDate = date || new Date().toISOString().slice(0, 10);
+    const chargeLabel = ADDITIONAL_CHARGE_LABELS[chargeType];
+    const chargeDescription = description?.trim() ? description.trim() : chargeLabel;
+
+    // Running balance from last ledger entry
+    const [lastEntry] = await pool.query(
+      'SELECT balance FROM ledger_entries WHERE student_id = ? ORDER BY date DESC, created_at DESC LIMIT 1',
+      [studentId]
+    );
+    const prevBalance = lastEntry.length ? parseFloat(lastEntry[0].balance) : 0;
+    const newBalance = prevBalance + parsedAmount;
+
+    const id = uuidv4();
+    await pool.query(
+      `INSERT INTO ledger_entries (id, tenant_id, student_id, date, description, debit, credit, balance, bill_id, entry_type)
+       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, 'charge')`,
+      [id, tenantId, studentId, chargeDate, chargeDescription, parsedAmount, newBalance, student.bill_id]
+    );
+
+    await pool.query('UPDATE students SET balance = balance + ? WHERE id = ?', [parsedAmount, studentId]);
+    await auditLog(req, 'create', 'ledger_entry', id,
+      `Additional charge (${chargeLabel}): ${chargeDescription} - PKR ${parsedAmount} for ${student.name}`);
+
+    const [rows] = await pool.query('SELECT * FROM ledger_entries WHERE id = ?', [id]);
+    res.status(201).json({ data: rows[0], message: `${chargeLabel} posted to ledger` });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const fetchStudentLedgerSummary = async (req, res, next) => {
+  try {
+    const { page = 1, pageSize = 25, search, className } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(pageSize);
+
+    let where = 'WHERE s.deleted_at IS NULL';
+    const params = [];
+
+    if (req.tenantId) {
+      where += ' AND s.tenant_id = ?';
+      params.push(req.tenantId);
+    }
+    if (search) {
+      where += ' AND (s.name LIKE ? OR s.cnic LIKE ? OR s.roll_number LIKE ? OR s.consumer_number LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    }
+    if (className) {
+      where += ' AND s.class = ?';
+      params.push(className);
+    }
+
+    const [countRows] = await pool.query(
+      `SELECT COUNT(*) as total FROM students s ${where}`,
       params
     );
 
-    res.json({ data: rows });
+    const [rows] = await pool.query(
+      `SELECT
+         s.id, s.name, s.class, s.section, s.roll_number, s.consumer_number, s.bill_id, s.status,
+         COALESCE(SUM(le.debit), 0) AS total_debit,
+         COALESCE(SUM(le.credit), 0) AS total_credit,
+         COALESCE((
+           SELECT balance FROM ledger_entries
+           WHERE student_id = s.id
+           ORDER BY date DESC, created_at DESC LIMIT 1
+         ), 0) AS running_balance,
+         COUNT(le.id) AS entry_count
+       FROM students s
+       LEFT JOIN ledger_entries le ON le.student_id = s.id
+       ${where}
+       GROUP BY s.id, s.name, s.class, s.section, s.roll_number, s.consumer_number, s.bill_id, s.status
+       ORDER BY s.name ASC
+       LIMIT ? OFFSET ?`,
+      [...params, parseInt(pageSize), offset]
+    );
+
+    res.json({
+      data: rows,
+      meta: { page: parseInt(page), pageSize: parseInt(pageSize), total: countRows[0].total },
+    });
   } catch (err) {
     next(err);
   }
@@ -338,4 +473,6 @@ module.exports = {
   getStudentLedger,
   getStudentSnapshot,
   fetchStudentFinancialSummary,
+  fetchStudentLedgerSummary,
+  createAdditionalCharge,
 };

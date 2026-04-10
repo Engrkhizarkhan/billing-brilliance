@@ -178,17 +178,19 @@ const billInquiry1Link = async (req, res) => {
         return res.json(inquiryError('01'));
       }
 
-      // Pending
+      // Pending ETEA
       const isOverdue = etea.due_date && parseDbDate(etea.due_date) < now;
-      const amtFormatted = fmtAmountInquiry(etea.amount);
+      // ETEA records don't carry a separate late_fee column — use base amount for both fields
+      const amtWithin = fmtAmountInquiry(etea.amount);
+      const amtAfter = amtWithin; // no late-fee concept for ETEA payments
 
       return res.json({
         response_Code: '00',
         consumer_detail: padRight(etea.description || etea.application_id, 30),
         bill_status: 'U',
         due_date: etea.due_date ? fmtDate(etea.due_date) : '',
-        amount_within_dueDate: isOverdue ? '+0000000000000' : amtFormatted,
-        amount_after_dueDate: amtFormatted,
+        amount_within_dueDate: amtWithin,
+        amount_after_dueDate: amtAfter,
         billing_month: etea.due_date ? fmtBillingMonth(etea.due_date) : fmtBillingMonth(null),
         date_paid: '',
         amount_paid: '',
@@ -239,19 +241,24 @@ const billInquiry1Link = async (req, res) => {
     }
 
     // --- Unpaid / overdue ---
+    const baseAmount = unpaid.reduce((s, inv) => s + parseFloat(inv.amount || 0), 0);
+    const lateFeeTotal = unpaid.reduce((s, inv) => s + parseFloat(inv.late_fee || 0), 0);
     const isOverdue = unpaid.some((inv) => inv.due_date && new Date(inv.due_date) < now);
     const dueDate = oldest?.due_date ? fmtDate(oldest.due_date) : '';
     const billingMo = oldest?.due_date ? fmtBillingMonth(oldest.due_date) : fmtBillingMonth(null);
-    const amtFormatted = fmtAmountInquiry(totalDue);
+
+    // amount_within_dueDate: always the base amount (no late fee)
+    // amount_after_dueDate:  base + late fee (same as within when not yet overdue)
+    const amtWithin = fmtAmountInquiry(baseAmount);
+    const amtAfter = isOverdue ? fmtAmountInquiry(baseAmount + lateFeeTotal) : amtWithin;
 
     return res.json({
       response_Code: '00',
       consumer_detail: padRight(student.name, 30),
       bill_status: 'U',
       due_date: dueDate,
-      // amount_within_dueDate: 0 if already overdue; otherwise full outstanding
-      amount_within_dueDate: isOverdue ? '+0000000000000' : amtFormatted,
-      amount_after_dueDate: amtFormatted,
+      amount_within_dueDate: amtWithin,
+      amount_after_dueDate: amtAfter,
       billing_month: billingMo,
       date_paid: '',
       amount_paid: '',
@@ -420,7 +427,7 @@ const billPayment1Link = async (req, res) => {
 
     // Check if already fully paid
     const [unpaid] = await pool.query(
-      `SELECT id, amount FROM invoices
+      `SELECT id, amount, late_fee, due_date, late_fee_applied, month, invoice_number FROM invoices
        WHERE consumer_number = ? AND status != 'paid' AND deleted_at IS NULL
        ORDER BY due_date ASC`,
       [consumerNumber]
@@ -471,16 +478,36 @@ const billPayment1Link = async (req, res) => {
 
     // Apply payment to invoices oldest-first; only mark paid when fully covered
     let remaining = parseFloat(amount.toFixed(2));
+    const paidInvoices = [];
     for (const inv of unpaid) {
       const invAmt = parseFloat(inv.amount);
       if (remaining >= invAmt) {
         await pool.query(
-          `UPDATE invoices SET status = 'paid', paid_at = NOW() WHERE id = ?`,
-          [inv.id]
+          `UPDATE invoices SET status = 'paid', paid_at = ? WHERE id = ?`,
+          [paidAtStr, inv.id]
         );
         remaining = parseFloat((remaining - invAmt).toFixed(2));
+        paidInvoices.push(inv);
       } else {
         break;
+      }
+    }
+
+    // Post late_fee ledger entries for each invoice paid after its due date
+    const paidDate = new Date(paidAtStr);
+    for (const inv of paidInvoices) {
+      const lateFeeAmt = parseFloat(inv.late_fee || 0);
+      const invDueDate = new Date(inv.due_date);
+      if (lateFeeAmt > 0 && paidDate > invDueDate && !inv.late_fee_applied) {
+        const monthLabel = inv.month || String(inv.due_date).slice(0, 7);
+        await pool.query(
+          `INSERT INTO ledger_entries
+             (id, tenant_id, student_id, date, description, debit, credit, balance, bill_id, reference, entry_type)
+           VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, 'late_fee')`,
+          [uuidv4(), tenantId, student.id, paidAtStr.slice(0, 10),
+            `Late Fee — ${monthLabel}`, lateFeeAmt, inv.invoice_number, dupKey]
+        );
+        await pool.query('UPDATE invoices SET late_fee_applied = 1 WHERE id = ?', [inv.id]);
       }
     }
 

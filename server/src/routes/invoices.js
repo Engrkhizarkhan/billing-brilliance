@@ -14,5 +14,6 @@ router.post('/generate', invoiceController.generateInvoicesFromAssignments);
 router.get('/:id', idParam, handleValidation, invoiceController.getInvoice);
 router.post('/', invoiceController.createInvoice);
 router.put('/:id/status', idParam, handleValidation, invoiceController.updateInvoiceStatus);
+router.delete('/:id', idParam, handleValidation, invoiceController.deleteInvoice);
 
 module.exports = router;

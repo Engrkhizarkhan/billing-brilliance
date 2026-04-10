@@ -44,7 +44,7 @@ const navItems: Record<UserRole, NavItem[]> = {
     { label: 'Scholarships', path: '/school/scholarships', icon: Award, group: 'Students' },
     { label: 'Defaulters', path: '/school/defaulters', icon: AlertTriangle, group: 'Finance' },
     { label: 'Payment Programs', path: '/school/payment-programs', icon: CreditCard, group: 'Finance' },
-    { label: 'Payments', path: '/school/payments', icon: Wallet, group: 'Finance' },
+    { label: 'Payment History', path: '/school/payments', icon: Wallet, group: 'Finance' },
     { label: 'Real-Time Payments', path: '/school/realtime-payments', icon: Activity, group: 'Finance' },
     { label: 'Reports', path: '/school/reports', icon: BarChart3, group: 'Analytics' },
     { label: 'Login Activity', path: '/school/login-activity', icon: Shield, group: 'System' },

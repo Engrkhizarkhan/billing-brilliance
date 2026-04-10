@@ -1,6 +1,5 @@
 import { StatCard } from '@/components/StatCard';
 import { GraduationCap, Receipt, Wallet, Users, AlertTriangle, Calendar, TrendingUp, Loader2 } from 'lucide-react';
-import { feeCollectionByHead } from '@/data/chartData';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
@@ -19,11 +18,15 @@ const SchoolDashboard = () => {
   const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({}), []);
   const { data: invoicesData, loading: li } = useApiQuery(() => api.fetchInvoices({}), [paymentVersion]);
   const { data: paymentHistoryData, loading: lp } = useApiQuery(() => api.fetchPaymentHistory(), [paymentVersion]);
+  const { data: feeByPlanData, loading: lFee } = useApiQuery(() => api.getCollectionByFeePlan(), [paymentVersion]);
+  const { data: dashStatsData } = useApiQuery(() => api.getDashboardStats(), [paymentVersion]);
 
   const students = (studentsData || []) as Student[];
   const invoices = (invoicesData || []) as Invoice[];
   const paymentHistory = (paymentHistoryData || []) as Array<{ id: string; studentName: string; amount: number; date: string; note: string }>;
-  const loading = ls || li || lp;
+  const feeByPlan = (feeByPlanData || []) as { name: string; value: number }[];
+  const totalLateFees = (dashStatsData as { totalLateFees?: number } | null)?.totalLateFees ?? 0;
+  const loading = ls || li || lp || lFee;
 
   const classSummary = useMemo(() => {
     const map: Record<string, number> = {};
@@ -75,6 +78,25 @@ const SchoolDashboard = () => {
   const todayPayments = latestDayPayments.length;
   const latestDayAmount = latestDayPayments.reduce((sum, payment) => sum + payment.amount, 0);
 
+  const monthChange = useMemo(() => {
+    const prev = monthlyCollectionData[monthlyCollectionData.length - 2]?.collected ?? 0;
+    const curr = monthlyCollectionData[monthlyCollectionData.length - 1]?.collected ?? 0;
+    if (prev === 0) return null;
+    return Math.round(((curr - prev) / prev) * 100);
+  }, [monthlyCollectionData]);
+
+  const studentsWithoutCurrentMonthBill = useMemo(() => {
+    const studentsWithBill = new Set(
+      invoices
+        .filter((inv) => inv.month === currentMonthKey)
+        .flatMap((inv) => [inv.studentId, inv.consumerNumber].filter(Boolean))
+    );
+    return students.filter((s) => !studentsWithBill.has(s.id) && !studentsWithBill.has(s.consumerNumber)).length;
+  }, [students, invoices, currentMonthKey]);
+
+  const currentMonthBillsGenerated = studentsWithoutCurrentMonthBill === 0 && students.length > 0;
+  const currentMonthLabel = new Date().toLocaleDateString('en-US', { month: 'long' });
+
   const recentPayments = paymentHistory.slice(0, 5);
 
   if (loading) return <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin" /></div>;
@@ -86,12 +108,13 @@ const SchoolDashboard = () => {
         <p className="page-description">Overview of students, fees, and collections</p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         <div className="cursor-pointer" onClick={() => navigate('/school/students')}><StatCard title="Total Students" value={students.length} icon={GraduationCap} trend="5 new this month" trendUp /></div>
         <StatCard title="Collected This Month" value={formatPKR(collectedThisMonth)} icon={Wallet} trend={collectedThisMonth > 0 ? 'from payment history' : 'No payments this month'} trendUp={collectedThisMonth > 0} />
         <div className="cursor-pointer" onClick={() => navigate('/school/defaulters')}><StatCard title="Outstanding" value={formatPKR(totalOutstanding)} icon={AlertTriangle} trend={`${defaultersCount} defaulters`} trendUp={false} /></div>
         <StatCard title="Defaulters" value={defaultersCount} icon={Users} />
         <StatCard title="Latest Day Payments" value={todayPayments} icon={Calendar} trend={latestPaymentDate ? `${formatPKR(latestDayAmount)} on ${latestPaymentDate}` : 'No payments yet'} trendUp={todayPayments > 0} />
+        <StatCard title="Late Fees Collected" value={formatPKR(totalLateFees)} icon={TrendingUp} trend={totalLateFees > 0 ? 'From overdue payments' : 'None charged yet'} trendUp={false} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -99,7 +122,11 @@ const SchoolDashboard = () => {
         <div className="dashboard-card lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <h3 className="section-title">Monthly Collection Trend</h3>
-            <span className="metric-change-up">↑ 10%</span>
+            {monthChange !== null && (
+              <span className={monthChange >= 0 ? 'metric-change-up' : 'metric-change-down'}>
+                {monthChange >= 0 ? '↑' : '↓'} {Math.abs(monthChange)}%
+              </span>
+            )}
           </div>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={monthlyCollectionData}>
@@ -112,18 +139,22 @@ const SchoolDashboard = () => {
           </ResponsiveContainer>
         </div>
 
-        {/* Fee Head Breakdown */}
+        {/* Fee Plan Breakdown */}
         <div className="dashboard-card">
-          <h3 className="section-title mb-4">Collection by Fee Head</h3>
-          <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie data={feeCollectionByHead} cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={3} dataKey="value">
-                {feeCollectionByHead.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-              </Pie>
-              <Tooltip formatter={(v: number) => formatPKR(v)} />
-              <Legend formatter={(value) => <span className="text-xs">{value}</span>} />
-            </PieChart>
-          </ResponsiveContainer>
+          <h3 className="section-title mb-4">Collection by Fee Plan</h3>
+          {feeByPlan.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-20">No fee plans configured.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <PieChart>
+                <Pie data={feeByPlan} cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={3} dataKey="value">
+                  {feeByPlan.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                </Pie>
+                <Tooltip formatter={(v: number) => formatPKR(v)} />
+                <Legend formatter={(value) => <span className="text-xs">{value}</span>} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
@@ -161,14 +192,28 @@ const SchoolDashboard = () => {
               <AlertTriangle className="w-5 h-5 text-destructive mt-0.5 shrink-0" />
               <div><p className="text-sm font-medium text-destructive">{defaultersCount} students currently have outstanding dues</p><p className="text-xs text-muted-foreground mt-1">Total outstanding: {formatPKR(totalOutstanding)}</p></div>
             </div>
-            <div className="rounded-xl bg-warning/5 border border-warning/10 p-4 flex items-start gap-3">
-              <Receipt className="w-5 h-5 text-warning mt-0.5 shrink-0" />
-              <div><p className="text-sm font-medium">Monthly bills not generated for April</p><p className="text-xs text-muted-foreground mt-1">Generate bills for 342 students</p></div>
-            </div>
-            <div className="rounded-xl bg-primary/5 border border-primary/10 p-4 flex items-start gap-3">
-              <TrendingUp className="w-5 h-5 text-primary mt-0.5 shrink-0" />
-              <div><p className="text-sm font-medium">Collection rate improved by 10%</p><p className="text-xs text-muted-foreground mt-1">Collections are trending up this month</p></div>
-            </div>
+            {!currentMonthBillsGenerated && studentsWithoutCurrentMonthBill > 0 && (
+              <div className="rounded-xl bg-warning/5 border border-warning/10 p-4 flex items-start gap-3">
+                <Receipt className="w-5 h-5 text-warning mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium">Monthly bills not generated for {currentMonthLabel}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Generate bills for {studentsWithoutCurrentMonthBill} student{studentsWithoutCurrentMonthBill !== 1 ? 's' : ''}</p>
+                </div>
+              </div>
+            )}
+            {monthChange !== null && (
+              <div className={`rounded-xl p-4 flex items-start gap-3 ${monthChange >= 0 ? 'bg-primary/5 border border-primary/10' : 'bg-destructive/5 border border-destructive/10'}`}>
+                <TrendingUp className={`w-5 h-5 mt-0.5 shrink-0 ${monthChange >= 0 ? 'text-primary' : 'text-destructive'}`} />
+                <div>
+                  <p className="text-sm font-medium">
+                    Collection rate {monthChange >= 0 ? 'improved' : 'dropped'} by {Math.abs(monthChange)}%
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Collections are trending {monthChange >= 0 ? 'up' : 'down'} compared to last month
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

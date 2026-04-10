@@ -112,6 +112,7 @@ export interface PaymentPlanAssignment {
   planName?: string;
   amount?: number;
   frequency?: FeePlan['frequency'];
+  planType?: 'tuition' | 'additional';
 }
 
 export type StudentRiskTier = 'current' | 'watch' | 'high-risk' | 'critical';
@@ -129,6 +130,22 @@ export interface StudentFinancialSummary {
   studentId: string;
   totalDue: number;
   overdueMonths: number;
+  lastPaymentDate?: string | null;
+}
+
+export interface StudentLedgerSummary {
+  id: string;
+  name: string;
+  class: string;
+  section: string;
+  rollNumber: string;
+  consumerNumber: string;
+  billId: string;
+  status: string;
+  totalDebit: number;
+  totalCredit: number;
+  runningBalance: number;
+  entryCount: number;
 }
 
 export interface LedgerAllocation {
@@ -140,9 +157,10 @@ export interface FeePlan {
   id: string;
   name: string;
   amount: number;
-  frequency: 'monthly' | 'quarterly' | 'yearly';
+  frequency: 'monthly' | 'quarterly' | 'yearly' | 'one-time';
   dueDay: number;
   lateFee: number;
+  planType: 'tuition' | 'additional';
 }
 
 export interface Service {
@@ -195,7 +213,7 @@ export interface LedgerEntry {
   balance: number;
   billId: string;
   reference?: string;
-  entryType?: 'charge' | 'payment' | 'adjustment';
+  entryType?: 'charge' | 'payment' | 'adjustment' | 'late_fee';
   allocations?: LedgerAllocation[];
   grossTuition?: number;
   scholarshipDiscount?: number;

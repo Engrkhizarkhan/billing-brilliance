@@ -7,10 +7,8 @@ import { ExportButton } from '@/components/ExportButton';
 import { TablePagination } from '@/components/TablePagination';
 import { EmptyState } from '@/components/EmptyState';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { AlertTriangle, MessageSquare, Loader2 } from 'lucide-react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import { formatPKR } from '@/lib/formatters';
-import { toast } from 'sonner';
 
 const Defaulters = () => {
   const [search, setSearch] = useState('');
@@ -74,12 +72,7 @@ const Defaulters = () => {
           <h1 className="page-header">Defaulters</h1>
           <p className="page-description">Students with outstanding dues • {filtered.length} defaulters • Total: {formatPKR(totalDue)}</p>
         </div>
-        <div className="flex gap-2">
-          <ExportButton data={filtered.map((item) => ({ Name: item.student.name, Father: item.student.fatherName, Class: item.student.class, CNIC: item.student.cnic, Phone: item.student.phone, AmountDue: item.financial.totalDue, OverdueMonths: item.financial.overdueMonths, Risk: item.financial.riskTier }))} filename="defaulters" />
-          <Button variant="outline" size="sm" className="rounded-lg" onClick={() => toast.success('SMS reminders sent to all defaulters')}>
-            <MessageSquare className="w-4 h-4 mr-1.5" />Send Reminders
-          </Button>
-        </div>
+        <ExportButton data={filtered.map((item) => ({ Name: item.student.name, Father: item.student.fatherName, Class: item.student.class, CNIC: item.student.cnic, Phone: item.student.phone, AmountDue: item.financial.totalDue, OverdueMonths: item.financial.overdueMonths, Risk: item.financial.riskTier }))} filename="defaulters" />
       </div>
 
       <FilterBar
@@ -124,7 +117,6 @@ const Defaulters = () => {
                 <TableHead className="text-xs font-semibold text-right">Amount Due</TableHead>
                 <TableHead className="text-xs font-semibold text-right">Overdue Months</TableHead>
                 <TableHead className="text-xs font-semibold">Risk</TableHead>
-                <TableHead className="text-xs font-semibold w-16">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -139,11 +131,6 @@ const Defaulters = () => {
                   <TableCell className="text-right font-mono text-sm font-semibold text-destructive">{formatPKR(financial.totalDue)}</TableCell>
                   <TableCell className="text-right font-mono text-xs text-destructive">{financial.overdueMonths} mo</TableCell>
                   <TableCell><span className="text-xs capitalize bg-warning/10 text-warning px-2 py-0.5 rounded-md">{financial.riskTier}</span></TableCell>
-                  <TableCell>
-                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => toast.success(`SMS sent to ${student.name}'s parent`)}>
-                      <MessageSquare className="w-3.5 h-3.5" />
-                    </Button>
-                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
