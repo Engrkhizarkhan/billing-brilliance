@@ -17,7 +17,8 @@ const pool = mysql.createPool({
   dateStrings: true,
 });
 
-pool.on('connection', () => {
+pool.on('connection', (conn) => {
+  conn.query("SET time_zone = '+00:00'");
   logger.debug('New database connection established');
 });
 

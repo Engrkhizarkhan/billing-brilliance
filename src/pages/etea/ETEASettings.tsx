@@ -9,7 +9,7 @@ import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import { useAuthStore } from '@/store/authStore';
 import { EteaRequestSecurityContext } from '@/types';
-import { Copy, Eye, EyeOff } from 'lucide-react';
+import { Copy, Eye, EyeOff, X, Plus } from 'lucide-react';
 
 const ETEASettings = () => {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -23,6 +23,10 @@ const ETEASettings = () => {
   const setSourceIp = useEteaSecurityStore((state) => state.setSourceIp);
 
   const [securitySourceIp, setSecuritySourceIp] = useState(storedSourceIp);
+  const [ipList, setIpList] = useState<string[]>(
+    storedSourceIp ? storedSourceIp.split(',').map((s) => s.trim()).filter(Boolean) : ['127.0.0.1']
+  );
+  const [ipInput, setIpInput] = useState('');
   const [savingSecurityContext, setSavingSecurityContext] = useState(false);
   const { data: securityContextData } = useApiQuery(() => api.fetchSetting<EteaRequestSecurityContext>('etea_security_context'), []);
 
@@ -32,6 +36,7 @@ const ETEASettings = () => {
 
     const nextSourceIp = securityContext.sourceIp || storedSourceIp;
     setSecuritySourceIp(nextSourceIp);
+    setIpList(nextSourceIp ? nextSourceIp.split(',').map((s) => s.trim()).filter(Boolean) : ['127.0.0.1']);
     setSourceIp(nextSourceIp);
   }, [securityContextData, setSourceIp, storedSourceIp]);
 
@@ -71,16 +76,32 @@ const ETEASettings = () => {
     }
   };
 
+  const addIp = () => {
+    const val = ipInput.trim();
+    if (!val) return;
+    if (ipList.includes(val)) { toast.error('IP already in list'); return; }
+    const next = [...ipList, val];
+    setIpList(next);
+    setSecuritySourceIp(next.join(','));
+    setIpInput('');
+  };
+
+  const removeIp = (ip: string) => {
+    const next = ipList.filter((i) => i !== ip);
+    setIpList(next);
+    setSecuritySourceIp(next.join(','));
+  };
+
   const handleSaveSecurityContext = async () => {
-    if (!securitySourceIp.trim()) {
-      toast.error('Source IP is required');
+    if (ipList.length === 0) {
+      toast.error('At least one source IP is required');
       return;
     }
 
     setSavingSecurityContext(true);
     try {
       const payload = {
-        sourceIp: securitySourceIp.trim(),
+        sourceIp: ipList.join(','),
       };
       await api.saveSetting('etea_security_context', payload);
       setSourceIp(payload.sourceIp);
@@ -193,30 +214,41 @@ const ETEASettings = () => {
         <CardHeader>
           <CardTitle>API Security Context</CardTitle>
           <CardDescription>
-            Configure source IP for ETEA payment-controller calls. Protocol is fixed to HTTPS and callback flow enforces signature + idempotency controls.
+            Configure whitelisted source IPs for ETEA payment-controller calls. Callback flow enforces signature + idempotency controls.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="source-ip">Source IP (Whitelisted)</Label>
-            <Input
-              id="source-ip"
-              value={securitySourceIp}
-              onChange={(event) => setSecuritySourceIp(event.target.value)}
-              className="rounded-lg"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="protocol">Protocol</Label>
-            <Input id="protocol" value="https" readOnly className="rounded-lg bg-muted/40" />
+            <Label>Source IPs (Whitelisted)</Label>
+            <div className="flex flex-wrap gap-2 rounded-lg border bg-muted/20 p-2 min-h-[42px]">
+              {ipList.map((ip) => (
+                <span key={ip} className="flex items-center gap-1 bg-background border rounded px-2 py-0.5 text-xs font-mono">
+                  {ip}
+                  <button type="button" onClick={() => removeIp(ip)} className="text-muted-foreground hover:text-destructive ml-1">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={ipInput}
+                onChange={(e) => setIpInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addIp(); } }}
+                placeholder="e.g. 203.0.113.10"
+                className="rounded-lg font-mono text-sm"
+              />
+              <Button type="button" variant="outline" size="sm" className="rounded-lg" onClick={addIp}>
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">Press Enter or click + to add. Multiple IPs allowed.</p>
           </div>
 
           <div className="rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground space-y-1">
             <p>Security controls enabled:</p>
             <p>- API key authentication</p>
             <p>- Source IP whitelist</p>
-            <p>- HTTPS-only transport</p>
             <p>- Webhook signature verification</p>
             <p>- Callback idempotency protection</p>
           </div>

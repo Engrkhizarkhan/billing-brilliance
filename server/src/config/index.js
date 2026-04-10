@@ -30,6 +30,7 @@ module.exports = {
 
   etea: {
     callbackUrl: process.env.ETEA_CALLBACK_URL || '/api/payment/callback',
+    notificationUrl: process.env.ETEA_NOTIFICATION_URL || '',  // ETEA's webhook endpoint — set in .env
     webhookSecret: process.env.ETEA_WEBHOOK_SECRET || 'change-me',
     paymentExpiryHours: parseInt(process.env.ETEA_PAYMENT_EXPIRY_HOURS, 10) || 48,
     allowedIps: (process.env.ETEA_ALLOWED_IPS || '127.0.0.1,::1').split(',').map(s => s.trim()).filter(Boolean),

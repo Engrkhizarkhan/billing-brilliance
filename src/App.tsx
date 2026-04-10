@@ -31,11 +31,11 @@ import ETEADashboard from "./pages/etea/ETEADashboard";
 import ETEALoginActivity from "./pages/etea/ETEALoginActivity";
 import ETEAInvoices from "./pages/etea/ETEAInvoices";
 import ETEAPayments from "./pages/etea/ETEAPayments";
+import ETEAPaymentHistory from "./pages/etea/ETEAPaymentHistory";
 import ETEARealtimePayments from "./pages/etea/ETEARealtimePayments";
 import ETEAReports from "./pages/etea/ETEAReports";
 import ETEASettings from "./pages/etea/ETEASettings";
 import AuditTrail from "./pages/admin/AuditTrail";
-import ApiHealth from "./pages/admin/ApiHealth";
 import OneLinkSandbox from "./pages/admin/OneLinkSandbox";
 import NotFound from "./pages/NotFound";
 
@@ -78,7 +78,6 @@ const AppRoutes = () => {
             <Route path="cashflow" element={<CashFlow />} />
             <Route path="reports" element={<Reports />} />
             <Route path="audit" element={<AuditTrail />} />
-            <Route path="api-health" element={<ApiHealth />} />
             <Route path="onelink-sandbox" element={<OneLinkSandbox />} />
           </Route>
 
@@ -103,6 +102,7 @@ const AppRoutes = () => {
             <Route index element={<ETEADashboard />} />
             <Route path="invoices" element={<ETEAInvoices />} />
             <Route path="payments" element={<ETEAPayments />} />
+            <Route path="history" element={<ETEAPaymentHistory />} />
             <Route path="realtime-payments" element={<ETEARealtimePayments />} />
             <Route path="reports" element={<ETEAReports />} />
             <Route path="login-activity" element={<ETEALoginActivity />} />

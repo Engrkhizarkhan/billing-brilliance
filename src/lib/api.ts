@@ -414,8 +414,8 @@ export const api = {
   // ---- Reports ----
   async getDashboardStats(): Promise<ApiResponse<{
     totalStudents: number; totalInvoices: number; paidRevenue: number;
-    pendingAmount: number; overdueInvoices: number; totalTransactions: number;
-    totalLateFees: number;
+    pendingAmount: number; overdueAmount: number; overdueInvoices: number;
+    totalTransactions: number; totalLateFees: number;
   }>> {
     return get('/reports/dashboard');
   },

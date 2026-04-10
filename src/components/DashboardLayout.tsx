@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Users, CreditCard, BarChart3, Building2,
   GraduationCap, BookOpen, Award, Receipt, Wallet, Briefcase,
   LogOut, Menu, X, DollarSign, ChevronRight, Settings, Sun, Moon,
-  AlertTriangle, FileText, Shield, ClipboardList, Activity, Wifi
+  AlertTriangle, FileText, Shield, ClipboardList, Activity, Wifi, History
 } from 'lucide-react';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -32,7 +32,6 @@ const navItems: Record<UserRole, NavItem[]> = {
     { label: 'Cash Flow', path: '/admin/cashflow', icon: DollarSign, group: 'Finance' },
     { label: 'Reports', path: '/admin/reports', icon: BarChart3, group: 'Analytics' },
     { label: 'Audit Trail', path: '/admin/audit', icon: ClipboardList, group: 'Analytics' },
-    { label: 'API Health', path: '/admin/api-health', icon: Shield, group: 'System' },
     { label: '1LINK Sandbox', path: '/admin/onelink-sandbox', icon: Wifi, group: 'System' },
   ],
   school: [
@@ -53,6 +52,7 @@ const navItems: Record<UserRole, NavItem[]> = {
   etea: [
     { label: 'Dashboard', path: '/etea', icon: LayoutDashboard, group: 'Overview' },
     { label: 'Payments', path: '/etea/payments', icon: Wallet, group: 'Finance' },
+    { label: 'Payment History', path: '/etea/history', icon: History, group: 'Finance' },
     { label: 'Real-Time Payments', path: '/etea/realtime-payments', icon: Activity, group: 'Finance' },
     { label: 'Reports', path: '/etea/reports', icon: BarChart3, group: 'Analytics' },
     { label: 'Login Activity', path: '/etea/login-activity', icon: Shield, group: 'System' },

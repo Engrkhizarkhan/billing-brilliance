@@ -41,11 +41,13 @@ const AdminDashboard = () => {
   const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({ pageSize: 100 }), []);
   const { data: invoicesData, loading: li } = useApiQuery(() => api.fetchInvoices({ pageSize: 100 }), [paymentVersion]);
   const { data: txnData, loading: lt } = useApiQuery(() => api.fetchTransactions({ pageSize: 5000 }), [paymentVersion]);
+  const { data: dashStatsRaw } = useApiQuery(() => api.getDashboardStats(), [paymentVersion]);
 
   const allBillers = (billers || []) as Biller[];
   const students = (studentsData || []) as StudentRecord[];
   const invoices = (invoicesData || []) as InvoiceRecord[];
   const transactions = (txnData || []) as TransactionRecord[];
+  const dashStats = dashStatsRaw as { overdueAmount?: number; pendingAmount?: number } | null;
 
   const loading = lb || ls || li || lt;
 
@@ -104,12 +106,16 @@ const AdminDashboard = () => {
   const tenantSummary = useMemo(() => {
     return allBillers.map((biller) => {
       const studentCount = students.filter((s) => resolveTenantId(s) === biller.id).length;
-      const invoiceCount = invoices.filter((inv) => resolveTenantId(inv) === biller.id).length;
+      const tenantInvoices = invoices.filter((inv) => resolveTenantId(inv) === biller.id);
+      const invoiceCount = tenantInvoices.length;
+      const pendingAmount = tenantInvoices
+        .filter((inv) => inv.status !== 'paid')
+        .reduce((sum, inv) => sum + Number(inv.amount || 0), 0);
       const txnCount = transactions.filter((t) => (t.tenantId && t.tenantId === biller.id) || t.billerName === biller.name).length;
       const revenue = transactions
         .filter((t) => t.status === 'completed' && ((t.tenantId && t.tenantId === biller.id) || t.billerName === biller.name))
         .reduce((sum, t) => sum + Number(t.amount || 0), 0);
-      return { ...biller, studentCount, invoiceCount, txnCount, revenue };
+      return { ...biller, studentCount, invoiceCount, pendingAmount, txnCount, revenue };
     });
   }, [allBillers, students, invoices, transactions]);
 
@@ -119,12 +125,6 @@ const AdminDashboard = () => {
       .reduce((sum, t) => sum + Number(t.amount || 0), 0);
 
     const totalPayments = transactions.filter((t) => t.status === 'completed').length;
-    const pendingAmount = invoices
-      .filter((i) => i.status === 'pending')
-      .reduce((sum, i) => sum + Number(i.amount || 0), 0);
-    const overdueAmount = invoices
-      .filter((i) => i.status === 'overdue')
-      .reduce((sum, i) => sum + Number(i.amount || 0), 0);
 
     return {
       tenants: allBillers.length,
@@ -133,10 +133,10 @@ const AdminDashboard = () => {
       invoices: invoices.length,
       totalRevenue,
       totalPayments,
-      pendingAmount,
-      overdueAmount,
+      pendingAmount: dashStats?.pendingAmount ?? 0,
+      overdueAmount: dashStats?.overdueAmount ?? 0,
     };
-  }, [allBillers, students, invoices, transactions]);
+  }, [allBillers, students, invoices, transactions, dashStats]);
 
   const revenueTrendPercent = useMemo(() => {
     if (revenueData.length < 2) return 0;
@@ -200,6 +200,7 @@ const AdminDashboard = () => {
               <TableHead className="text-xs">Invoices</TableHead>
               <TableHead className="text-xs">Txns</TableHead>
               <TableHead className="text-xs">Paid Revenue</TableHead>
+              <TableHead className="text-xs">Pending</TableHead>
               <TableHead className="text-xs">Status</TableHead>
             </TableRow>
           </TableHeader>
@@ -213,6 +214,7 @@ const AdminDashboard = () => {
                 <TableCell className="font-mono text-sm">{tenant.invoiceCount}</TableCell>
                 <TableCell className="font-mono text-sm">{tenant.txnCount}</TableCell>
                 <TableCell className="font-mono text-sm">₨ {tenant.revenue.toLocaleString()}</TableCell>
+                <TableCell className="font-mono text-sm text-amber-600">₨ {tenant.pendingAmount.toLocaleString()}</TableCell>
                 <TableCell><StatusBadge status={tenant.status} /></TableCell>
               </TableRow>
             ))}

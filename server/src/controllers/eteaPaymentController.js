@@ -9,6 +9,7 @@ const { AppError } = require('../middleware/errorHandler');
 const { auditLog } = require('../middleware/auditLog');
 
 const CALLBACK_URL = config.etea.callbackUrl;
+const ETEA_NOTIFICATION_URL = config.etea.notificationUrl; // Outbound: ETEA's webhook to receive payment confirmations
 const WEBHOOK_SECRET = config.etea.webhookSecret;
 const REQUIRE_WEBHOOK_SIGNATURE = config.etea.requireWebhookSignature;
 const DEFAULT_EXPIRY_HOURS = config.etea.paymentExpiryHours;
@@ -41,6 +42,7 @@ const normalizeCreateRequest = (body) => ({
   postingId: (body.postingId || body.posting_id || '').trim(),
   dueDate: (body.dueDate || body.due_date || '').trim(),
   expireAt: body.expireAt || body.expire_at || null,
+  neverExpires: Boolean(body.neverExpires || body.never_expires),
   description: body.description?.trim(),
   customerName: (body.customerName || body.customer_name || body.applicantId || body.applicant_id || 'Applicant').trim(),
   amount: body.amount,
@@ -152,9 +154,12 @@ const createPayment = async (req, res, next) => {
       : normalized.expireAt
         ? new Date(normalized.expireAt).toISOString().slice(0, 10)
         : new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const expiryDate = normalized.expireAt
-      ? new Date(normalized.expireAt).toISOString()
-      : addHours(createdAt, DEFAULT_EXPIRY_HOURS);
+    // never_expires = store a far-future date (year 9999) so expiry queries never trigger
+    const expiryDate = normalized.neverExpires
+      ? '9999-12-31T23:59:59.000Z'
+      : normalized.expireAt
+        ? new Date(normalized.expireAt).toISOString()
+        : addHours(createdAt, DEFAULT_EXPIRY_HOURS);
     const billId = `ETEA-${id.split('-')[0].toUpperCase()}`;
 
     // Generate a 1BILL-compatible consumer number for this payment record.
@@ -332,14 +337,37 @@ const processPaymentCallback = async (req, res, next) => {
       }
     }
 
-    // Record notification
+    const [updatedRows] = await pool.query('SELECT * FROM etea_payment_records WHERE id = ?', [payment.id]);
+    const updated = updatedRows[0];
+
+    // Push outbound notification to ETEA's webhook endpoint (fire-and-forget, non-blocking)
+    const eteaWebhookUrl = ETEA_NOTIFICATION_URL || updated.callback_url || '';
+    if (eteaWebhookUrl) {
+      const notificationPayload = {
+        application_id: updated.application_id,
+        status: updated.status,
+        transaction_id: updated.transaction_id || null,
+        paid_at: updated.paid_at || null,
+      };
+      fetch(eteaWebhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(notificationPayload),
+        signal: AbortSignal.timeout(8000),
+      })
+        .then((res) => {
+          logger.info(`ETEA webhook push → ${eteaWebhookUrl} | status=${res.status} | application_id=${updated.application_id}`);
+        })
+        .catch((err) => {
+          logger.warn(`ETEA webhook push failed → ${eteaWebhookUrl} | ${err.message}`);
+        });
+    }
+
+    // Record notification log
     await pool.query(
       'INSERT INTO etea_payment_notifications (id, tenant_id, application_id, payment_id, bill_id, status) VALUES (?, ?, ?, ?, ?, ?)',
       [uuidv4(), payment.tenant_id, payment.application_id, payment.id, payment.bill_id, callback.status]
     );
-
-    const [updatedRows] = await pool.query('SELECT * FROM etea_payment_records WHERE id = ?', [payment.id]);
-    const updated = updatedRows[0];
 
     await auditLog(req, 'callback', 'etea_payment', payment.id, `Callback: ${callback.status} via TXN ${callback.transactionId}`);
 
@@ -372,13 +400,29 @@ const healthCheck = async (req, res) => {
 // ---- Expire overdue payments (cron-callable) ----
 const expireOverduePayments = async (req, res, next) => {
   try {
-    const [result] = await pool.query(
-      `UPDATE etea_payment_records SET status = 'expired'
-       WHERE status = 'pending' AND expiry_date <= NOW()`
+    // Fetch records about to be expired so we can log notifications
+    const [toExpire] = await pool.query(
+      `SELECT id, tenant_id, application_id, bill_id FROM etea_payment_records
+       WHERE status = 'pending' AND expiry_date <= UTC_TIMESTAMP()`
     );
+
+    if (toExpire.length > 0) {
+      await pool.query(
+        `UPDATE etea_payment_records SET status = 'expired'
+         WHERE status = 'pending' AND expiry_date <= UTC_TIMESTAMP()`
+      );
+
+      // Insert a notification row for each expired record
+      const notifValues = toExpire.map((r) => [uuidv4(), r.tenant_id, r.application_id, r.id, r.bill_id, 'expired']);
+      await pool.query(
+        'INSERT INTO etea_payment_notifications (id, tenant_id, application_id, payment_id, bill_id, status) VALUES ?',
+        [notifValues]
+      );
+    }
+
     res.json({
-      data: { expiredCount: result.affectedRows },
-      message: `${result.affectedRows} payment(s) expired`,
+      data: { expiredCount: toExpire.length },
+      message: `${toExpire.length} payment(s) expired`,
     });
   } catch (err) {
     next(err);
@@ -452,12 +496,33 @@ const getStats = async (req, res, next) => {
 // ---- List all payments & notifications ----
 const listPayments = async (req, res, next) => {
   try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const offset = (page - 1) * limit;
+
     let where = 'WHERE 1=1';
     const params = [];
     if (req.tenantId) { where += ' AND tenant_id = ?'; params.push(req.tenantId); }
+    if (req.query.status) { where += ' AND status = ?'; params.push(req.query.status); }
+    if (req.query.from)   { where += ' AND created_at >= ?'; params.push(req.query.from); }
+    if (req.query.to)     { where += ' AND created_at <= ?'; params.push(req.query.to); }
+    if (req.query.application_id) { where += ' AND application_id = ?'; params.push(req.query.application_id); }
 
-    const [rows] = await pool.query(`SELECT * FROM etea_payment_records ${where} ORDER BY created_at DESC`, params);
-    res.json({ data: rows });
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) AS total FROM etea_payment_records ${where}`, params
+    );
+
+    const [rows] = await pool.query(
+      `SELECT application_id, applicant_id, posting_id, consumer_number, amount, status,
+              created_at, paid_at, transaction_id, expiry_date
+       FROM etea_payment_records ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+
+    res.json({
+      data: rows,
+      meta: { total, page, limit, pages: Math.ceil(total / limit) },
+    });
   } catch (err) {
     next(err);
   }
@@ -465,26 +530,53 @@ const listPayments = async (req, res, next) => {
 
 const listNotifications = async (req, res, next) => {
   try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const offset = (page - 1) * limit;
+
     let where = 'WHERE 1=1';
     const params = [];
     if (req.tenantId) { where += ' AND tenant_id = ?'; params.push(req.tenantId); }
+    if (req.query.status) { where += ' AND status = ?'; params.push(req.query.status); }
+    if (req.query.from)   { where += ' AND sent_at >= ?'; params.push(req.query.from); }
+    if (req.query.to)     { where += ' AND sent_at <= ?'; params.push(req.query.to); }
+    if (req.query.application_id) { where += ' AND application_id = ?'; params.push(req.query.application_id); }
 
-    const [rows] = await pool.query(`SELECT * FROM etea_payment_notifications ${where} ORDER BY sent_at DESC`, params);
-    res.json({ data: rows });
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) AS total FROM etea_payment_notifications ${where}`, params
+    );
+
+    const [rows] = await pool.query(
+      `SELECT application_id, status, sent_at
+       FROM etea_payment_notifications ${where} ORDER BY sent_at DESC LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+
+    res.json({
+      data: rows,
+      meta: { total, page, limit, pages: Math.ceil(total / limit) },
+    });
   } catch (err) {
     next(err);
   }
 };
 
 // ---- Helper ----
-const buildOneBillPayload = (payment, customerName = 'Applicant') => ({
-  billId: payment.bill_id,
-  amount: parseFloat(payment.amount),
-  dueDate: payment.due_date,
-  customerName,
-  callbackUrl: payment.callback_url,
-  description: payment.description || `Payment for application ${payment.application_id}`,
-});
+const buildOneBillPayload = (payment, customerName = 'Applicant') => {
+  const expiryIso = payment.expiry_date
+    ? String(payment.expiry_date).replace(' ', 'T') + (String(payment.expiry_date).includes('Z') ? '' : 'Z')
+    : null;
+  const neverExpires = expiryIso && new Date(expiryIso).getFullYear() >= 9999;
+  return {
+    applicationId: payment.application_id,
+    consumerNumber: payment.consumer_number || null,
+    amount: parseFloat(payment.amount),
+    expires: neverExpires ? 'never' : expiryIso,
+    neverExpires,
+    customerName,
+    description: payment.description || `Payment for application ${payment.application_id}`,
+  };
+};
 
 module.exports = {
   createPayment,

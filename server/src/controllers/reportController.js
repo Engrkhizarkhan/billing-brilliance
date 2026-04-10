@@ -11,6 +11,7 @@ const getDashboardStats = async (req, res, next) => {
     const [[paidRevenue]] = await pool.query(`SELECT COALESCE(SUM(amount), 0) as total FROM invoices ${tenantWhere} AND status = 'paid' AND deleted_at IS NULL`, params);
     const [[pendingAmount]] = await pool.query(`SELECT COALESCE(SUM(amount), 0) as total FROM invoices ${tenantWhere} AND status != 'paid' AND deleted_at IS NULL`, params);
     const [[overdueCount]] = await pool.query(`SELECT COUNT(*) as count FROM invoices ${tenantWhere} AND status = 'overdue' AND deleted_at IS NULL`, params);
+    const [[overdueRow]] = await pool.query(`SELECT COALESCE(SUM(amount), 0) as total FROM invoices ${tenantWhere} AND status != 'paid' AND due_date < CURDATE() AND deleted_at IS NULL`, params);
     const [[txnCount]] = await pool.query(`SELECT COUNT(*) as count FROM transactions ${tenantWhere}`, params);
     const [[lateFeeRow]] = await pool.query(
       `SELECT COALESCE(SUM(debit), 0) as total FROM ledger_entries ${tenantWhere} AND entry_type = 'late_fee'`,
@@ -23,6 +24,7 @@ const getDashboardStats = async (req, res, next) => {
         totalInvoices: invoiceCount.count,
         paidRevenue: parseFloat(paidRevenue.total),
         pendingAmount: parseFloat(pendingAmount.total),
+        overdueAmount: parseFloat(overdueRow.total),
         overdueInvoices: overdueCount.count,
         totalTransactions: txnCount.count,
         totalLateFees: parseFloat(lateFeeRow.total),
