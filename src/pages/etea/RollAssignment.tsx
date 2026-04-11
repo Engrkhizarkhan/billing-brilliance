@@ -30,7 +30,7 @@ const RollAssignment = () => {
   const [stageFilter, setStageFilter] = useState<'all' | 'pending' | 'scheduled' | 'assigned'>('pending');
   const { data: applicantsData, loading: loadingApplicants } = useApiQuery(() => api.fetchApplicants({}), []);
   const { data: postingsData, loading: loadingPostings } = useApiQuery(() => api.fetchPostings(), []);
-  const allApplicants = (applicantsData || []) as Applicant[];
+  const allApplicants = useMemo(() => (applicantsData || []) as Applicant[], [applicantsData]);
   const postingsList = (postingsData || []) as EteaPosting[];
   const [rows, setRows] = useState<Assignment[]>([]);
 
@@ -45,7 +45,7 @@ const RollAssignment = () => {
         }))
       );
     }
-  }, [allApplicants]);
+  }, [allApplicants, rows.length]);
 
   const filtered = useMemo(() => {
     return rows.filter((row) => {

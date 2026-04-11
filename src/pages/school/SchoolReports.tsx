@@ -16,8 +16,8 @@ const SchoolReports = () => {
   const { data: monthlyTrendData, loading: lTrend } = useApiQuery(() => api.getMonthlyTrend(), []);
   const { data: feeByPlanData, loading: lFee } = useApiQuery(() => api.getCollectionByFeePlan(), []);
 
-  const students = (studentsData || []) as Student[];
-  const invoices = (invoicesData || []) as Invoice[];
+  const students = useMemo(() => (studentsData || []) as Student[], [studentsData]);
+  const invoices = useMemo(() => (invoicesData || []) as Invoice[], [invoicesData]);
   const stats = statsData as { paidRevenue?: number; overdueInvoices?: number } | null;
   const monthlyTrend = (monthlyTrendData || []) as { month: string; collected: number }[];
   const feeByPlan = (feeByPlanData || []) as { name: string; value: number }[];

@@ -14,7 +14,7 @@ const ETEADashboard = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
 
   const { data: paymentsData, loading: loadingPayments } = useApiQuery(() => api.listEteaPayments(), [paymentVersion]);
-  const paymentRecords = (paymentsData || []) as EteaPaymentRecord[];
+  const paymentRecords = useMemo(() => (paymentsData || []) as EteaPaymentRecord[], [paymentsData]);
 
   const pipelineData = useMemo(
     () => [

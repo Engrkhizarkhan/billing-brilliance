@@ -19,7 +19,7 @@ const Defaulters = () => {
 
   const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({ pageSize: 9999 }), []);
   const { data: summaryData, loading: li } = useApiQuery(() => api.fetchStudentFinancialSummary(), []);
-  const students = (studentsData || []) as Student[];
+  const students = useMemo(() => (studentsData || []) as Student[], [studentsData]);
   const loading = ls || li;
 
   const financialByStudentId = useMemo(() => {
@@ -36,7 +36,7 @@ const Defaulters = () => {
 
   const classOptions = useMemo(
     () => Array.from(new Set(students.map((student) => student.class))).sort((a, b) => Number(a.replace(/\D/g, '')) - Number(b.replace(/\D/g, ''))),
-    []
+    [students]
   );
 
   const defaulters = students

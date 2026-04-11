@@ -20,9 +20,9 @@ const PaymentPrograms = () => {
   const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({}), []);
   const { data: feePlansData, loading: lf } = useApiQuery(() => api.fetchFeePlans(), []);
   const { data: assignmentsData, loading: la, refetch: refetchAssignments } = useApiQuery(() => api.fetchPaymentPlanAssignments(), []);
-  const students = (studentsData || []) as Student[];
+  const students = useMemo(() => (studentsData || []) as Student[], [studentsData]);
   const feePlans = (feePlansData || []) as FeePlan[];
-  const assignments = (assignmentsData || []) as PaymentPlanAssignment[];
+  const assignments = useMemo(() => (assignmentsData || []) as PaymentPlanAssignment[], [assignmentsData]);
   const pageLoading = ls || lf || la;
   const [assigning, setAssigning] = useState(false);
   const [search, setSearch] = useState('');
@@ -85,7 +85,7 @@ const PaymentPrograms = () => {
   const individualSections = useMemo(() => {
     const pool = studentClassFilter === 'all' ? students : students.filter((student) => student.class === studentClassFilter);
     return Array.from(new Set(pool.map((student) => student.section))).sort((a, b) => a.localeCompare(b));
-  }, [studentClassFilter]);
+  }, [studentClassFilter, students]);
 
   const filteredStudentDirectory = useMemo(() => {
     const query = studentSearch.trim().toLowerCase();
@@ -100,7 +100,7 @@ const PaymentPrograms = () => {
       return classMatch && sectionMatch && searchMatch;
     });
     return source.slice(0, 200);
-  }, [studentSearch, studentClassFilter, studentSectionFilter]);
+  }, [studentSearch, studentClassFilter, studentSectionFilter, students]);
 
   // Students who already have any active/pending tuition plan (max 1 tuition per student)
   const assignedTuitionStudentIds = useMemo(

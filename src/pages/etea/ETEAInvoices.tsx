@@ -24,7 +24,7 @@ const ETEAInvoices = () => {
   const [pageSize, setPageSize] = useState(25);
 
   const { data: paymentsData, loading } = useApiQuery(() => api.listEteaPayments(), [paymentVersion]);
-  const rawPayments = (paymentsData || []) as EteaPaymentRecord[];
+  const rawPayments = useMemo(() => (paymentsData || []) as EteaPaymentRecord[], [paymentsData]);
 
   const invoiceRows = useMemo(
     () => rawPayments.map((payment) => ({

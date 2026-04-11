@@ -13,7 +13,7 @@ const ETEAReports = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
 
   const { data: paymentsData, loading } = useApiQuery(() => api.listEteaPayments(), [paymentVersion]);
-  const paymentRecords = (paymentsData || []) as EteaPaymentRecord[];
+  const paymentRecords = useMemo(() => (paymentsData || []) as EteaPaymentRecord[], [paymentsData]);
 
   const { data: postingsData } = useApiQuery(() => api.fetchPostings(), []);
   useEffect(() => {

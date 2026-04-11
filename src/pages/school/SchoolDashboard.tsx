@@ -21,9 +21,9 @@ const SchoolDashboard = () => {
   const { data: feeByPlanData, loading: lFee } = useApiQuery(() => api.getCollectionByFeePlan(), [paymentVersion]);
   const { data: dashStatsData } = useApiQuery(() => api.getDashboardStats(), [paymentVersion]);
 
-  const students = (studentsData || []) as Student[];
-  const invoices = (invoicesData || []) as Invoice[];
-  const paymentHistory = (paymentHistoryData || []) as Array<{ id: string; studentName: string; amount: number; date: string; note: string }>;
+  const students = useMemo(() => (studentsData || []) as Student[], [studentsData]);
+  const invoices = useMemo(() => (invoicesData || []) as Invoice[], [invoicesData]);
+  const paymentHistory = useMemo(() => (paymentHistoryData || []) as Array<{ id: string; studentName: string; amount: number; date: string; note: string }>, [paymentHistoryData]);
   const feeByPlan = (feeByPlanData || []) as { name: string; value: number }[];
   const totalLateFees = (dashStatsData as { totalLateFees?: number } | null)?.totalLateFees ?? 0;
   const loading = ls || li || lp || lFee;

@@ -110,11 +110,21 @@ const updateInvoiceStatus = async (req, res, next) => {
       const dueDate = new Date(inv.due_date);
       if (lateFeeAmt > 0 && now > dueDate && !inv.late_fee_applied) {
         const monthLabel = (inv.month || String(inv.due_date).slice(0, 7));
+        const studentId = inv.student_id;
+        const tId = req.tenantId || inv.tenant_id;
+
+        const [lastBal] = await pool.query(
+          'SELECT balance FROM ledger_entries WHERE student_id = ? ORDER BY date DESC, created_at DESC LIMIT 1',
+          [studentId]
+        );
+        const prevBalance = lastBal.length ? parseFloat(lastBal[0].balance) : 0;
+        const lateFeeBalance = parseFloat((prevBalance + lateFeeAmt).toFixed(2));
+
         await pool.query(
           `INSERT INTO ledger_entries (id, tenant_id, student_id, date, description, debit, credit, balance, reference, entry_type)
            VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, 'late_fee')`,
-          [uuidv4(), req.tenantId || inv.tenant_id, inv.student_id, now.toISOString().slice(0, 10),
-           `Late Fee — ${monthLabel}`, lateFeeAmt, lateFeeAmt, inv.invoice_number]
+          [uuidv4(), tId, studentId, now.toISOString().slice(0, 10),
+           `Late Fee — ${monthLabel}`, lateFeeAmt, lateFeeBalance, inv.invoice_number]
         );
         await pool.query('UPDATE invoices SET late_fee_applied = 1 WHERE id = ?', [req.params.id]);
       }
@@ -180,6 +190,9 @@ const generateInvoicesFromAssignments = async (req, res, next) => {
     let created = 0;
     let skipped = 0;
 
+    // Cache current running balance per student to avoid multiple DB round-trips per student
+    const studentBalances = {};
+
     for (const assignment of assignmentRows) {
       // Dedup per assignment+month: one invoice per fee plan per student per month
       const [existing] = await pool.query(
@@ -190,6 +203,15 @@ const generateInvoicesFromAssignments = async (req, res, next) => {
       if (existing.length > 0) {
         skipped += 1;
         continue;
+      }
+
+      // Seed running balance for this student on first encounter in this batch
+      if (!(assignment.student_id in studentBalances)) {
+        const [lastEntry] = await pool.query(
+          'SELECT balance FROM ledger_entries WHERE student_id = ? ORDER BY date DESC, created_at DESC LIMIT 1',
+          [assignment.student_id]
+        );
+        studentBalances[assignment.student_id] = lastEntry.length ? parseFloat(lastEntry[0].balance) : 0;
       }
 
       counter += 1;
@@ -237,13 +259,14 @@ const generateInvoicesFromAssignments = async (req, res, next) => {
         [invoiceId, tenantId, invoiceNumber, assignment.student_id, assignment.fee_plan_id, assignment.student_name, assignment.consumer_number, month, invoiceAmount, parseFloat(assignment.late_fee || 0), dueDate]
       );
 
-      // Create ledger charge entry for this fee plan
+      // Create ledger charge entry for this fee plan — balance carries the running total
+      studentBalances[assignment.student_id] = parseFloat((studentBalances[assignment.student_id] + netAmount).toFixed(2));
       const ledgerId = uuidv4();
       await pool.query(
         `INSERT INTO ledger_entries (id, tenant_id, student_id, date, description, debit, credit, balance, bill_id, reference, entry_type, gross_tuition, scholarship_discount, net_tuition)
          VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 'charge', ?, ?, ?)`,
         [ledgerId, tenantId, assignment.student_id, dueDate,
-         `${assignment.fee_plan_name} — ${month}`, netAmount, netAmount,
+         `${assignment.fee_plan_name} — ${month}`, netAmount, studentBalances[assignment.student_id],
          invoiceNumber, invoiceNumber, grossAmount, totalDiscount, netAmount]
       );
 
@@ -255,12 +278,13 @@ const generateInvoicesFromAssignments = async (req, res, next) => {
           [tenantId, assignment.student_id, `Transport Fee — ${month}`, month]
         );
         if (!existingBus.length) {
+          studentBalances[assignment.student_id] = parseFloat((studentBalances[assignment.student_id] + busMonthlyFee).toFixed(2));
           const busLedgerId = uuidv4();
           await pool.query(
             `INSERT INTO ledger_entries (id, tenant_id, student_id, date, description, debit, credit, balance, bill_id, reference, entry_type)
              VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 'charge')`,
             [busLedgerId, tenantId, assignment.student_id, dueDate,
-             `Transport Fee — ${month}`, busMonthlyFee, busMonthlyFee,
+             `Transport Fee — ${month}`, busMonthlyFee, studentBalances[assignment.student_id],
              invoiceNumber, invoiceNumber]
           );
         }

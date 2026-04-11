@@ -18,7 +18,7 @@ import { useApiQuery } from '@/hooks/useApiQuery';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Copy, Loader2, Infinity } from 'lucide-react';
+import { Copy, Loader2, Infinity as InfinityIcon } from 'lucide-react';
 
 
 const ETEAPayments = () => {
@@ -256,7 +256,7 @@ const ETEAPayments = () => {
                 onCheckedChange={(checked) => setCreateForm({ ...createForm, never_expires: Boolean(checked), expires_in_minutes: 0 })}
               />
               <Label htmlFor="never_expires" className="text-xs cursor-pointer flex items-center gap-1">
-                <Infinity className="w-3.5 h-3.5" /> Never expires (consumer number stays valid indefinitely)
+                <InfinityIcon className="w-3.5 h-3.5" /> Never expires (consumer number stays valid indefinitely)
               </Label>
             </div>
             <div className="space-y-1.5">

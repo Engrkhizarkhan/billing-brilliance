@@ -40,7 +40,7 @@ const seedAssignments = (apps: Applicant[]): ServiceAssignment[] => {
 const ETEAPaymentPrograms = () => {
   const { data: applicantsData, loading: loadingApplicants } = useApiQuery(() => api.fetchApplicants({}), []);
   const { data: servicesData, loading: loadingServices } = useApiQuery(() => api.fetchServices(), []);
-  const applicantsList = (applicantsData || []) as Applicant[];
+  const applicantsList = useMemo(() => (applicantsData || []) as Applicant[], [applicantsData]);
   const servicesList = (servicesData || []) as Service[];
 
   const [assignments, setAssignments] = useState<ServiceAssignment[]>([]);

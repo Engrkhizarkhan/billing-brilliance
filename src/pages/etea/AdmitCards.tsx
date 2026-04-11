@@ -16,7 +16,7 @@ const AdmitCards = () => {
   const [deliveryChannel, setDeliveryChannel] = useState<'email' | 'sms' | 'portal'>('portal');
   const { data: applicantsData, loading: loadingApplicants } = useApiQuery(() => api.fetchApplicants({}), []);
   const { data: postingsData, loading: loadingPostings } = useApiQuery(() => api.fetchPostings(), []);
-  const allApplicants = (applicantsData || []) as Applicant[];
+  const allApplicants = useMemo(() => (applicantsData || []) as Applicant[], [applicantsData]);
   const postingsList = (postingsData || []) as EteaPosting[];
   const admitted = useMemo(() => allApplicants.filter((a) => a.rollNumber), [allApplicants]);
 

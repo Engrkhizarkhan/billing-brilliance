@@ -53,7 +53,7 @@ const SchoolPayments = () => {
   const [pageSize, setPageSize] = useState(25);
 
   const { data: studentsData } = useApiQuery(() => api.fetchStudents({}), []);
-  const students = (studentsData || []) as Student[];
+  const students = useMemo(() => (studentsData || []) as Student[], [studentsData]);
 
   const { data: historyRaw, meta: historyMeta } = useApiQuery(
     () => api.fetchPaymentHistory({
@@ -67,7 +67,7 @@ const SchoolPayments = () => {
     [paymentVersion, page, pageSize, search, classFilter, channelFilter, monthFilter]
   );
 
-  const payments = (historyRaw || []) as PaymentRecord[];
+  const payments = useMemo(() => (historyRaw || []) as PaymentRecord[], [historyRaw]);
   const total = historyMeta?.total ?? 0;
 
   const classOptions = useMemo(

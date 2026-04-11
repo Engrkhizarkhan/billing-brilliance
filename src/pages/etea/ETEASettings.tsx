@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -174,7 +174,7 @@ const ETEASettings = () => {
         <CardHeader>
           <CardTitle>API Key</CardTitle>
           <CardDescription>
-            This key is issued by the platform for your organization. Provide it to external integrations (e.g. 1BILL) that need to call the ETEA payment API directly. Dashboard users authenticated via their account do not need to enter this key.
+            This key is issued by the platform for your organization. Provide it to external integrations (e.g. 1BILL) that need to call the ETEA payment API directly. Dashboard users authenticated via their account do not need to enter this key.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">

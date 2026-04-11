@@ -45,7 +45,7 @@ const ETEARealtimePayments = () => {
   }, [paymentVersion]);
 
   const { data: paymentsData, loading } = useApiQuery(() => api.listEteaPayments(), [paymentVersion, liveClock]);
-  const allPayments = (paymentsData || []) as EteaPaymentRecord[];
+  const allPayments = useMemo(() => (paymentsData || []) as EteaPaymentRecord[], [paymentsData]);
 
   const paidPayments = useMemo(
     () =>

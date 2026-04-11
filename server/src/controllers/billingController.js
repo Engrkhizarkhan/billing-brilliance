@@ -123,6 +123,13 @@ const postBillPayment = async (req, res, next) => {
       [consumerNumber.trim()]
     );
 
+    // Fetch current running balance from ledger_entries so every new entry carries an accurate balance
+    const [lastLedgerEntry] = await pool.query(
+      'SELECT balance FROM ledger_entries WHERE student_id = ? ORDER BY date DESC, created_at DESC LIMIT 1',
+      [student.id]
+    );
+    let runningBalance = lastLedgerEntry.length ? parseFloat(lastLedgerEntry[0].balance) : 0;
+
     let remaining = parseFloat(amount);
     for (const inv of unpaidInvoices) {
       const invAmount = parseFloat(inv.amount);
@@ -140,11 +147,12 @@ const postBillPayment = async (req, res, next) => {
         if (lateFeeAmt > 0 && paymentDate > dueDate && !inv.late_fee_applied) {
           const lateFeeEntryId = uuidv4();
           const monthLabel = inv.month || inv.due_date.slice(0, 7);
+          runningBalance = parseFloat((runningBalance + lateFeeAmt).toFixed(2));
           await pool.query(
             `INSERT INTO ledger_entries (id, tenant_id, student_id, date, description, debit, credit, balance, reference, entry_type)
              VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, 'late_fee')`,
             [lateFeeEntryId, tenantId, inv.student_id, paidAt,
-             `Late Fee — ${monthLabel}`, lateFeeAmt, lateFeeAmt, transactionId]
+             `Late Fee — ${monthLabel}`, lateFeeAmt, runningBalance, transactionId]
           );
           await pool.query('UPDATE invoices SET late_fee_applied = 1 WHERE id = ?', [inv.id]);
         }
@@ -161,12 +169,14 @@ const postBillPayment = async (req, res, next) => {
     const stillDue = parseFloat(afterRows[0].still_due);
     const fullyPaid = stillDue === 0;
 
-    // Create ledger payment entry
+    // Create ledger payment entry — running balance decreases by the amount paid
+    runningBalance = parseFloat((runningBalance - parseFloat(amount)).toFixed(2));
+    if (runningBalance < 0) runningBalance = 0; // clamp against floating-point drift
     await pool.query(
       `INSERT INTO ledger_entries (id, tenant_id, student_id, date, description, debit, credit, balance, bill_id, reference, entry_type)
        VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'payment')`,
       [uuidv4(), tenantId, student.id, paidAt,
-       `Payment received via ${channel}`, amount, amount,
+       `Payment received via ${channel}`, amount, runningBalance,
        invoiceRef, transactionId]
     );
 

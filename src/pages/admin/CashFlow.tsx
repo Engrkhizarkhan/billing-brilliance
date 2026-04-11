@@ -26,8 +26,8 @@ const CashFlow = () => {
   const { data: txnData, loading: loadingTransactions } = useApiQuery(() => api.fetchTransactions({ pageSize: 5000 }), [paymentVersion]);
   const { data: invoicesData, loading: loadingInvoices } = useApiQuery(() => api.fetchInvoices({ pageSize: 100 }), [paymentVersion]);
 
-  const transactions = (txnData || []) as TransactionRecord[];
-  const invoices = (invoicesData || []) as InvoiceRecord[];
+  const transactions = useMemo(() => (txnData || []) as TransactionRecord[], [txnData]);
+  const invoices = useMemo(() => (invoicesData || []) as InvoiceRecord[], [invoicesData]);
 
   const summary = useMemo(() => {
     const today = new Date();

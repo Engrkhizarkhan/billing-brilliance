@@ -21,7 +21,7 @@ const ETEAPaymentHistory = () => {
   const [pageSize, setPageSize] = useState(25);
 
   const { data: paymentsData, loading: loadingPayments } = useApiQuery(() => api.listEteaPayments(), [paymentVersion]);
-  const paymentRecords = (paymentsData || []) as EteaPaymentRecord[];
+  const paymentRecords = useMemo(() => (paymentsData || []) as EteaPaymentRecord[], [paymentsData]);
 
   const filteredPayments = useMemo(() => {
     const query = search.toLowerCase();

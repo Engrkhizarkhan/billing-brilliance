@@ -76,7 +76,7 @@ const FeeLedger = () => {
       : Promise.resolve({ data: [] as StudentLedgerSummary[] }),
     [selectedStudent]
   );
-  const allSummaries = (summaryData || []) as StudentLedgerSummary[];
+  const allSummaries = useMemo(() => (summaryData || []) as StudentLedgerSummary[], [summaryData]);
 
   const filteredSummaries = useMemo(() => {
     let list = allSummaries;
@@ -148,7 +148,7 @@ const FeeLedger = () => {
     () => selectedStudent ? api.getStudentLedger(selectedStudent) : Promise.resolve({ data: [] }),
     [selectedStudent, ledgerVersion, paymentVersion]
   );
-  const ledger = (ledgerData || []) as LedgerEntry[];
+  const ledger = useMemo(() => (ledgerData || []) as LedgerEntry[], [ledgerData]);
 
   const { data: financialSnapshot } = useApiQuery(
     () => selectedStudent ? api.getStudentSnapshot(selectedStudent) : Promise.resolve({ data: null as unknown as StudentFinancialSnapshot }),

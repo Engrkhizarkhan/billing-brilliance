@@ -43,8 +43,8 @@ const ApplicantList = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
   const { data: applicantsData, loading: loadingApplicants } = useApiQuery(() => api.fetchApplicants({}), [paymentVersion]);
   const { data: postingsData, loading: loadingPostings } = useApiQuery(() => api.fetchPostings(), []);
-  const applicantList = (applicantsData || []) as Applicant[];
-  const postingsList = (postingsData || []) as EteaPosting[];
+  const applicantList = useMemo(() => (applicantsData || []) as Applicant[], [applicantsData]);
+  const postingsList = useMemo(() => (postingsData || []) as EteaPosting[], [postingsData]);
   const navigate = useNavigate();
 
   useEffect(() => {

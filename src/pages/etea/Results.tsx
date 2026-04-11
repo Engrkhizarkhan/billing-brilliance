@@ -19,7 +19,7 @@ const Results = () => {
   const [published, setPublished] = useState(false);
   const { data: applicantsData, loading: loadingApplicants } = useApiQuery(() => api.fetchApplicants({}), []);
   const { data: postingsData, loading: loadingPostings } = useApiQuery(() => api.fetchPostings(), []);
-  const allApplicants = (applicantsData || []) as Applicant[];
+  const allApplicants = useMemo(() => (applicantsData || []) as Applicant[], [applicantsData]);
   const postingsList = (postingsData || []) as EteaPosting[];
 
   const appeared = useMemo(() => allApplicants.filter((a) => a.applicationStatus === 'appeared' || a.marks !== undefined), [allApplicants]);

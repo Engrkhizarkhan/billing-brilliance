@@ -43,8 +43,8 @@ const InvoiceList = () => {
 
   const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({}), []);
   const { data: invoicesData, loading: li, refetch: refetchInvoices } = useApiQuery(() => api.fetchInvoices({}), [paymentVersion]);
-  const students = (studentsData || []) as Student[];
-  const invoices = (invoicesData || []) as Invoice[];
+  const students = useMemo(() => (studentsData || []) as Student[], [studentsData]);
+  const invoices = useMemo(() => (invoicesData || []) as Invoice[], [invoicesData]);
   const loading = ls || li;
 
   const handleGenerateInvoices = async () => {

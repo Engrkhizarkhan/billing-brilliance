@@ -37,10 +37,10 @@ const RealTimePayments = () => {
     () => api.fetchTransactions({ pageSize: 50, status: 'completed' } as Parameters<typeof api.fetchTransactions>[0]),
     [paymentVersion]
   );
-  const transactions = (txnData || []) as Array<{
+  const transactions = useMemo(() => (txnData || []) as Array<{
     id: string; transactionId: string; consumerNumber: string; amount: number;
     status: string; date: string; channel?: string; billerName: string; createdAt?: string;
-  }>;
+  }>, [txnData]);
 
   // Auto-refresh every 10 s when enabled
   useEffect(() => {

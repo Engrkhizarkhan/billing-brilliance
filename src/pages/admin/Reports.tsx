@@ -25,8 +25,8 @@ const Reports = () => {
   const { data: txnData, loading: loadingTransactions } = useApiQuery(() => api.fetchTransactions({ pageSize: 5000 }), [paymentVersion]);
   const { data: billersData, loading: loadingBillers } = useApiQuery(() => api.fetchBillers({ pageSize: 100 }), []);
 
-  const transactions = (txnData || []) as TransactionRecord[];
-  const billers = (billersData || []) as BillerRecord[];
+  const transactions = useMemo(() => (txnData || []) as TransactionRecord[], [txnData]);
+  const billers = useMemo(() => (billersData || []) as BillerRecord[], [billersData]);
 
   const revenueData = useMemo(() => {
     const byMonth = new Map<string, number>();

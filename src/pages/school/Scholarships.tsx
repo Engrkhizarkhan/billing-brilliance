@@ -17,7 +17,7 @@ const Scholarships = () => {
   const { data: scholarshipsData, loading: scholarshipsLoading, refetch: refetchScholarships } = useApiQuery(() => api.fetchScholarships({}), []);
   const { data: assignmentsData, refetch: refetchAssignments } = useApiQuery(() => api.fetchAllScholarshipAssignments(), []);
   const { data: studentsData, loading: studentsLoading } = useApiQuery(() => api.fetchStudents({ pageSize: 9999 }), []);
-  const studentDirectory = (studentsData || []) as Student[];
+  const studentDirectory = useMemo(() => (studentsData || []) as Student[], [studentsData]);
 
   const [list, setList] = useState<Scholarship[]>([]);
   const [assignments, setAssignments] = useState<StudentScholarshipAssignment[]>([]);
@@ -88,7 +88,7 @@ const Scholarships = () => {
       })
       .filter((row): row is { assignment: StudentScholarshipAssignment; scholarship: Scholarship; student: typeof studentDirectory[number] } => row !== null)
       .sort((a, b) => a.student.class.localeCompare(b.student.class) || a.student.name.localeCompare(b.student.name));
-  }, [activeAssignments, list]);
+  }, [activeAssignments, list, studentDirectory]);
 
   const assignmentRowsByScholarship = useMemo(() => {
     const map: Record<string, typeof assignmentRows> = {};

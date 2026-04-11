@@ -43,10 +43,10 @@ const AdminDashboard = () => {
   const { data: txnData, loading: lt } = useApiQuery(() => api.fetchTransactions({ pageSize: 5000 }), [paymentVersion]);
   const { data: dashStatsRaw } = useApiQuery(() => api.getDashboardStats(), [paymentVersion]);
 
-  const allBillers = (billers || []) as Biller[];
-  const students = (studentsData || []) as StudentRecord[];
-  const invoices = (invoicesData || []) as InvoiceRecord[];
-  const transactions = (txnData || []) as TransactionRecord[];
+  const allBillers = useMemo(() => (billers || []) as Biller[], [billers]);
+  const students = useMemo(() => (studentsData || []) as StudentRecord[], [studentsData]);
+  const invoices = useMemo(() => (invoicesData || []) as InvoiceRecord[], [invoicesData]);
+  const transactions = useMemo(() => (txnData || []) as TransactionRecord[], [txnData]);
   const dashStats = dashStatsRaw as { overdueAmount?: number; pendingAmount?: number } | null;
 
   const loading = lb || ls || li || lt;
