@@ -466,3 +466,29 @@ export interface EteaRequestSecurityContext {
   webhookSignature?: string;
   idempotencyKey?: string;
 }
+
+// ── 1LINK Bundle Management ──────────────────────────────────────────────────
+
+export interface Bundle {
+  id: string;
+  pcid: string;
+  billerName: string;
+  bundleId: string;
+  bundleName: string;
+  description?: string;
+  expiryDate?: string;
+  amount: string;
+  tag?: string;
+  status: 'active' | 'inactive';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PcidKey {
+  pcid: string;
+  apiKey: string;
+  billerId?: string;
+  billerName?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}

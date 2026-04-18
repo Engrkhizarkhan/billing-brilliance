@@ -40,7 +40,10 @@ const parsePaymentAmount = (str) => {
 // ── Date helpers ─────────────────────────────────────────────────────────────
 
 /** Parse a MySQL DATETIME string returned with dateStrings:true as UTC */
-const parseDbDate = (str) => new Date(String(str).replace(' ', 'T') + (String(str).includes('Z') || String(str).includes('+') ? '' : 'Z'));
+const parseDbDate = (str) => {
+  if (str instanceof Date) return str;
+  return new Date(String(str).replace(' ', 'T') + (String(str).includes('Z') || String(str).includes('+') ? '' : 'Z'));
+};
 
 /** Format a date to 1LINK yyyyMMdd */
 const fmtDate = (date) => {
@@ -75,6 +78,42 @@ const parseTranDateTime = (tranDate, tranTime) => {
 
 /** Left-justify, right-pad with spaces, truncate to maxLen */
 const padRight = (str, maxLen) => String(str || '').slice(0, maxLen).padEnd(maxLen, ' ');
+
+// ── 1LINK reserved field parsers ─────────────────────────────────────────────
+//
+// Inquiry reserved layout (fixed-length, space-padded):
+//   CNIC(13) + AccountId(28) + BundleID(100) + Info1(100) + Info2(144) = 385
+//
+// Payment reserved layout (fixed-length, space-padded):
+//   CNIC(13) + City(30) + Province(20) + AccountId(28) +
+//   fromAccountType(2) + fromAccountTitle(30) + BundleID(100) +
+//   Info1(100) + Info2(192) = 515
+//
+const parseInquiryReserved = (reserved) => {
+  const s = String(reserved || '').padEnd(385, ' ');
+  return {
+    cnic:      s.slice(0, 13).trim(),
+    accountId: s.slice(13, 41).trim(),
+    bundleId:  s.slice(41, 141).trim(),
+    info1:     s.slice(141, 241).trim(),
+    info2:     s.slice(241).trim(),
+  };
+};
+
+const parsePaymentReserved = (reserved) => {
+  const s = String(reserved || '').padEnd(515, ' ');
+  return {
+    cnic:             s.slice(0, 13).trim(),
+    city:             s.slice(13, 43).trim(),
+    province:         s.slice(43, 63).trim(),
+    accountId:        s.slice(63, 91).trim(),
+    fromAccountType:  s.slice(91, 93).trim(),
+    fromAccountTitle: s.slice(93, 123).trim(),
+    bundleId:         s.slice(123, 223).trim(),
+    info1:            s.slice(223, 323).trim(),
+    info2:            s.slice(323).trim(),
+  };
+};
 
 // ── Error response shapes ─────────────────────────────────────────────────────
 
@@ -114,6 +153,7 @@ const paymentError = (code) => ({
 const billInquiry1Link = async (req, res) => {
   try {
     const consumerNumber = (req.body.consumer_number || '').trim();
+    const { bundleId } = parseInquiryReserved(req.body.reserved);
 
     if (!consumerNumber) {
       return res.json(inquiryError('04'));
@@ -213,8 +253,66 @@ const billInquiry1Link = async (req, res) => {
     const oldest = unpaid[0] || null;
     const now = new Date();
 
-    // --- Fully paid ---
+    // --- No unpaid invoices: distinguish "never billed" from "fully paid" ---
     if (totalDue === 0) {
+      // Check whether this consumer has ever had an invoice created
+      const [invCountRows] = await pool.query(
+        'SELECT COUNT(*) AS cnt FROM invoices WHERE consumer_number = ? AND deleted_at IS NULL',
+        [consumerNumber]
+      );
+      const neverInvoiced = parseInt(invCountRows[0].cnt, 10) === 0;
+
+      // Special case: consumer was just registered (no invoice yet) but the inquiry
+      // carries a bundleId in the reserved field → create the invoice now so the
+      // payment flow can complete correctly.
+      if (neverInvoiced && bundleId) {
+        const bankMnemonic = (req.body.bank_mnemonic || '').trim();
+        const [bundleRows] = await pool.query(
+          `SELECT * FROM bundles
+           WHERE bundle_id = ? AND pcid = ? AND status = 'active' AND deleted_at IS NULL
+           LIMIT 1`,
+          [bundleId, bankMnemonic]
+        );
+
+        if (bundleRows.length > 0) {
+          const bundle = bundleRows[0];
+          const bundleAmount = parseFloat(bundle.amount);
+          const nowDate = new Date();
+          const dueDateObj = new Date(nowDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+          const dueDateStr = dueDateObj.toISOString().slice(0, 10);
+          const invoiceNumber = `INV-${bankMnemonic}-${Date.now()}`;
+
+          await pool.query(
+            `INSERT INTO invoices
+               (id, tenant_id, invoice_number, student_id, student_name,
+                consumer_number, month, amount, status, due_date)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+            [
+              uuidv4(), student.tenant_id, invoiceNumber,
+              student.id, student.name, consumerNumber,
+              nowDate.toISOString().slice(0, 7), bundleAmount, dueDateStr,
+            ]
+          );
+
+          logger.info(`1LINK BillInquiry: auto-created invoice ${invoiceNumber} for ${consumerNumber} bundle ${bundleId} PKR ${bundleAmount}`);
+
+          return res.json({
+            response_Code: '00',
+            consumer_detail: padRight(student.name, 30),
+            bill_status: 'U',
+            due_date: dueDateStr.replace(/-/g, ''),
+            amount_within_dueDate: fmtAmountInquiry(bundleAmount),
+            amount_after_dueDate: fmtAmountInquiry(bundleAmount),
+            billing_month: fmtBillingMonth(nowDate),
+            date_paid: '',
+            amount_paid: '',
+            tran_auth_Id: '',
+            reserved: '',
+          });
+        }
+      }
+
+      // Fully paid (all invoices settled) or consumer has no bill yet
       const [paidRows] = await pool.query(
         `SELECT * FROM payments WHERE consumer_number = ? ORDER BY date DESC LIMIT 1`,
         [consumerNumber]
@@ -301,6 +399,7 @@ const billPayment1Link = async (req, res) => {
     const tranDate = (tran_date || '').trim();
     const tranTime = (tran_time || '').trim();
     const bankMnemonic = (bank_mnemonic || '1LINK').trim();
+    const { bundleId } = parsePaymentReserved(req.body.reserved);
 
     // Required field validation
     if (!consumerNumber || !tranAuthId || !transaction_amount || !tranDate || !tranTime) {
@@ -461,7 +560,8 @@ const billPayment1Link = async (req, res) => {
       [
         paymentId, tenantId, student.id, consumerNumber,
         amount, paidAtStr, dupKey,
-        tranAuthId, bankMnemonic, receiptNumber, null,
+        tranAuthId, bankMnemonic, receiptNumber,
+        bundleId ? `bundle:${bundleId}` : null,
       ]
     );
 

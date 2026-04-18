@@ -10,6 +10,7 @@ import LoginPage from "./pages/LoginPage";
 import DashboardLayout from "./components/DashboardLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import BillerManagement from "./pages/admin/BillerManagement";
+import BundleManagement from "./pages/admin/BundleManagement";
 import UserManagement from "./pages/admin/UserManagement";
 import TransactionList from "./pages/admin/TransactionList";
 import CashFlow from "./pages/admin/CashFlow";
@@ -37,6 +38,8 @@ import ETEAReports from "./pages/etea/ETEAReports";
 import ETEASettings from "./pages/etea/ETEASettings";
 import AuditTrail from "./pages/admin/AuditTrail";
 import OneLinkSandbox from "./pages/admin/OneLinkSandbox";
+import FetchBundleSandbox from "./pages/admin/FetchBundleSandbox";
+import ApiReference from "./pages/admin/ApiReference";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -73,12 +76,15 @@ const AppRoutes = () => {
           <Route path="/admin" element={<ProtectedRoute requiredRole="admin" />}>
             <Route index element={<AdminDashboard />} />
             <Route path="billers" element={<BillerManagement />} />
+            <Route path="bundles" element={<BundleManagement />} />
             <Route path="users" element={<UserManagement />} />
             <Route path="transactions" element={<TransactionList />} />
             <Route path="cashflow" element={<CashFlow />} />
             <Route path="reports" element={<Reports />} />
             <Route path="audit" element={<AuditTrail />} />
             <Route path="onelink-sandbox" element={<OneLinkSandbox />} />
+            <Route path="fetchbundle-sandbox" element={<FetchBundleSandbox />} />
+            <Route path="api-reference" element={<ApiReference />} />
           </Route>
 
           <Route path="/school" element={<ProtectedRoute requiredRole="school" />}>

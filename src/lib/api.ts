@@ -5,6 +5,8 @@ import type {
   BillInquiryResponse,
   BillPaymentRequest,
   BillPaymentResult,
+  Bundle,
+  PcidKey,
   BundlePackage,
   FetchBundleResponse,
   ETEAPosting,
@@ -197,6 +199,37 @@ export const api = {
 
   async fetchBundles(pcid?: string): Promise<ApiResponse<FetchBundleResponse>> {
     return post<ApiResponse<FetchBundleResponse>>('/billing/fetchbundle', { PCID: pcid });
+  },
+
+  // ---- Admin Bundle Management ----
+  async fetchAdminBundles(params: { pcid?: string; status?: string; search?: string; page?: number; pageSize?: number } = {}): Promise<ApiResponse<Bundle[]>> {
+    const q = buildQuery(params);
+    return get<ApiResponse<Bundle[]>>(`/bundles${q}`);
+  },
+
+  async createBundle(payload: Omit<Bundle, 'id' | 'createdAt' | 'updatedAt'>): Promise<ApiResponse<Bundle>> {
+    return post<ApiResponse<Bundle>>('/bundles', payload);
+  },
+
+  async updateBundle(id: string, payload: Partial<Omit<Bundle, 'id' | 'createdAt' | 'updatedAt'>>): Promise<ApiResponse<Bundle>> {
+    return put<ApiResponse<Bundle>>(`/bundles/${id}`, payload);
+  },
+
+  async deleteBundle(id: string): Promise<ApiResponse<boolean>> {
+    return del<ApiResponse<boolean>>(`/bundles/${id}`);
+  },
+
+  // ---- PCID API Key Management ----
+  async fetchPcidKeys(): Promise<ApiResponse<PcidKey[]>> {
+    return get<ApiResponse<PcidKey[]>>('/bundles/pcid-keys');
+  },
+
+  async regeneratePcidKey(pcid: string): Promise<ApiResponse<PcidKey>> {
+    return post<ApiResponse<PcidKey>>(`/bundles/pcid-keys/${pcid}/regenerate`, {});
+  },
+
+  async linkPcidBiller(pcid: string, billerId: string | null): Promise<ApiResponse<PcidKey>> {
+    return put<ApiResponse<PcidKey>>(`/bundles/pcid-keys/${pcid}/biller`, { billerId });
   },
 
   // ---- Transactions & Payments ----

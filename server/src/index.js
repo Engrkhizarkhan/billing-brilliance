@@ -27,6 +27,9 @@ const notificationRoutes = require('./routes/notifications');
 const auditRoutes = require('./routes/audit');
 const reportRoutes = require('./routes/reports');
 const oneLinkRoutes = require('./routes/onelink');
+const fetchBundleRoutes = require('./routes/fetchbundle');
+const bundleRoutes = require('./routes/bundles');
+const saasGatewayRoutes = require('./routes/saasGateway');
 
 const app = express();
 
@@ -88,6 +91,15 @@ app.use('/api/reports', reportRoutes);
 // because transactionRoutes / settingsRoutes apply router.use(authenticate) which intercepts ALL /api/** requests
 app.use('/api/1.0/Payments', oneLinkRoutes);
 
+// 1LINK FetchBundle endpoint (external — authenticated by 1LINK credentials)
+app.use('/v1/Transaction', fetchBundleRoutes);
+
+// SaaS payment gateway (external — authenticated by per-tenant API key)
+app.use('/api/saas/v1', saasGatewayRoutes);
+
+// Admin bundle management
+app.use('/api/bundles', bundleRoutes);
+
 // Broad /api mounts (have global authenticate middleware inside)
 app.use('/api', eteaPaymentRoutes);
 app.use('/api', transactionRoutes);
@@ -113,7 +125,7 @@ const startServer = async () => {
     logger.info('Database connected successfully');
     await ensureProtectedAdmin();
 
-    app.listen(config.port, () => {
+    app.listen(config.port, "0.0.0.0", () => {
       logger.info(`Server running on port ${config.port} in ${config.nodeEnv} mode`);
       logger.info(`API base URL: http://localhost:${config.port}/api`);
     });

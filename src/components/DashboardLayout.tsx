@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Users, CreditCard, BarChart3, Building2,
   GraduationCap, BookOpen, Award, Receipt, Wallet, Briefcase,
   LogOut, Menu, X, DollarSign, ChevronRight, Settings, Sun, Moon,
-  AlertTriangle, FileText, Shield, ClipboardList, Activity, Wifi, History
+  AlertTriangle, FileText, Shield, ClipboardList, Activity, Wifi, History, Package, FlaskConical, FileCode2
 } from 'lucide-react';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -27,12 +27,15 @@ const navItems: Record<UserRole, NavItem[]> = {
   admin: [
     { label: 'Dashboard', path: '/admin', icon: LayoutDashboard, group: 'Overview' },
     { label: 'Billers', path: '/admin/billers', icon: Building2, group: 'Management' },
+    { label: 'Bundles', path: '/admin/bundles', icon: Package, group: 'Management' },
     { label: 'Users', path: '/admin/users', icon: Users, group: 'Management' },
     { label: 'Transactions', path: '/admin/transactions', icon: CreditCard, group: 'Finance' },
     { label: 'Cash Flow', path: '/admin/cashflow', icon: DollarSign, group: 'Finance' },
     { label: 'Reports', path: '/admin/reports', icon: BarChart3, group: 'Analytics' },
     { label: 'Audit Trail', path: '/admin/audit', icon: ClipboardList, group: 'Analytics' },
     { label: '1LINK Sandbox', path: '/admin/onelink-sandbox', icon: Wifi, group: 'System' },
+    { label: 'FetchBundle Sandbox', path: '/admin/fetchbundle-sandbox', icon: FlaskConical, group: 'System' },
+    { label: 'API Reference', path: '/admin/api-reference', icon: FileCode2, group: 'System' },
   ],
   school: [
     { label: 'Dashboard', path: '/school', icon: LayoutDashboard, group: 'Overview' },
