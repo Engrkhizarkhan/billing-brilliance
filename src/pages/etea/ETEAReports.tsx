@@ -1,23 +1,23 @@
 import { useEffect, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatPKR } from '@/lib/formatters';
-import { resolvePostingById, setEteaFinanceCache } from '@/lib/eteaFinance';
+import { resolvePostingById, setOrgFinanceCache } from '@/lib/orgFinance';
 import { usePaymentStore } from '@/store/paymentStore';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
-import { EteaPaymentRecord, ETEAPosting } from '@/types';
+import { OrgPaymentRecord, OrgPosting } from '@/types';
 import { Loader2 } from 'lucide-react';
 
 const ETEAReports = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
 
-  const { data: paymentsData, loading } = useApiQuery(() => api.listEteaPayments(), [paymentVersion]);
-  const paymentRecords = useMemo(() => (paymentsData || []) as EteaPaymentRecord[], [paymentsData]);
+  const { data: paymentsData, loading } = useApiQuery(() => api.listOrgPayments(), [paymentVersion]);
+  const paymentRecords = useMemo(() => (paymentsData || []) as OrgPaymentRecord[], [paymentsData]);
 
   const { data: postingsData } = useApiQuery(() => api.fetchPostings(), []);
   useEffect(() => {
-    if (postingsData) setEteaFinanceCache(postingsData as ETEAPosting[], []);
+    if (postingsData) setOrgFinanceCache(postingsData as OrgPosting[], []);
   }, [postingsData]);
 
   const monthlyCollections = useMemo(() => {

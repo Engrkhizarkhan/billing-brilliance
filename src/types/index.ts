@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'school' | 'etea';
+export type UserRole = 'admin' | 'school' | 'org';
 export type SchoolAccessRole = 'admin' | 'finance' | 'staff' | 'viewer';
 
 export interface User {
@@ -19,7 +19,7 @@ export interface User {
 export interface Biller {
   id: string;
   name: string;
-  type: 'school' | 'etea' | 'private_agency';
+  type: 'school' | 'org' | 'private_agency';
   billerCode: string;
   email: string;
   phone: string;
@@ -220,7 +220,7 @@ export interface LedgerEntry {
   netTuition?: number;
 }
 
-export interface ETEAPosting {
+export interface OrgPosting {
   id: string;
   title: string;
   type: 'entry_test' | 'job_vacancy';
@@ -366,9 +366,9 @@ export interface FetchBundleResponse {
   bundleDetails: BillBundleDetail[];
 }
 
-export type EteaPaymentStatus = 'pending' | 'paid' | 'failed' | 'expired';
+export type OrgPaymentStatus = 'pending' | 'paid' | 'failed' | 'expired';
 
-export interface EteaPaymentRecord {
+export interface OrgPaymentRecord {
   id: string;
   applicationId: string;
   applicantId: string;
@@ -376,7 +376,7 @@ export interface EteaPaymentRecord {
   billId: string;
   consumerNumber?: string;
   amount: number;
-  status: EteaPaymentStatus;
+  status: OrgPaymentStatus;
   dueDate: string;
   expiryDate: string;
   createdAt: string;
@@ -386,7 +386,7 @@ export interface EteaPaymentRecord {
   callbackUrl: string;
 }
 
-export interface EteaCreatePaymentRequest {
+export interface OrgCreatePaymentRequest {
   applicantId: string;
   applicationId: string;
   postingId: string;
@@ -402,12 +402,12 @@ export interface EteaCreatePaymentRequest {
   customer_name?: string;
 }
 
-export interface EteaCreatePaymentResponse {
+export interface OrgCreatePaymentResponse {
   paymentId: string;
   billId: string;
   consumerNumber?: string;
-  status: EteaPaymentStatus;
-  payment: EteaPaymentRecord;
+  status: OrgPaymentStatus;
+  payment: OrgPaymentRecord;
   oneBillRequest: OneBillCreateBillRequest;
 }
 
@@ -425,41 +425,41 @@ export interface OneBillCreateBillRequest {
   callback_url?: string;
 }
 
-export interface EteaPaymentStatusResponse {
+export interface OrgPaymentStatusResponse {
   applicationId: string;
-  status: EteaPaymentStatus | 'not_found';
-  payment?: EteaPaymentRecord;
+  status: OrgPaymentStatus | 'not_found';
+  payment?: OrgPaymentRecord;
 }
 
-export interface EteaPaymentCallbackRequest {
+export interface OrgPaymentCallbackRequest {
   billId: string;
-  status: Extract<EteaPaymentStatus, 'paid' | 'failed' | 'expired'>;
+  status: Extract<OrgPaymentStatus, 'paid' | 'failed' | 'expired'>;
   transactionId: string;
   paidAt?: string;
 }
 
-export interface EteaPaymentCallbackResponse {
+export interface OrgPaymentCallbackResponse {
   acknowledged: boolean;
-  payment?: EteaPaymentRecord;
+  payment?: OrgPaymentRecord;
   message: string;
 }
 
-export interface EteaPaymentNotification {
+export interface OrgPaymentNotification {
   id: string;
   applicationId: string;
   paymentId: string;
   billId: string;
-  status: EteaPaymentStatus;
+  status: OrgPaymentStatus;
   sentAt: string;
 }
 
-export interface EteaHealthResponse {
+export interface OrgHealthResponse {
   status: 'ok';
-  service: 'etea-payment-controller';
+  service: 'org-payment-controller';
   timestamp: string;
 }
 
-export interface EteaRequestSecurityContext {
+export interface OrgRequestSecurityContext {
   apiKey?: string;
   sourceIp?: string;
   protocol?: 'https' | 'http';

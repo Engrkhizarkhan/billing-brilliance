@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../config/database');
+const logger = require('../config/logger');
 
 const createNotification = async ({ tenantId = null, userId = null, title, message = '', type = 'system' }) => {
   if (!title) return false;
@@ -12,7 +13,7 @@ const createNotification = async ({ tenantId = null, userId = null, title, messa
     );
     return true;
   } catch (err) {
-    console.error('Notification error:', err.message);
+    logger.error('Notification error:', err.message);
     return false;
   }
 };

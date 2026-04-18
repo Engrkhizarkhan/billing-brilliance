@@ -6,7 +6,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
-import { EteaPaymentRecord } from '@/types';
+import { OrgPaymentRecord } from '@/types';
 import { usePaymentStore } from '@/store/paymentStore';
 import { formatPKR } from '@/lib/formatters';
 
@@ -44,8 +44,8 @@ const ETEARealtimePayments = () => {
     setLastLiveUpdateAt(now.toISOString());
   }, [paymentVersion]);
 
-  const { data: paymentsData, loading } = useApiQuery(() => api.listEteaPayments(), [paymentVersion, liveClock]);
-  const allPayments = useMemo(() => (paymentsData || []) as EteaPaymentRecord[], [paymentsData]);
+  const { data: paymentsData, loading } = useApiQuery(() => api.listOrgPayments(), [paymentVersion, liveClock]);
+  const allPayments = useMemo(() => (paymentsData || []) as OrgPaymentRecord[], [paymentsData]);
 
   const paidPayments = useMemo(
     () =>

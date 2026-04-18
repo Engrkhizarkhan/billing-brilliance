@@ -28,6 +28,8 @@ const authenticate = async (req, res, next) => {
       return res.status(403).json({ error: 'Account is not active' });
     }
 
+    // Normalize legacy 'etea' role to 'org'
+    if (user.role === 'etea') user.role = 'org';
     req.user = user;
     req.tenantId = user.tenant_id;
     next();

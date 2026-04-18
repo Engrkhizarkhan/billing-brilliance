@@ -7,14 +7,14 @@ import { useMemo } from 'react';
 import { usePaymentStore } from '@/store/paymentStore';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
-import { EteaPaymentRecord } from '@/types';
+import { OrgPaymentRecord } from '@/types';
 
 const ETEADashboard = () => {
   const navigate = useNavigate();
   const paymentVersion = usePaymentStore((state) => state.version);
 
-  const { data: paymentsData, loading: loadingPayments } = useApiQuery(() => api.listEteaPayments(), [paymentVersion]);
-  const paymentRecords = useMemo(() => (paymentsData || []) as EteaPaymentRecord[], [paymentsData]);
+  const { data: paymentsData, loading: loadingPayments } = useApiQuery(() => api.listOrgPayments(), [paymentVersion]);
+  const paymentRecords = useMemo(() => (paymentsData || []) as OrgPaymentRecord[], [paymentsData]);
 
   const pipelineData = useMemo(
     () => [

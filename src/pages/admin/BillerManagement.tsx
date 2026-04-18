@@ -14,7 +14,7 @@ import { api } from '@/lib/api';
 
 const billerTypeLabels: Record<Biller['type'], string> = {
   school: 'School',
-  etea: 'ETEA',
+  org: 'Organization',
   private_agency: 'Private Agency',
 };
 
@@ -156,7 +156,7 @@ const BillerManagement = () => {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="school">School</SelectItem>
-                    <SelectItem value="etea">ETEA</SelectItem>
+                    <SelectItem value="org">Organization</SelectItem>
                     <SelectItem value="private_agency">Private Agency</SelectItem>
                   </SelectContent>
                 </Select>
@@ -188,7 +188,7 @@ const BillerManagement = () => {
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="school">School</SelectItem>
-                      <SelectItem value="etea">ETEA</SelectItem>
+                      <SelectItem value="org">Organization</SelectItem>
                       <SelectItem value="private_agency">Private Agency</SelectItem>
                     </SelectContent>
                   </Select>
@@ -242,7 +242,7 @@ const BillerManagement = () => {
             label: 'Type',
             options: [
               { value: 'school', label: 'School' },
-              { value: 'etea', label: 'ETEA' },
+              { value: 'org', label: 'Organization' },
               { value: 'private_agency', label: 'Private Agency' },
             ],
           },

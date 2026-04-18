@@ -9,6 +9,16 @@ const { auditLog } = require('../middleware/auditLog');
 const { createNotification } = require('../services/notificationService');
 const { isProtectedAdminUser } = require('../services/protectedAdmin');
 
+// Parse a JWT duration string (e.g. "7d", "24h", "3600s") into milliseconds.
+const parseDurationMs = (str) => {
+  if (!str) return 7 * 24 * 60 * 60 * 1000; // default 7d
+  const match = String(str).match(/^(\d+)(s|m|h|d)$/);
+  if (!match) return 7 * 24 * 60 * 60 * 1000;
+  const n = parseInt(match[1], 10);
+  const units = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
+  return n * units[match[2]];
+};
+
 const generateTokens = (user) => {
   const accessToken = jwt.sign(
     {
@@ -59,7 +69,7 @@ const login = async (req, res, next) => {
     const { accessToken, refreshToken } = generateTokens(user);
 
     // Store refresh token
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + parseDurationMs(config.jwt.refreshExpiresIn));
     await pool.query(
       'INSERT INTO refresh_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)',
       [uuidv4(), user.id, refreshToken, expiresAt]
@@ -81,6 +91,8 @@ const login = async (req, res, next) => {
     });
 
     const { password_hash, ...safeUser } = user;
+    // Normalize legacy 'etea' role to 'org'
+    if (safeUser.role === 'etea') safeUser.role = 'org';
 
     // Attach tenant API key so dashboard can display it in settings
     if (user.tenant_id) {
@@ -123,7 +135,8 @@ const refreshToken = async (req, res, next) => {
     }
 
     const [userRows] = await pool.query(
-      'SELECT * FROM users WHERE id = ? AND status = ? AND deleted_at IS NULL',
+      `SELECT id, email, name, role, status, tenant_id, school_ref, school_access_role
+       FROM users WHERE id = ? AND status = ? AND deleted_at IS NULL`,
       [decoded.userId, 'active']
     );
 
@@ -138,7 +151,7 @@ const refreshToken = async (req, res, next) => {
     const tokens = generateTokens(user);
 
     // Store new refresh token
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + parseDurationMs(config.jwt.refreshExpiresIn));
     await pool.query(
       'INSERT INTO refresh_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)',
       [uuidv4(), user.id, tokens.refreshToken, expiresAt]
@@ -212,4 +225,89 @@ const changePassword = async (req, res, next) => {
   }
 };
 
-module.exports = { login, refreshToken, logout, getProfile, changePassword };
+/**
+ * POST /api/auth/impersonate
+ * Admin-only — generates a short-lived JWT for a target user without touching
+ * that user's audit trail, last_login_at, or notifications.
+ * Body: { userId: string }
+ */
+const impersonate = async (req, res, next) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) throw new AppError('userId is required', 400);
+
+    // Load target user
+    const [rows] = await pool.query(
+      'SELECT * FROM users WHERE id = ? AND deleted_at IS NULL',
+      [userId]
+    );
+    if (rows.length === 0) throw new AppError('User not found', 404);
+
+    const target = rows[0];
+
+    // Safety guards
+    if (target.role === 'admin') {
+      throw new AppError('Cannot impersonate another admin', 403);
+    }
+    if (target.status !== 'active') {
+      throw new AppError('Target user account is not active', 403);
+    }
+
+    // Normalize legacy role
+    if (target.role === 'etea') target.role = 'org';
+
+    // Issue a short-lived impersonation token (30 min, no refresh)
+    const impersonationToken = jwt.sign(
+      {
+        userId: target.id,
+        email: target.email,
+        role: target.role,
+        tenantId: target.tenant_id,
+        schoolRef: target.school_ref,
+        schoolAccessRole: target.school_access_role,
+        // Non-standard claims — used by the frontend banner only
+        impersonated: true,
+        impersonatedBy: req.user.id,
+        impersonatedByEmail: req.user.email,
+      },
+      config.jwt.secret,
+      { expiresIn: '30m' }
+    );
+
+    // Attach tenant API key so tenant pages work
+    let tenantApiKey = null;
+    if (target.tenant_id) {
+      const [tenantRows] = await pool.query(
+        'SELECT api_key FROM tenants WHERE id = ? AND deleted_at IS NULL',
+        [target.tenant_id]
+      );
+      tenantApiKey = tenantRows[0]?.api_key || null;
+    }
+
+    // Audit the admin action — NOT the target user's login
+    await auditLog(
+      req,
+      'impersonate',
+      'user',
+      target.id,
+      `Admin ${req.user.email} started maintenance session as ${target.email} (${target.role})`
+    );
+
+    logger.info(`IMPERSONATION: admin ${req.user.email} → user ${target.email} (${target.role})`);
+
+    const { password_hash, ...safeTarget } = target;
+    void password_hash;
+
+    return res.json({
+      data: {
+        token: impersonationToken,
+        user: { ...safeTarget, tenantApiKey },
+      },
+      message: 'Impersonation session started',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { login, refreshToken, logout, getProfile, changePassword, impersonate };

@@ -8,12 +8,12 @@ const logger = require('../config/logger');
 const { AppError } = require('../middleware/errorHandler');
 const { auditLog } = require('../middleware/auditLog');
 
-const CALLBACK_URL = config.etea.callbackUrl;
-const ETEA_NOTIFICATION_URL = config.etea.notificationUrl; // Outbound: ETEA's webhook to receive payment confirmations
-const WEBHOOK_SECRET = config.etea.webhookSecret;
-const REQUIRE_WEBHOOK_SIGNATURE = config.etea.requireWebhookSignature;
-const DEFAULT_EXPIRY_HOURS = config.etea.paymentExpiryHours;
-const ALLOWED_IPS = config.etea.allowedIps;
+const CALLBACK_URL = config.org.callbackUrl;
+const ORG_NOTIFICATION_URL = config.org.notificationUrl; // Outbound: org's webhook to receive payment confirmations
+const WEBHOOK_SECRET = config.org.webhookSecret;
+const REQUIRE_WEBHOOK_SIGNATURE = config.org.requireWebhookSignature;
+const DEFAULT_EXPIRY_HOURS = config.org.paymentExpiryHours;
+const ALLOWED_IPS = config.org.allowedIps;
 
 // ---- Signature helpers ----
 const toSignatureHash = (value) => {
@@ -100,7 +100,7 @@ const ensurePaymentNotStale = async (payment) => {
   if (payment.status !== 'pending') return payment;
   if (parseDbDate(payment.expiry_date).getTime() > Date.now()) return payment;
 
-  await pool.query('UPDATE etea_payment_records SET status = ? WHERE id = ?', ['expired', payment.id]);
+  await pool.query('UPDATE org_payment_records SET status = ? WHERE id = ?', ['expired', payment.id]);
   return { ...payment, status: 'expired' };
 };
 
@@ -119,7 +119,7 @@ const createPayment = async (req, res, next) => {
 
     // Check for existing payment (idempotent)
     const [existingRows] = await pool.query(
-      'SELECT * FROM etea_payment_records WHERE application_id = ? AND tenant_id = ?',
+      'SELECT * FROM org_payment_records WHERE application_id = ? AND tenant_id = ?',
       [normalized.applicationId, tenantId]
     );
 
@@ -140,7 +140,7 @@ const createPayment = async (req, res, next) => {
     // Resolve posting
     let description = normalized.description;
     if (!description) {
-      const [postingRows] = await pool.query('SELECT title FROM etea_postings WHERE id = ? AND deleted_at IS NULL', [normalized.postingId]);
+      const [postingRows] = await pool.query('SELECT title FROM org_postings WHERE id = ? AND deleted_at IS NULL', [normalized.postingId]);
       description = postingRows.length > 0
         ? `${postingRows[0].title} application fee`
         : `Payment for application ${normalized.applicationId}`;
@@ -160,7 +160,7 @@ const createPayment = async (req, res, next) => {
       : normalized.expireAt
         ? new Date(normalized.expireAt).toISOString()
         : addHours(createdAt, DEFAULT_EXPIRY_HOURS);
-    const billId = `ETEA-${id.split('-')[0].toUpperCase()}`;
+    const billId = `ORG-${id.split('-')[0].toUpperCase()}`;
 
     // Generate a 1BILL-compatible consumer number for this payment record.
     // Format: FINTECH_PREFIX(6) + tenant biller_code(4) + timestamp(10) + random(4) = 24 chars.
@@ -173,20 +173,20 @@ const createPayment = async (req, res, next) => {
     const consumerNumber = `${FINTECH_PREFIX}${billerCode}${ts}${rand}`;
 
     await pool.query(
-      `INSERT INTO etea_payment_records (id, tenant_id, application_id, applicant_id, posting_id, bill_id, consumer_number, amount, status, due_date, expiry_date, created_at, description, callback_url)
+      `INSERT INTO org_payment_records (id, tenant_id, application_id, applicant_id, posting_id, bill_id, consumer_number, amount, status, due_date, expiry_date, created_at, description, callback_url)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
       [id, tenantId, normalized.applicationId, normalized.applicantId, normalized.postingId, billId, consumerNumber,
         normalized.amount, dueDate, expiryDate, createdAt, description, CALLBACK_URL]
     );
 
-    const [rows] = await pool.query('SELECT * FROM etea_payment_records WHERE id = ?', [id]);
+    const [rows] = await pool.query('SELECT * FROM org_payment_records WHERE id = ?', [id]);
     const payment = rows[0];
 
-    await auditLog(req, 'create', 'etea_payment', id, `Payment created for app ${normalized.applicationId}`);
+    await auditLog(req, 'create', 'org_payment', id, `Payment created for app ${normalized.applicationId}`);
 
     // Record notification
     await pool.query(
-      'INSERT INTO etea_payment_notifications (id, tenant_id, application_id, payment_id, bill_id, status) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO org_payment_notifications (id, tenant_id, application_id, payment_id, bill_id, status) VALUES (?, ?, ?, ?, ?, ?)',
       [uuidv4(), tenantId, normalized.applicationId, id, billId, 'pending']
     );
 
@@ -213,7 +213,7 @@ const getPaymentStatus = async (req, res, next) => {
     const { applicationId } = req.params;
 
     const [rows] = await pool.query(
-      'SELECT * FROM etea_payment_records WHERE application_id = ?',
+      'SELECT * FROM org_payment_records WHERE application_id = ?',
       [applicationId]
     );
 
@@ -268,7 +268,7 @@ const processPaymentCallback = async (req, res, next) => {
 
     // Find payment by bill ID
     const [payRows] = await pool.query(
-      'SELECT * FROM etea_payment_records WHERE bill_id = ?',
+      'SELECT * FROM org_payment_records WHERE bill_id = ?',
       [callback.billId]
     );
 
@@ -283,7 +283,7 @@ const processPaymentCallback = async (req, res, next) => {
     // Duplicate transaction ID check
     if (callback.transactionId) {
       const [dupRows] = await pool.query(
-        'SELECT id FROM etea_payment_records WHERE transaction_id = ? AND bill_id != ?',
+        'SELECT id FROM org_payment_records WHERE transaction_id = ? AND bill_id != ?',
         [callback.transactionId, callback.billId]
       );
       if (dupRows.length > 0) {
@@ -319,7 +319,7 @@ const processPaymentCallback = async (req, res, next) => {
     }
 
     await pool.query(
-      'UPDATE etea_payment_records SET status = ?, transaction_id = ?, paid_at = ? WHERE id = ?',
+      'UPDATE org_payment_records SET status = ?, transaction_id = ?, paid_at = ? WHERE id = ?',
       [updates.status, updates.transaction_id, updates.paid_at || null, payment.id]
     );
 
@@ -328,7 +328,7 @@ const processPaymentCallback = async (req, res, next) => {
       try {
         await pool.query(
           `INSERT INTO transactions (id, tenant_id, transaction_id, consumer_number, amount, status, date, biller_name, channel)
-           VALUES (?, ?, ?, ?, ?, ?, CURDATE(), 'ETEA KPK', 'online')`,
+           VALUES (?, ?, ?, ?, ?, ?, CURDATE(), 'Org KPK', 'online')`,
           [uuidv4(), payment.tenant_id, callback.transactionId, payment.bill_id, payment.amount,
             callback.status === 'paid' ? 'completed' : callback.status === 'failed' ? 'failed' : 'pending']
         );
@@ -337,39 +337,54 @@ const processPaymentCallback = async (req, res, next) => {
       }
     }
 
-    const [updatedRows] = await pool.query('SELECT * FROM etea_payment_records WHERE id = ?', [payment.id]);
+    const [updatedRows] = await pool.query('SELECT * FROM org_payment_records WHERE id = ?', [payment.id]);
     const updated = updatedRows[0];
 
-    // Push outbound notification to ETEA's webhook endpoint (fire-and-forget, non-blocking)
-    const eteaWebhookUrl = ETEA_NOTIFICATION_URL || updated.callback_url || '';
-    if (eteaWebhookUrl) {
+    // Look up per-tenant webhook config from tenants.settings (falls back to global env constants)
+    const [tenantRows] = await pool.query(
+      'SELECT settings FROM tenants WHERE id = ? AND deleted_at IS NULL',
+      [payment.tenant_id]
+    );
+    const rawSettings = tenantRows[0]?.settings;
+    const tenantSettings = rawSettings
+      ? (typeof rawSettings === 'object' ? rawSettings : (() => { try { return JSON.parse(rawSettings); } catch { return {}; } })())
+      : {};
+    const orgWebhookUrl = tenantSettings.notification_url || ORG_NOTIFICATION_URL || updated.callback_url || '';
+    const outboundSecret = tenantSettings.webhook_secret || WEBHOOK_SECRET;
+
+    // Push outbound notification to org's webhook endpoint (fire-and-forget, non-blocking)
+    if (orgWebhookUrl) {
       const notificationPayload = {
         application_id: updated.application_id,
         status: updated.status,
         transaction_id: updated.transaction_id || null,
         paid_at: updated.paid_at || null,
       };
-      fetch(eteaWebhookUrl, {
+      const outboundSig = crypto
+        .createHmac('sha256', outboundSecret)
+        .update(JSON.stringify(notificationPayload))
+        .digest('hex');
+      fetch(orgWebhookUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Webhook-Signature': outboundSig },
         body: JSON.stringify(notificationPayload),
         signal: AbortSignal.timeout(8000),
       })
         .then((res) => {
-          logger.info(`ETEA webhook push → ${eteaWebhookUrl} | status=${res.status} | application_id=${updated.application_id}`);
+          logger.info(`Org webhook push → ${orgWebhookUrl} | status=${res.status} | application_id=${updated.application_id}`);
         })
         .catch((err) => {
-          logger.warn(`ETEA webhook push failed → ${eteaWebhookUrl} | ${err.message}`);
+          logger.warn(`Org webhook push failed → ${orgWebhookUrl} | ${err.message}`);
         });
     }
 
     // Record notification log
     await pool.query(
-      'INSERT INTO etea_payment_notifications (id, tenant_id, application_id, payment_id, bill_id, status) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO org_payment_notifications (id, tenant_id, application_id, payment_id, bill_id, status) VALUES (?, ?, ?, ?, ?, ?)',
       [uuidv4(), payment.tenant_id, payment.application_id, payment.id, payment.bill_id, callback.status]
     );
 
-    await auditLog(req, 'callback', 'etea_payment', payment.id, `Callback: ${callback.status} via TXN ${callback.transactionId}`);
+    await auditLog(req, 'callback', 'org_payment', payment.id, `Callback: ${callback.status} via TXN ${callback.transactionId}`);
 
     const response = {
       data: {
@@ -391,7 +406,7 @@ const healthCheck = async (req, res) => {
   res.json({
     data: {
       status: 'ok',
-      service: 'etea-payment-controller',
+      service: 'org-payment-controller',
       timestamp: new Date().toISOString(),
     },
   });
@@ -402,20 +417,20 @@ const expireOverduePayments = async (req, res, next) => {
   try {
     // Fetch records about to be expired so we can log notifications
     const [toExpire] = await pool.query(
-      `SELECT id, tenant_id, application_id, bill_id FROM etea_payment_records
+      `SELECT id, tenant_id, application_id, bill_id FROM org_payment_records
        WHERE status = 'pending' AND expiry_date <= UTC_TIMESTAMP()`
     );
 
     if (toExpire.length > 0) {
       await pool.query(
-        `UPDATE etea_payment_records SET status = 'expired'
+        `UPDATE org_payment_records SET status = 'expired'
          WHERE status = 'pending' AND expiry_date <= UTC_TIMESTAMP()`
       );
 
       // Insert a notification row for each expired record
       const notifValues = toExpire.map((r) => [uuidv4(), r.tenant_id, r.application_id, r.id, r.bill_id, 'expired']);
       await pool.query(
-        'INSERT INTO etea_payment_notifications (id, tenant_id, application_id, payment_id, bill_id, status) VALUES ?',
+        'INSERT INTO org_payment_notifications (id, tenant_id, application_id, payment_id, bill_id, status) VALUES ?',
         [notifValues]
       );
     }
@@ -429,7 +444,7 @@ const expireOverduePayments = async (req, res, next) => {
   }
 };
 
-// ---- GET /api/etea/stats ----
+// ---- GET /api/org/stats ----
 const getStats = async (req, res, next) => {
   try {
     const params = [];
@@ -439,7 +454,7 @@ const getStats = async (req, res, next) => {
     // Status counts + totals in one query
     const [statusRows] = await pool.query(
       `SELECT status, COUNT(*) AS cnt, COALESCE(SUM(amount), 0) AS total
-       FROM etea_payment_records ${where}
+       FROM org_payment_records ${where}
        GROUP BY status`,
       params
     );
@@ -454,7 +469,7 @@ const getStats = async (req, res, next) => {
 
     // Verified transactions (paid + has transaction_id)
     const [vRows] = await pool.query(
-      `SELECT COUNT(*) AS cnt FROM etea_payment_records ${where} AND status = 'paid' AND transaction_id IS NOT NULL`,
+      `SELECT COUNT(*) AS cnt FROM org_payment_records ${where} AND status = 'paid' AND transaction_id IS NOT NULL`,
       params
     );
     const verifiedTransactions = Number(vRows[0].cnt);
@@ -463,7 +478,7 @@ const getStats = async (req, res, next) => {
     const trendParams = [...params];
     const [trendRows] = await pool.query(
       `SELECT DATE_FORMAT(paid_at, '%Y-%m') AS month, SUM(amount) AS revenue
-       FROM etea_payment_records
+       FROM org_payment_records
        ${where} AND status = 'paid' AND paid_at IS NOT NULL
          AND paid_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
        GROUP BY month ORDER BY month ASC`,
@@ -509,13 +524,13 @@ const listPayments = async (req, res, next) => {
     if (req.query.application_id) { where += ' AND application_id = ?'; params.push(req.query.application_id); }
 
     const [[{ total }]] = await pool.query(
-      `SELECT COUNT(*) AS total FROM etea_payment_records ${where}`, params
+      `SELECT COUNT(*) AS total FROM org_payment_records ${where}`, params
     );
 
     const [rows] = await pool.query(
       `SELECT application_id, applicant_id, posting_id, consumer_number, amount, status,
               created_at, paid_at, transaction_id, expiry_date
-       FROM etea_payment_records ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+       FROM org_payment_records ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
 
@@ -543,12 +558,12 @@ const listNotifications = async (req, res, next) => {
     if (req.query.application_id) { where += ' AND application_id = ?'; params.push(req.query.application_id); }
 
     const [[{ total }]] = await pool.query(
-      `SELECT COUNT(*) AS total FROM etea_payment_notifications ${where}`, params
+      `SELECT COUNT(*) AS total FROM org_payment_notifications ${where}`, params
     );
 
     const [rows] = await pool.query(
       `SELECT application_id, status, sent_at
-       FROM etea_payment_notifications ${where} ORDER BY sent_at DESC LIMIT ? OFFSET ?`,
+       FROM org_payment_notifications ${where} ORDER BY sent_at DESC LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
 

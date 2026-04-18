@@ -7,7 +7,7 @@ import { formatPKR } from '@/lib/formatters';
 import { usePaymentStore } from '@/store/paymentStore';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
-import { EteaPaymentRecord } from '@/types';
+import { OrgPaymentRecord } from '@/types';
 import { Loader2 } from 'lucide-react';
 
 const mapPaymentToInvoiceStatus = (status: 'pending' | 'paid' | 'failed' | 'expired'): 'paid' | 'pending' | 'overdue' => {
@@ -23,8 +23,8 @@ const ETEAInvoices = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  const { data: paymentsData, loading } = useApiQuery(() => api.listEteaPayments(), [paymentVersion]);
-  const rawPayments = useMemo(() => (paymentsData || []) as EteaPaymentRecord[], [paymentsData]);
+  const { data: paymentsData, loading } = useApiQuery(() => api.listOrgPayments(), [paymentVersion]);
+  const rawPayments = useMemo(() => (paymentsData || []) as OrgPaymentRecord[], [paymentsData]);
 
   const invoiceRows = useMemo(
     () => rawPayments.map((payment) => ({

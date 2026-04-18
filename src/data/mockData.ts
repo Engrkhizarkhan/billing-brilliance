@@ -2,7 +2,7 @@ import {
   AuditLog,
   Applicant,
   Biller,
-  ETEAPosting,
+  OrgPosting,
   FeeHead,
   FeePlan,
   Invoice,
@@ -16,8 +16,8 @@ import {
   Transaction,
   BillStatus,
   BundlePackage,
-  EteaPaymentNotification,
-  EteaPaymentRecord,
+  OrgPaymentNotification,
+  OrgPaymentRecord,
 } from '@/types';
 
 const FINTECH_PREFIX = '123456';
@@ -29,7 +29,7 @@ export const generateConsumerNumber = (billerCode: string, studentNum: string): 
 export const billers: Biller[] = [
   { id: '1', name: 'Beacon House School', type: 'school', billerCode: '1001', email: 'info@beaconhouse.edu', phone: '0300-1234567', status: 'active', createdAt: '2024-01-15' },
   { id: '2', name: 'City Grammar School', type: 'school', billerCode: '1002', email: 'admin@citygrammar.edu', phone: '0301-2345678', status: 'active', createdAt: '2024-02-10' },
-  { id: '3', name: 'ETEA KPK', type: 'etea', billerCode: '2001', email: 'contact@etea.edu.pk', phone: '0302-3456789', status: 'active', createdAt: '2024-03-05' },
+  { id: '3', name: 'KPK Organization', type: 'org', billerCode: '2001', email: 'contact@org.payniva.com', phone: '0302-3456789', status: 'active', createdAt: '2024-03-05' },
   { id: '4', name: 'Premier Academy', type: 'school', billerCode: '1003', email: 'hello@premieracademy.edu', phone: '0303-4567890', status: 'suspended', createdAt: '2024-01-20' },
   { id: '5', name: 'Peshawar University', type: 'school', billerCode: '1004', email: 'info@uop.edu.pk', phone: '0304-5678901', status: 'active', createdAt: '2024-04-12' },
 ];
@@ -112,9 +112,9 @@ export type RuntimeBillPayment = {
 
 const runtimeBillPayments: RuntimeBillPayment[] = [];
 
-const eteaPaymentRecords: EteaPaymentRecord[] = [];
-const eteaPaymentNotifications: EteaPaymentNotification[] = [];
-let eteaPaymentSequence = 1000;
+const orgPaymentRecords: OrgPaymentRecord[] = [];
+const orgPaymentNotifications: OrgPaymentNotification[] = [];
+let orgPaymentSequence = 1000;
 
 export const recordRuntimeBillPayment = (payment: RuntimeBillPayment) => {
   runtimeBillPayments.push(payment);
@@ -123,50 +123,50 @@ export const recordRuntimeBillPayment = (payment: RuntimeBillPayment) => {
 
 export const getRuntimeBillPayments = () => runtimeBillPayments;
 
-export const getEteaPaymentRecords = () => eteaPaymentRecords;
+export const getOrgPaymentRecords = () => orgPaymentRecords;
 
-export const getEteaPaymentByApplicationId = (applicationId: string) =>
-  eteaPaymentRecords.find((payment) => payment.applicationId === applicationId);
+export const getOrgPaymentByApplicationId = (applicationId: string) =>
+  orgPaymentRecords.find((payment) => payment.applicationId === applicationId);
 
-export const getEteaPaymentByBillId = (billId: string) =>
-  eteaPaymentRecords.find((payment) => payment.billId === billId);
+export const getOrgPaymentByBillId = (billId: string) =>
+  orgPaymentRecords.find((payment) => payment.billId === billId);
 
-export const createEteaPaymentRecord = (record: Omit<EteaPaymentRecord, 'id'>) => {
-  eteaPaymentSequence += 1;
-  const created: EteaPaymentRecord = {
-    id: `PAY-${eteaPaymentSequence}`,
+export const createOrgPaymentRecord = (record: Omit<OrgPaymentRecord, 'id'>) => {
+  orgPaymentSequence += 1;
+  const created: OrgPaymentRecord = {
+    id: `PAY-${orgPaymentSequence}`,
     ...record,
   };
-  eteaPaymentRecords.unshift(created);
+  orgPaymentRecords.unshift(created);
   return created;
 };
 
-export const updateEteaPaymentRecord = (
+export const updateOrgPaymentRecord = (
   paymentId: string,
-  updates: Partial<Omit<EteaPaymentRecord, 'id'>>
+  updates: Partial<Omit<OrgPaymentRecord, 'id'>>
 ) => {
-  const index = eteaPaymentRecords.findIndex((payment) => payment.id === paymentId);
+  const index = orgPaymentRecords.findIndex((payment) => payment.id === paymentId);
   if (index === -1) return null;
 
-  eteaPaymentRecords[index] = {
-    ...eteaPaymentRecords[index],
+  orgPaymentRecords[index] = {
+    ...orgPaymentRecords[index],
     ...updates,
   };
 
-  return eteaPaymentRecords[index];
+  return orgPaymentRecords[index];
 };
 
-export const getEteaPaymentNotifications = () => eteaPaymentNotifications;
+export const getOrgPaymentNotifications = () => orgPaymentNotifications;
 
-export const recordEteaPaymentNotification = (
-  notification: Omit<EteaPaymentNotification, 'id' | 'sentAt'>
+export const recordOrgPaymentNotification = (
+  notification: Omit<OrgPaymentNotification, 'id' | 'sentAt'>
 ) => {
-  const created: EteaPaymentNotification = {
+  const created: OrgPaymentNotification = {
     id: `NTF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     sentAt: new Date().toISOString(),
     ...notification,
   };
-  eteaPaymentNotifications.unshift(created);
+  orgPaymentNotifications.unshift(created);
   return created;
 };
 
@@ -572,7 +572,7 @@ export const services: Service[] = [
   { id: 'srv5', name: 'CT Recruitment BPS-15', paymentType: 'one-time', amount: 1500, status: 'inactive' },
 ];
 
-export const eteaPostings: ETEAPosting[] = [
+export const orgPostings: OrgPosting[] = [
   { id: 'ep1', title: 'MDCAT 2025', type: 'entry_test', department: 'Medical', totalSeats: 5000, applicationFee: 3500, startDate: '2025-03-01', endDate: '2025-04-30', testDate: '2025-06-15', status: 'active', applicationsReceived: 3247 },
   { id: 'ep2', title: 'ECAT Engineering 2025', type: 'entry_test', department: 'Engineering', totalSeats: 3000, applicationFee: 3500, startDate: '2025-03-15', endDate: '2025-05-15', testDate: '2025-07-01', status: 'active', applicationsReceived: 1892 },
   { id: 'ep3', title: 'Lecturer Physics KPK', type: 'job_vacancy', department: 'Education Dept KPK', totalSeats: 150, applicationFee: 2500, startDate: '2025-02-01', endDate: '2025-03-31', testDate: '2025-05-10', status: 'closed', applicationsReceived: 4521 },
@@ -597,7 +597,7 @@ export const applicants: Applicant[] = applicantNames.map((name, i) => ({
   dateOfBirth: `200${i % 5}-0${(i % 9) + 1}-${String((i % 28) + 1).padStart(2, '0')}`,
   qualification: ['FSc Pre-Medical', 'FSc Pre-Engineering', 'BA/BSc', 'MA/MSc', 'BS 4-Year'][i % 5],
   consumerNumber: generateConsumerNumber('2001', String(i + 1)),
-  billId: `ETEA-MDCAT25-${String(i + 1).padStart(5, '0')}`,
+  billId: `ORG-MDCAT25-${String(i + 1).padStart(5, '0')}`,
   paymentStatus: (['paid', 'pending', 'partial'] as const)[i % 3],
   applicationStatus: (['submitted', 'fee_pending', 'fee_paid', 'roll_assigned', 'test_scheduled', 'appeared', 'result_pending', 'selected', 'rejected'] as const)[i % 9],
   serviceId: ['srv1', 'srv1', 'srv2', 'srv3', 'srv1'][i % 5],
@@ -607,25 +607,25 @@ export const applicants: Applicant[] = applicantNames.map((name, i) => ({
   appliedDate: `2025-03-${String((i % 28) + 1).padStart(2, '0')}`,
 }));
 
-const buildEteaBillId = (applicationId: string) => {
+const buildOrgBillId = (applicationId: string) => {
   const applicationDigits = applicationId.replace(/\D/g, '').padStart(14, '0').slice(-14);
   return `1234562001${applicationDigits}`;
 };
 
-const eteaSeedPayments: EteaPaymentRecord[] = [
+const orgSeedPayments: OrgPaymentRecord[] = [
   {
     id: 'PAY-1001',
     applicationId: 'a1',
     applicantId: 'a1',
     postingId: applicants[0].serviceId,
-    billId: buildEteaBillId('a1'),
+    billId: buildOrgBillId('a1'),
     amount: 3500,
     status: 'paid',
     dueDate: '2026-04-10',
     expiryDate: '2026-04-12T09:00:00.000Z',
     createdAt: '2026-04-01T09:00:00.000Z',
     paidAt: '2026-04-01T09:17:00.000Z',
-    transactionId: 'TXN-ETEA-1001',
+    transactionId: 'TXN-ORG-1001',
     description: 'MDCAT application fee',
     callbackUrl: '/api/payment/callback',
   },
@@ -634,7 +634,7 @@ const eteaSeedPayments: EteaPaymentRecord[] = [
     applicationId: 'a2',
     applicantId: 'a2',
     postingId: applicants[1].serviceId,
-    billId: buildEteaBillId('a2'),
+    billId: buildOrgBillId('a2'),
     amount: 3500,
     status: 'pending',
     dueDate: '2026-04-11',
@@ -648,13 +648,13 @@ const eteaSeedPayments: EteaPaymentRecord[] = [
     applicationId: 'a3',
     applicantId: 'a3',
     postingId: applicants[2].serviceId,
-    billId: buildEteaBillId('a3'),
+    billId: buildOrgBillId('a3'),
     amount: 3500,
     status: 'failed',
     dueDate: '2026-04-09',
     expiryDate: '2026-04-11T08:00:00.000Z',
     createdAt: '2026-03-31T08:00:00.000Z',
-    transactionId: 'TXN-ETEA-1003',
+    transactionId: 'TXN-ORG-1003',
     description: 'ECAT application fee',
     callbackUrl: '/api/payment/callback',
   },
@@ -663,14 +663,14 @@ const eteaSeedPayments: EteaPaymentRecord[] = [
     applicationId: 'a4',
     applicantId: 'a4',
     postingId: applicants[3].serviceId,
-    billId: buildEteaBillId('a4'),
+    billId: buildOrgBillId('a4'),
     amount: 2500,
     status: 'paid',
     dueDate: '2026-04-08',
     expiryDate: '2026-04-10T10:00:00.000Z',
     createdAt: '2026-03-30T10:00:00.000Z',
     paidAt: '2026-03-30T10:42:00.000Z',
-    transactionId: 'TXN-ETEA-1004',
+    transactionId: 'TXN-ORG-1004',
     description: 'Lecturer recruitment application fee',
     callbackUrl: '/api/payment/callback',
   },
@@ -679,7 +679,7 @@ const eteaSeedPayments: EteaPaymentRecord[] = [
     applicationId: 'a5',
     applicantId: 'a5',
     postingId: applicants[4].serviceId,
-    billId: buildEteaBillId('a5'),
+    billId: buildOrgBillId('a5'),
     amount: 3500,
     status: 'expired',
     dueDate: '2026-03-25',
@@ -693,7 +693,7 @@ const eteaSeedPayments: EteaPaymentRecord[] = [
     applicationId: 'a6',
     applicantId: 'a6',
     postingId: applicants[5].serviceId,
-    billId: buildEteaBillId('a6'),
+    billId: buildOrgBillId('a6'),
     amount: 3500,
     status: 'pending',
     dueDate: '2026-04-14',
@@ -704,10 +704,10 @@ const eteaSeedPayments: EteaPaymentRecord[] = [
   },
 ];
 
-eteaPaymentRecords.push(...eteaSeedPayments);
-eteaPaymentSequence = 1000 + eteaSeedPayments.length;
+orgPaymentRecords.push(...orgSeedPayments);
+orgPaymentSequence = 1000 + orgSeedPayments.length;
 
-eteaSeedPayments.forEach((payment) => {
+orgSeedPayments.forEach((payment) => {
   const applicant = applicants.find((entry) => entry.id === payment.applicantId);
   if (!applicant) return;
 
@@ -726,7 +726,7 @@ eteaSeedPayments.forEach((payment) => {
   }
 });
 
-const eteaSeedNotifications: EteaPaymentNotification[] = eteaSeedPayments
+const orgSeedNotifications: OrgPaymentNotification[] = orgSeedPayments
   .filter((payment) => payment.status !== 'pending')
   .map((payment, index) => ({
     id: `NTF-SEED-${index + 1}`,
@@ -737,12 +737,12 @@ const eteaSeedNotifications: EteaPaymentNotification[] = eteaSeedPayments
     sentAt: payment.paidAt || payment.createdAt,
   }));
 
-eteaPaymentNotifications.push(...eteaSeedNotifications);
+orgPaymentNotifications.push(...orgSeedNotifications);
 
 export const auditLogs: AuditLog[] = [
   { id: 'al1', userId: '1', userName: 'Admin User', action: 'create', entity: 'student', entityId: 's1', details: 'Created student Ahmed Khan', timestamp: '2025-03-28T10:30:00', ip: '192.168.1.100' },
   { id: 'al2', userId: '2', userName: 'School Admin', action: 'update', entity: 'fee_plan', entityId: 'fp1', details: 'Updated Standard Monthly amount from ₨12,000 to ₨15,000', timestamp: '2025-03-28T09:15:00', ip: '192.168.1.101' },
-  { id: 'al3', userId: '3', userName: 'ETEA Manager', action: 'create', entity: 'posting', entityId: 'ep1', details: 'Created posting MDCAT 2025', timestamp: '2025-03-27T14:00:00', ip: '192.168.1.102' },
+  { id: 'al3', userId: '3', userName: 'Org Manager', action: 'create', entity: 'posting', entityId: 'ep1', details: 'Created posting MDCAT 2025', timestamp: '2025-03-27T14:00:00', ip: '192.168.1.102' },
   { id: 'al4', userId: '1', userName: 'Admin User', action: 'payment', entity: 'transaction', entityId: 't1', details: 'Payment ₨15,000 received from Ahmed Khan via 1Bill', timestamp: '2025-03-27T11:20:00', ip: '192.168.1.100' },
   { id: 'al5', userId: '2', userName: 'School Admin', action: 'delete', entity: 'scholarship', entityId: 'sch4', details: 'Archived Academic Excellence scholarship', timestamp: '2025-03-26T16:45:00', ip: '192.168.1.101' },
 ];

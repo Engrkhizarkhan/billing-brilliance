@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatPKR } from '@/lib/formatters';
 import { usePaymentStore } from '@/store/paymentStore';
-import { EteaPaymentRecord } from '@/types';
+import { OrgPaymentRecord } from '@/types';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
@@ -20,8 +20,8 @@ const ETEAPaymentHistory = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  const { data: paymentsData, loading: loadingPayments } = useApiQuery(() => api.listEteaPayments(), [paymentVersion]);
-  const paymentRecords = useMemo(() => (paymentsData || []) as EteaPaymentRecord[], [paymentsData]);
+  const { data: paymentsData, loading: loadingPayments } = useApiQuery(() => api.listOrgPayments(), [paymentVersion]);
+  const paymentRecords = useMemo(() => (paymentsData || []) as OrgPaymentRecord[], [paymentsData]);
 
   const filteredPayments = useMemo(() => {
     const query = search.toLowerCase();

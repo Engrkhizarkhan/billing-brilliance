@@ -31,7 +31,7 @@ const testConnection = async () => {
     return true;
   } catch (err) {
     logger.error('Database connection failed:', err.message);
-    return false;
+    return false; // caller (startServer) checks return value and exits
   }
 };
 

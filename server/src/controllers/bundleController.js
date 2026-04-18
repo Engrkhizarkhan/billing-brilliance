@@ -243,6 +243,20 @@ const fetchBundle1Link = async (req, res, next) => {
 
     const pcid = PCID.trim().toUpperCase();
 
+    // Verify PCID is registered before querying bundles
+    const [pcidRows] = await pool.query(
+      'SELECT pcid FROM bundle_pcids WHERE pcid = ?',
+      [pcid]
+    );
+    if (pcidRows.length === 0) {
+      return res.json({
+        companyId: pcid,
+        responseCode: '01',
+        billerName: '',
+        bundleDetails: [],
+      });
+    }
+
     const [rows] = await pool.query(
       `SELECT * FROM bundles
        WHERE pcid = ? AND status = 'active' AND deleted_at IS NULL
@@ -250,10 +264,11 @@ const fetchBundle1Link = async (req, res, next) => {
       [pcid]
     );
 
+    // PCID is known but has no active bundles — return success with empty list
     if (rows.length === 0) {
       return res.json({
         companyId: pcid,
-        responseCode: '01',
+        responseCode: '00',
         billerName: '',
         bundleDetails: [],
       });

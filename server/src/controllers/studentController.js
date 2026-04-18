@@ -75,34 +75,49 @@ const createStudent = async (req, res, next) => {
     if (tenants.length === 0) throw new AppError('Tenant not found', 404);
     const billerCode = tenants[0].biller_code;
 
-    // Get next sequence for consumer number
-    const [seqRows] = await pool.query('SELECT COUNT(*) as cnt FROM students WHERE tenant_id = ?', [tenantId]);
-    const seq = seqRows[0].cnt + 1;
+    // Get sequence — use MAX()+1 inside a transaction to avoid race conditions
+    const conn = await pool.getConnection();
+    let seq, id, consumerNumber, billId;
+    try {
+      await conn.beginTransaction();
+      await conn.query('SELECT id FROM tenants WHERE id = ? FOR UPDATE', [tenantId]);
+      const [[seqRow]] = await conn.query(
+        'SELECT COALESCE(MAX(seq_number), 0) + 1 AS next_seq FROM students WHERE tenant_id = ?',
+        [tenantId]
+      );
+      seq = seqRow.next_seq;
+      consumerNumber = req.body.consumerNumber || generateConsumerNumber(billerCode, seq);
+      billId = req.body.billId || `SCH-${billerCode}-${String(seq).padStart(5, '0')}`;
 
-    const id = uuidv4();
-    const consumerNumber = req.body.consumerNumber || generateConsumerNumber(billerCode, seq);
-    const billId = req.body.billId || `SCH-${billerCode}-${String(seq).padStart(5, '0')}`;
+      id = uuidv4();
+      const {
+        name, fatherName, rollNumber, class: className, section, phone, cnic,
+        status = 'active', balance = 0, admissionDate, gender, dateOfBirth, address,
+        usesBusService = false, busServiceStartMonth, busServiceEndMonth, busMonthlyFee = 0,
+      } = req.body;
 
-    const {
-      name, fatherName, rollNumber, class: className, section, phone, cnic,
-      status = 'active', balance = 0, admissionDate, gender, dateOfBirth, address,
-      usesBusService = false, busServiceStartMonth, busServiceEndMonth, busMonthlyFee = 0,
-    } = req.body;
+      await conn.query(
+        `INSERT INTO students (id, tenant_id, name, father_name, roll_number, class, section, phone, cnic,
+          consumer_number, bill_id, seq_number, status, balance, admission_date, gender, date_of_birth, address,
+          uses_bus_service, bus_service_start_month, bus_service_end_month, bus_monthly_fee)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, tenantId, name, fatherName, rollNumber || null, className, section || null, phone || null, cnic || null,
+          consumerNumber, billId, seq, status, balance, admissionDate || null, gender, dateOfBirth || null, address || null,
+          usesBusService ? 1 : 0, busServiceStartMonth || null, busServiceEndMonth || null, busMonthlyFee]
+      );
 
-    await pool.query(
-      `INSERT INTO students (id, tenant_id, name, father_name, roll_number, class, section, phone, cnic,
-        consumer_number, bill_id, status, balance, admission_date, gender, date_of_birth, address,
-        uses_bus_service, bus_service_start_month, bus_service_end_month, bus_monthly_fee)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, tenantId, name, fatherName, rollNumber || null, className, section || null, phone || null, cnic || null,
-        consumerNumber, billId, status, balance, admissionDate || null, gender, dateOfBirth || null, address || null,
-        usesBusService ? 1 : 0, busServiceStartMonth || null, busServiceEndMonth || null, busMonthlyFee]
-    );
+      await conn.commit();
+    } catch (txErr) {
+      await conn.rollback();
+      conn.release();
+      throw txErr;
+    }
+    conn.release();
 
-    await auditLog(req, 'create', 'student', id, `Student ${name} created`);
+    await auditLog(req, 'create', 'student', id, `Student created`);
     await createRequestNotification(req, {
       title: 'Student created',
-      message: `${name} was added to the student directory.`,
+      message: `Student was added to the student directory.`,
       type: 'system',
       tenantId,
     });

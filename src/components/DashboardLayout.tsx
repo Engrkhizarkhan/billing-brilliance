@@ -10,7 +10,7 @@ import {
   LayoutDashboard, Users, CreditCard, BarChart3, Building2,
   GraduationCap, BookOpen, Award, Receipt, Wallet, Briefcase,
   LogOut, Menu, X, DollarSign, ChevronRight, Settings, Sun, Moon,
-  AlertTriangle, FileText, Shield, ClipboardList, Activity, Wifi, History, Package, FlaskConical, FileCode2
+  AlertTriangle, FileText, Shield, ClipboardList, Activity, Wifi, History, Package, FlaskConical, FileCode2, Webhook, Wrench
 } from 'lucide-react';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -36,6 +36,7 @@ const navItems: Record<UserRole, NavItem[]> = {
     { label: '1LINK Sandbox', path: '/admin/onelink-sandbox', icon: Wifi, group: 'System' },
     { label: 'FetchBundle Sandbox', path: '/admin/fetchbundle-sandbox', icon: FlaskConical, group: 'System' },
     { label: 'API Reference', path: '/admin/api-reference', icon: FileCode2, group: 'System' },
+    { label: 'Dev Tools', path: '/admin/dev-tools', icon: Wrench, group: 'System' },
   ],
   school: [
     { label: 'Dashboard', path: '/school', icon: LayoutDashboard, group: 'Overview' },
@@ -52,25 +53,30 @@ const navItems: Record<UserRole, NavItem[]> = {
     { label: 'Login Activity', path: '/school/login-activity', icon: Shield, group: 'System' },
     { label: 'Settings', path: '/school/settings', icon: Settings, group: 'System' },
   ],
-  etea: [
-    { label: 'Dashboard', path: '/etea', icon: LayoutDashboard, group: 'Overview' },
-    { label: 'Payments', path: '/etea/payments', icon: Wallet, group: 'Finance' },
-    { label: 'Payment History', path: '/etea/history', icon: History, group: 'Finance' },
-    { label: 'Real-Time Payments', path: '/etea/realtime-payments', icon: Activity, group: 'Finance' },
-    { label: 'Reports', path: '/etea/reports', icon: BarChart3, group: 'Analytics' },
-    { label: 'Login Activity', path: '/etea/login-activity', icon: Shield, group: 'System' },
-    { label: 'Settings', path: '/etea/settings', icon: Settings, group: 'System' },
+  org: [
+    { label: 'Dashboard', path: '/org', icon: LayoutDashboard, group: 'Overview' },
+    { label: 'Payments', path: '/org/payments', icon: Wallet, group: 'Finance' },
+    { label: 'Payment History', path: '/org/history', icon: History, group: 'Finance' },
+    { label: 'Real-Time Payments', path: '/org/realtime-payments', icon: Activity, group: 'Finance' },
+    { label: 'Invoices', path: '/org/invoices', icon: FileText, group: 'Finance' },
+    { label: 'Reports', path: '/org/reports', icon: BarChart3, group: 'Analytics' },
+    { label: 'Login Activity', path: '/org/login-activity', icon: Shield, group: 'System' },
+    { label: 'Sandbox', path: '/org/sandbox', icon: FlaskConical, group: 'System' },
+    { label: 'Settings', path: '/org/settings', icon: Settings, group: 'System' },
+    { label: 'Webhook Config', path: '/org/webhook-config', icon: Webhook, group: 'System' },
   ],
 };
 
 const roleLabels: Record<UserRole, string> = {
   admin: 'Super Admin',
   school: 'School Portal',
-  etea: 'ETEA Portal',
+  org: 'Organization Portal',
 };
 
+const ROLE_PATHS: Record<UserRole, string> = { admin: '/admin', school: '/school', org: '/org' };
+
 const DashboardLayout = () => {
-  const { user, logout } = useAuthStore();
+  const { user, logout, impersonating, impersonatedUser, exitImpersonation } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -82,7 +88,7 @@ const DashboardLayout = () => {
   if (!user) { navigate('/login'); return null; }
 
   const items = navItems[user.role];
-  const roleRootPath = `/${user.role}`;
+  const roleRootPath = ROLE_PATHS[user.role];
 
   const isActive = (path: string) => {
     if (path === roleRootPath) return location.pathname === path;
@@ -100,7 +106,26 @@ const DashboardLayout = () => {
   }, {});
 
   return (
-    <div className="h-screen overflow-hidden flex bg-background">
+    <div className="flex flex-col h-screen overflow-hidden">
+      {/* Impersonation banner — shown when admin is viewing another user's dashboard */}
+      {impersonating && impersonatedUser && (
+        <div className="bg-orange-500 text-white text-sm flex items-center justify-between px-4 py-2 shrink-0 z-50">
+          <span>
+            🔒 Maintenance Session — Viewing as{' '}
+            <strong>{impersonatedUser.name}</strong>{' '}({impersonatedUser.role})
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-white hover:bg-orange-600 h-7 text-xs"
+            onClick={() => { exitImpersonation(); navigate('/admin'); }}
+          >
+            Exit Session
+          </Button>
+        </div>
+      )}
+
+      <div className="h-screen overflow-hidden flex bg-background flex-1">
       {/* Session timeout warning */}
       <Dialog open={showWarning} onOpenChange={() => {}}>
         <DialogContent className="max-w-sm">
@@ -209,6 +234,7 @@ const DashboardLayout = () => {
           <Outlet />
         </main>
       </div>
+    </div>
     </div>
   );
 };

@@ -4,7 +4,7 @@ import { usePaymentStore } from '@/store/paymentStore';
 import { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
-type BillerRecord = { id: string; type: 'school' | 'etea' | 'private_agency'; name: string };
+type BillerRecord = { id: string; type: 'school' | 'org' | 'private_agency'; name: string };
 type TransactionRecord = { tenantId?: string | null; amount: number; status: 'completed' | 'pending' | 'failed' | string; date: string };
 
 const COLORS = ['hsl(221, 83%, 53%)', 'hsl(160, 84%, 39%)', 'hsl(38, 92%, 50%)'];
@@ -48,7 +48,7 @@ const Reports = () => {
     const tenantTypeById = new Map(billers.map((b) => [b.id, b.type] as const));
     const totals = {
       school: 0,
-      etea: 0,
+      org: 0,
       private_agency: 0,
     };
 
@@ -57,13 +57,13 @@ const Reports = () => {
       .forEach((t) => {
         const tenantType = t.tenantId ? tenantTypeById.get(t.tenantId) : undefined;
         if (tenantType === 'school') totals.school += Number(t.amount || 0);
-        else if (tenantType === 'etea') totals.etea += Number(t.amount || 0);
+        else if (tenantType === 'org') totals.org += Number(t.amount || 0);
         else totals.private_agency += Number(t.amount || 0);
       });
 
     return [
       { name: 'Schools', value: totals.school },
-      { name: 'ETEA', value: totals.etea },
+      { name: 'Organizations', value: totals.org },
       { name: 'Agencies', value: totals.private_agency },
     ];
   }, [transactions, billers]);

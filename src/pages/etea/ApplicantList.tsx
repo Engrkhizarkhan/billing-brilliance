@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Eye, Loader2, MoreHorizontal, UserPlus, Wallet } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { resolvePostingById, setEteaFinanceCache } from '@/lib/eteaFinance';
+import { resolvePostingById, setOrgFinanceCache } from '@/lib/orgFinance';
 import { useNavigate } from 'react-router-dom';
 import { usePaymentStore } from '@/store/paymentStore';
 import { api } from '@/lib/api';
@@ -48,7 +48,7 @@ const ApplicantList = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (postingsData) setEteaFinanceCache(postingsData as EteaPosting[], []);
+    if (postingsData) setOrgFinanceCache(postingsData as EteaPosting[], []);
   }, [postingsData]);
 
   const [search, setSearch] = useState('');

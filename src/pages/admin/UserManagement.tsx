@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '@/components/StatusBadge';
 import { FilterBar } from '@/components/FilterBar';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Ban, Upload, Download, FileText, Plus, RefreshCcw } from 'lucide-react';
+import { Ban, Upload, Download, FileText, Plus, RefreshCcw, LogIn } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
@@ -12,8 +13,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Biller, User } from '@/types';
+import { useAuthStore } from '@/store/authStore';
 
 const UserManagement = () => {
+  const navigate = useNavigate();
+  const { startImpersonation } = useAuthStore();
   const [users, setUsers] = useState<User[]>([]);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -33,7 +37,7 @@ const UserManagement = () => {
 
   const billers = (billersData || []) as Biller[];
   const schoolTenants = billers.filter((b) => b.type === 'school');
-  const eteaTenants = billers.filter((b) => b.type === 'etea');
+  const orgTenants = billers.filter((b) => b.type === 'org');
 
   useEffect(() => {
     const load = async () => {
@@ -109,15 +113,15 @@ const UserManagement = () => {
   };
 
   const handleBulkUpload = async () => {
-    if (!schoolTenants[0] || !eteaTenants[0]) {
-      toast.error('Please create at least one school tenant and one ETEA tenant first');
+    if (!schoolTenants[0] || !orgTenants[0]) {
+      toast.error('Please create at least one school tenant and one Organization tenant first');
       return;
     }
 
     setLoading(true);
     const bulkPayload = [
       { name: 'Saad Qureshi', email: 'saad@school.com', role: 'school' as User['role'], tenantId: schoolTenants[0].id },
-      { name: 'Farah Naz', email: 'farah@agency.com', role: 'etea' as User['role'], tenantId: eteaTenants[0].id },
+      { name: 'Farah Naz', email: 'farah@agency.com', role: 'org' as User['role'], tenantId: orgTenants[0].id },
       { name: 'Kashif Raza', email: 'kashif@school.com', role: 'school' as User['role'], tenantId: schoolTenants[0].id },
     ];
     try {
@@ -174,7 +178,7 @@ const UserManagement = () => {
                     <SelectContent>
                       <SelectItem value="admin">Admin</SelectItem>
                       <SelectItem value="school">School</SelectItem>
-                      <SelectItem value="etea">ETEA</SelectItem>
+                      <SelectItem value="org">Organization</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -184,7 +188,7 @@ const UserManagement = () => {
                     <Select value={createForm.tenantId} onValueChange={(v) => setCreateForm({ ...createForm, tenantId: v })}>
                       <SelectTrigger><SelectValue placeholder="Select tenant" /></SelectTrigger>
                       <SelectContent>
-                        {(createForm.role === 'school' ? schoolTenants : eteaTenants).map((tenant) => (
+                        {(createForm.role === 'school' ? schoolTenants : orgTenants).map((tenant) => (
                           <SelectItem key={tenant.id} value={tenant.id}>{tenant.name}</SelectItem>
                         ))}
                       </SelectContent>
@@ -244,7 +248,7 @@ const UserManagement = () => {
         searchPlaceholder="Search users…"
         onSearch={setSearch}
         filters={[
-          { key: 'role', label: 'Role', options: [{ value: 'admin', label: 'Admin' }, { value: 'school', label: 'School' }, { value: 'etea', label: 'ETEA' }] },
+          { key: 'role', label: 'Role', options: [{ value: 'admin', label: 'Admin' }, { value: 'school', label: 'School' }, { value: 'org', label: 'Organization' }] },
           { key: 'status', label: 'Status', options: [{ value: 'active', label: 'Active' }, { value: 'banned', label: 'Banned' }] },
         ]}
         onFilterChange={(key, value) => {
@@ -254,7 +258,7 @@ const UserManagement = () => {
       />
 
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <RefreshCcw className="w-3.5 h-3.5" /> Accounts are tenant-scoped; school and ETEA users must be linked to a tenant.
+        <RefreshCcw className="w-3.5 h-3.5" /> Accounts are tenant-scoped; school and Org users must be linked to a tenant.
       </div>
 
       <div className="table-container">
@@ -280,14 +284,36 @@ const UserManagement = () => {
                 <TableCell>
                   {u.isProtected ? (
                     <span className="text-xs font-medium text-primary">Protected via env</span>
-                  ) : u.status !== 'banned' ? (
-                    <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => banUser(u.id)} disabled={loading}>
-                      <Ban className="w-3 h-3 mr-1" /> Ban
-                    </Button>
                   ) : (
-                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => unbanUser(u.id)} disabled={loading}>
-                      <RefreshCcw className="w-3 h-3 mr-1" /> Unban
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      {u.role !== 'admin' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          disabled={loading}
+                          onClick={async () => {
+                            try {
+                              await startImpersonation(u.id);
+                              navigate(`/${u.role}`);
+                            } catch {
+                              toast.error('Failed to start maintenance session');
+                            }
+                          }}
+                        >
+                          <LogIn className="w-3 h-3 mr-1" /> Login As
+                        </Button>
+                      )}
+                      {u.status !== 'banned' ? (
+                        <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => banUser(u.id)} disabled={loading}>
+                          <Ban className="w-3 h-3 mr-1" /> Ban
+                        </Button>
+                      ) : (
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => unbanUser(u.id)} disabled={loading}>
+                          <RefreshCcw className="w-3 h-3 mr-1" /> Unban
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </TableCell>
               </TableRow>

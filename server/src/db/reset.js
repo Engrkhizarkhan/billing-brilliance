@@ -1,22 +1,14 @@
 /**
  * Database Reset Script
  * Clears all seeded data and keeps only the admin@example.com user.
- * Usage: node src/db/reset.js
+ * Usage:  node src/db/reset.js
+ * Also exported as a function for use by:  node src/db/seed.js --fresh
  */
-require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
-const mysql = require('mysql2/promise');
-const config = require('../config');
+const { createConnection } = require('./db');    // also loads .env
 const logger = require('../config/logger');
 
 async function reset() {
-  const connection = await mysql.createConnection({
-    host: config.db.host,
-    port: config.db.port,
-    user: config.db.user,
-    password: config.db.password,
-    database: config.db.database,
-    multipleStatements: true,
-  });
+  const connection = await createConnection();
 
   try {
     logger.info('Starting database reset...');
@@ -26,8 +18,8 @@ async function reset() {
     // --- Transactional / operational tables ---
     const truncateTables = [
       'callback_idempotency_log',
-      'etea_payment_notifications',
-      'etea_payment_records',
+      'org_payment_notifications',
+      'org_payment_records',
       'audit_logs',
       'notifications',
       'refresh_tokens',
@@ -39,9 +31,10 @@ async function reset() {
       'invoices',
       'transactions',
       'bill_bundles',
+      'bundles',
       'applicants',
       'services',
-      'etea_postings',
+      'org_postings',
       'scholarships',
       'fee_heads',
       'fee_plans',
@@ -86,7 +79,11 @@ async function reset() {
   }
 }
 
-reset().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+module.exports = reset;
+
+if (require.main === module) {
+  reset().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

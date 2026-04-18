@@ -5,7 +5,7 @@ const mysql = require('mysql2/promise');
 const config = require('../config');
 const logger = require('../config/logger');
 
-const migrationsDir = path.join(__dirname, 'migrations');
+const SCHEMA_FILE = path.join(__dirname, 'schema.sql');
 
 async function migrate() {
   const isFresh = process.argv.includes('--fresh');
@@ -24,39 +24,35 @@ async function migrate() {
       await connection.query(`DROP DATABASE IF EXISTS \`${config.db.database}\``);
     }
 
-    await connection.query(`CREATE DATABASE IF NOT EXISTS \`${config.db.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+    await connection.query(
+      `CREATE DATABASE IF NOT EXISTS \`${config.db.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+    );
     await connection.query(`USE \`${config.db.database}\``);
 
-    // Create migrations tracking table
-    await connection.query(`
-      CREATE TABLE IF NOT EXISTS _migrations (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(255) NOT NULL UNIQUE,
-        executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+    logger.info(`Applying schema: ${SCHEMA_FILE}`);
+    const sql = fs.readFileSync(SCHEMA_FILE, 'utf8');
+    await connection.query(sql);
+    logger.info('Schema applied successfully');
 
-    const [executed] = await connection.query('SELECT name FROM _migrations ORDER BY id');
-    const executedNames = new Set(executed.map(r => r.name));
-
-    const files = fs.readdirSync(migrationsDir)
-      .filter(f => f.endsWith('.sql'))
-      .sort();
-
-    for (const file of files) {
-      if (executedNames.has(file)) {
-        logger.info(`Skipping already executed: ${file}`);
-        continue;
+    // Auto-migrate existing databases: rename legacy etea_* tables if present
+    const legacyTables = [
+      { old: 'etea_postings',              new: 'org_postings' },
+      { old: 'etea_payment_records',       new: 'org_payment_records' },
+      { old: 'etea_payment_notifications', new: 'org_payment_notifications' },
+    ];
+    for (const t of legacyTables) {
+      const [rows] = await connection.query(`SHOW TABLES LIKE '${t.old}'`);
+      if (rows.length > 0) {
+        await connection.query(`RENAME TABLE \`${t.old}\` TO \`${t.new}\``);
+        logger.info(`Renamed legacy table: ${t.old} → ${t.new}`);
       }
-
-      const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
-      logger.info(`Running migration: ${file}`);
-      await connection.query(sql);
-      await connection.query('INSERT INTO _migrations (name) VALUES (?)', [file]);
-      logger.info(`Completed: ${file}`);
     }
 
-    logger.info('All migrations executed successfully');
+    // Normalize legacy 'etea' role / type values
+    await connection.query("UPDATE users   SET role = 'org' WHERE role = 'etea'");
+    await connection.query("UPDATE tenants SET type = 'org' WHERE type = 'etea'");
+
+    logger.info('Migration complete');
   } catch (err) {
     logger.error('Migration failed:', err);
     process.exit(1);
@@ -66,3 +62,4 @@ async function migrate() {
 }
 
 migrate();
+

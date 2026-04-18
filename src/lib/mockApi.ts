@@ -2,7 +2,7 @@ import {
   applicants,
   billBundles,
   billers,
-  eteaPostings,
+  orgPostings,
   feePlans,
   findInvoiceForConsumer,
   findStudentByConsumerNumber,
@@ -26,7 +26,7 @@ import {
   BillPaymentRequest,
   BillPaymentResult,
   BillStatus,
-  ETEAPosting,
+  OrgPosting,
   FeePlan,
   Invoice,
   PaymentChannel,
@@ -91,7 +91,7 @@ const seedUsers: RuntimeUser[] = [
     verified: true,
     password: '123456',
   },
-  { id: '3', name: 'ETEA Manager', email: 'etea@example.com', role: 'etea', status: 'active', verified: true, password: '123456' },
+  { id: '3', name: 'Org Manager', email: 'org@example.com', role: 'org', status: 'active', verified: true, password: '123456' },
   {
     id: '4',
     name: 'School Finance',
@@ -104,7 +104,7 @@ const seedUsers: RuntimeUser[] = [
     verified: true,
     password: '123456',
   },
-  { id: '5', name: 'Jane Smith', email: 'jane@agency.com', role: 'etea', status: 'banned', verified: true, password: '123456' },
+  { id: '5', name: 'Jane Smith', email: 'jane@agency.com', role: 'org', status: 'banned', verified: true, password: '123456' },
 ];
 
 const runtimeUsers = [...seedUsers];
@@ -302,7 +302,7 @@ export const mockApi = {
     return { data: structuredClone(transactions) };
   },
 
-  // ---- Applicants & ETEA ----
+  // ---- Applicants & Org ----
   async fetchApplicants(params: { page?: number; pageSize?: number; status?: Applicant['applicationStatus']; postingId?: string; search?: string } = {}): ApiResponse<Applicant[]> {
     await delay();
     const { page = 1, pageSize = 25, status, postingId, search } = params;
@@ -323,7 +323,7 @@ export const mockApi = {
       ...payload,
       id: `a${idx}`,
       consumerNumber: generateConsumerNumber('2001', String(idx)),
-      billId: `ETEA-MDCAT25-${String(idx).padStart(5, '0')}`,
+      billId: `ORG-MDCAT25-${String(idx).padStart(5, '0')}`,
       paymentStatus: 'pending',
       applicationStatus: 'submitted',
       appliedDate: new Date().toISOString().split('T')[0],
@@ -351,9 +351,9 @@ export const mockApi = {
     return { data: structuredClone(target), message: 'Result recorded (mock)' };
   },
 
-  async fetchPostings(): ApiResponse<ETEAPosting[]> {
+  async fetchPostings(): ApiResponse<OrgPosting[]> {
     await delay();
-    return { data: structuredClone(eteaPostings) };
+    return { data: structuredClone(orgPostings) };
   },
 
   async fetchServices(): ApiResponse<Service[]> {

@@ -169,69 +169,69 @@ const billInquiry1Link = async (req, res) => {
     );
 
     if (studentRows.length === 0) {
-      // Fallback: check ETEA payment records
-      const [eteaRows] = await pool.query(
+      // Fallback: check org payment records
+      const [orgRows] = await pool.query(
         `SELECT epr.*, t.name AS biller_name
-         FROM etea_payment_records epr
+         FROM org_payment_records epr
          JOIN tenants t ON epr.tenant_id = t.id
          WHERE epr.consumer_number = ?`,
         [consumerNumber]
       );
 
-      if (eteaRows.length === 0) {
+      if (orgRows.length === 0) {
         return res.json(inquiryError('01'));
       }
 
-      const etea = eteaRows[0];
+      const org = orgRows[0];
       const now = new Date();
-      const isExpired = etea.expiry_date && parseDbDate(etea.expiry_date) <= now;
-      const status = etea.status;
+      const isExpired = org.expiry_date && parseDbDate(org.expiry_date) <= now;
+      const status = org.status;
 
       // Update status to expired if stale
       if (status === 'pending' && isExpired) {
         await pool.query(
-          `UPDATE etea_payment_records SET status = 'expired' WHERE id = ?`,
-          [etea.id]
+          `UPDATE org_payment_records SET status = 'expired' WHERE id = ?`,
+          [org.id]
         );
-        etea.status = 'expired';
+        org.status = 'expired';
       }
 
-      if (etea.status === 'paid') {
+      if (org.status === 'paid') {
         return res.json({
           response_Code: '00',
-          consumer_detail: padRight(etea.description || etea.application_id, 30),
+          consumer_detail: padRight(org.description || org.application_id, 30),
           bill_status: 'P',
-          due_date: etea.due_date ? fmtDate(etea.due_date) : '',
+          due_date: org.due_date ? fmtDate(org.due_date) : '',
           amount_within_dueDate: '+0000000000000',
           amount_after_dueDate: '+0000000000000',
-          billing_month: etea.due_date ? fmtBillingMonth(etea.due_date) : fmtBillingMonth(null),
-          date_paid: etea.paid_at ? fmtDate(etea.paid_at) : '',
-          amount_paid: etea.paid_at
-            ? String(Math.round(parseFloat(etea.amount) * 100)).padStart(12, '0')
+          billing_month: org.due_date ? fmtBillingMonth(org.due_date) : fmtBillingMonth(null),
+          date_paid: org.paid_at ? fmtDate(org.paid_at) : '',
+          amount_paid: org.paid_at
+            ? String(Math.round(parseFloat(org.amount) * 100)).padStart(12, '0')
             : '',
-          tran_auth_Id: (etea.transaction_id || '').slice(0, 6),
+          tran_auth_Id: (org.transaction_id || '').slice(0, 6),
           reserved: '',
         });
       }
 
-      if (etea.status === 'expired' || etea.status === 'failed') {
+      if (org.status === 'expired' || org.status === 'failed') {
         return res.json(inquiryError('01'));
       }
 
-      // Pending ETEA
-      const isOverdue = etea.due_date && parseDbDate(etea.due_date) < now;
-      // ETEA records don't carry a separate late_fee column — use base amount for both fields
-      const amtWithin = fmtAmountInquiry(etea.amount);
-      const amtAfter = amtWithin; // no late-fee concept for ETEA payments
+      // Pending org payment
+      const isOverdue = org.due_date && parseDbDate(org.due_date) < now;
+      // Org records don't carry a separate late_fee column — use base amount for both fields
+      const amtWithin = fmtAmountInquiry(org.amount);
+      const amtAfter = amtWithin; // no late-fee concept for org payments
 
       return res.json({
         response_Code: '00',
-        consumer_detail: padRight(etea.description || etea.application_id, 30),
+        consumer_detail: padRight(org.description || org.application_id, 30),
         bill_status: 'U',
-        due_date: etea.due_date ? fmtDate(etea.due_date) : '',
+        due_date: org.due_date ? fmtDate(org.due_date) : '',
         amount_within_dueDate: amtWithin,
         amount_after_dueDate: amtAfter,
-        billing_month: etea.due_date ? fmtBillingMonth(etea.due_date) : fmtBillingMonth(null),
+        billing_month: org.due_date ? fmtBillingMonth(org.due_date) : fmtBillingMonth(null),
         date_paid: '',
         amount_paid: '',
         tran_auth_Id: '',
@@ -269,15 +269,44 @@ const billInquiry1Link = async (req, res) => {
         const bankMnemonic = (req.body.bank_mnemonic || '').trim();
         const [bundleRows] = await pool.query(
           `SELECT * FROM bundles
-           WHERE bundle_id = ? AND pcid = ? AND status = 'active' AND deleted_at IS NULL
+           WHERE bundle_id = ? AND status = 'active' AND deleted_at IS NULL
            LIMIT 1`,
-          [bundleId, bankMnemonic]
+          [bundleId]
         );
 
         if (bundleRows.length > 0) {
           const bundle = bundleRows[0];
           const bundleAmount = parseFloat(bundle.amount);
           const nowDate = new Date();
+          const currentMonth = nowDate.toISOString().slice(0, 7);
+
+          // Idempotency guard: don't create a duplicate invoice if inquiry is called twice
+          const [dupInvRows] = await pool.query(
+            `SELECT id, amount, due_date FROM invoices
+             WHERE consumer_number = ? AND month = ? AND deleted_at IS NULL
+             LIMIT 1`,
+            [consumerNumber, currentMonth]
+          );
+          if (dupInvRows.length > 0) {
+            const dup = dupInvRows[0];
+            const dupAmount = parseFloat(dup.amount);
+            const dupDue = dup.due_date ? fmtDate(dup.due_date) : '';
+            logger.info(`1LINK BillInquiry: returning existing invoice for ${consumerNumber} month ${currentMonth}`);
+            return res.json({
+              response_Code: '00',
+              consumer_detail: padRight(student.name, 30),
+              bill_status: 'U',
+              due_date: dupDue,
+              amount_within_dueDate: fmtAmountInquiry(dupAmount),
+              amount_after_dueDate: fmtAmountInquiry(dupAmount),
+              billing_month: dup.due_date ? fmtBillingMonth(parseDbDate(dup.due_date)) : fmtBillingMonth(nowDate),
+              date_paid: '',
+              amount_paid: '',
+              tran_auth_Id: '',
+              reserved: '',
+            });
+          }
+
           const dueDateObj = new Date(nowDate.getTime() + 30 * 24 * 60 * 60 * 1000);
           const dueDateStr = dueDateObj.toISOString().slice(0, 10);
           const invoiceNumber = `INV-${bankMnemonic}-${Date.now()}`;
@@ -422,38 +451,38 @@ const billPayment1Link = async (req, res) => {
     );
 
     if (studentRows.length === 0) {
-      // Fallback: check ETEA payment records
-      const [eteaRows] = await pool.query(
+      // Fallback: check org payment records
+      const [orgRows] = await pool.query(
         `SELECT epr.*, t.id AS tenant_id, t.name AS biller_name
-         FROM etea_payment_records epr
+         FROM org_payment_records epr
          JOIN tenants t ON epr.tenant_id = t.id
          WHERE epr.consumer_number = ?`,
         [consumerNumber]
       );
 
-      if (eteaRows.length === 0) {
+      if (orgRows.length === 0) {
         return res.json(paymentError('01'));
       }
 
-      const etea = eteaRows[0];
+      const orgRec = orgRows[0];
 
-      // Check ETEA duplicate
-      const eteaDupKey = `${consumerNumber}:${tranAuthId}:${tranDate}:${tranTime}`;
-      const [eteaDupRows] = await pool.query(
+      // Check org duplicate
+      const orgDupKey = `${consumerNumber}:${tranAuthId}:${tranDate}:${tranTime}`;
+      const [orgDupRows] = await pool.query(
         `SELECT id FROM payments WHERE reference = ? LIMIT 1`,
-        [eteaDupKey]
+        [orgDupKey]
       );
-      if (eteaDupRows.length > 0) {
+      if (orgDupRows.length > 0) {
         return res.json(paymentError('03'));
       }
 
       // Check already paid
-      if (etea.status === 'paid') {
+      if (orgRec.status === 'paid') {
         return res.json(paymentError('06'));
       }
 
       // Check expired / failed
-      if (etea.status === 'expired' || etea.status === 'failed') {
+      if (orgRec.status === 'expired' || orgRec.status === 'failed') {
         return res.json(paymentError('01'));
       }
 
@@ -462,10 +491,10 @@ const billPayment1Link = async (req, res) => {
         ? new Date().toISOString().slice(0, 19).replace('T', ' ')
         : paidAt.toISOString().slice(0, 19).replace('T', ' ');
 
-      // Mark ETEA payment as paid
+      // Mark org payment as paid
       await pool.query(
-        `UPDATE etea_payment_records SET status = 'paid', transaction_id = ?, paid_at = ? WHERE id = ?`,
-        [tranAuthId, paidAtStr, etea.id]
+        `UPDATE org_payment_records SET status = 'paid', transaction_id = ?, paid_at = ? WHERE id = ?`,
+        [tranAuthId, paidAtStr, orgRec.id]
       );
 
       // Record payment row for duplicate detection
@@ -475,8 +504,8 @@ const billPayment1Link = async (req, res) => {
         `INSERT INTO payments
            (id, tenant_id, student_id, consumer_number, amount, date, reference, voucher_number, channel, receipt_number, note)
          VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [paymentId, etea.tenant_id, consumerNumber, amount, paidAtStr,
-          eteaDupKey, tranAuthId, bankMnemonic, receiptNumber, `ETEA: ${etea.application_id}`]
+        [paymentId, orgRec.tenant_id, consumerNumber, amount, paidAtStr,
+          orgDupKey, tranAuthId, bankMnemonic, receiptNumber, `Org: ${orgRec.application_id}`]
       );
 
       // Record transaction
@@ -485,28 +514,28 @@ const billPayment1Link = async (req, res) => {
           `INSERT INTO transactions
              (id, tenant_id, transaction_id, consumer_number, amount, status, date, biller_name, channel, reference, notes)
            VALUES (?, ?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?)`,
-          [uuidv4(), etea.tenant_id, tranAuthId, consumerNumber,
-            amount, paidAtStr, etea.biller_name, bankMnemonic, eteaDupKey, `ETEA app ${etea.application_id}`]
+          [uuidv4(), orgRec.tenant_id, tranAuthId, consumerNumber,
+            amount, paidAtStr, orgRec.biller_name, bankMnemonic, orgDupKey, `Org app ${orgRec.application_id}`]
         );
       } catch (e) {
         // Duplicate — ignore
       }
 
-      // Record ETEA notification
+      // Record org notification
       await pool.query(
-        `INSERT INTO etea_payment_notifications (id, tenant_id, application_id, payment_id, bill_id, status)
+        `INSERT INTO org_payment_notifications (id, tenant_id, application_id, payment_id, bill_id, status)
          VALUES (?, ?, ?, ?, ?, 'paid')`,
-        [uuidv4(), etea.tenant_id, etea.application_id, etea.id, etea.bill_id]
+        [uuidv4(), orgRec.tenant_id, orgRec.application_id, orgRec.id, orgRec.bill_id]
       );
 
       await auditLog(
-        req, 'payment', 'etea_bill_payment', paymentId,
-        `1LINK ETEA payment ${amount} PKR via ${bankMnemonic} for ${consumerNumber}`
+        req, 'payment', 'org_bill_payment', paymentId,
+        `1LINK org payment ${amount} PKR via ${bankMnemonic} for ${consumerNumber}`
       );
 
       return res.json({
         response_Code: '00',
-        Identification_parameter: (etea.description || etea.application_id).slice(0, 20),
+        Identification_parameter: (orgRec.description || orgRec.application_id).slice(0, 20),
         reserved: '',
       });
     }

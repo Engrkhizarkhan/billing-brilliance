@@ -6,13 +6,13 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { formatPKR } from '@/lib/formatters';
 import { usePaymentStore } from '@/store/paymentStore';
-import { useEteaSecurityStore } from '@/store/eteaSecurityStore';
+import { useOrgSecurityStore } from '@/store/orgSecurityStore';
 import {
-  EteaCreatePaymentResponse,
-  EteaHealthResponse,
-  EteaPaymentStatusResponse,
-  EteaPaymentNotification,
-  EteaPaymentRecord,
+  OrgCreatePaymentResponse,
+  OrgHealthResponse,
+  OrgPaymentStatusResponse,
+  OrgPaymentNotification,
+  OrgPaymentRecord,
 } from '@/types';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import { toast } from 'sonner';
@@ -31,14 +31,14 @@ const ETEAPayments = () => {
     return () => { if (notifIntervalRef.current) clearInterval(notifIntervalRef.current); };
   }, []);
 
-  const { data: notificationsData } = useApiQuery(() => api.listEteaPaymentNotifications(), [paymentVersion, notifTick]);
-  const notifications = (notificationsData || []) as EteaPaymentNotification[];
+  const { data: notificationsData } = useApiQuery(() => api.listOrgPaymentNotifications(), [paymentVersion, notifTick]);
+  const notifications = (notificationsData || []) as OrgPaymentNotification[];
   const [searchParams] = useSearchParams();
 
   const queryApplicationId = searchParams.get('application') || '';
 
-  const apiKey = useEteaSecurityStore((state) => state.apiKey);
-  const sourceIp = useEteaSecurityStore((state) => state.sourceIp);
+  const apiKey = useOrgSecurityStore((state) => state.apiKey);
+  const sourceIp = useOrgSecurityStore((state) => state.sourceIp);
 
   const [createForm, setCreateForm] = useState({
     applicant_id: '',
@@ -53,10 +53,10 @@ const ETEAPayments = () => {
 
   const [lookupApplicationId, setLookupApplicationId] = useState(queryApplicationId);
 
-  const [createResult, setCreateResult] = useState<EteaCreatePaymentResponse | null>(null);
-  const [lookupResult, setLookupResult] = useState<EteaPaymentStatusResponse | null>(null);
-  const [allPaymentsResult, setAllPaymentsResult] = useState<EteaPaymentRecord[] | null>(null);
-  const [health, setHealth] = useState<EteaHealthResponse | null>(null);
+  const [createResult, setCreateResult] = useState<OrgCreatePaymentResponse | null>(null);
+  const [lookupResult, setLookupResult] = useState<OrgPaymentStatusResponse | null>(null);
+  const [allPaymentsResult, setAllPaymentsResult] = useState<OrgPaymentRecord[] | null>(null);
+  const [health, setHealth] = useState<OrgHealthResponse | null>(null);
 
   useEffect(() => {
     if (!queryApplicationId) return;
@@ -100,7 +100,7 @@ const ETEAPayments = () => {
     }
 
     try {
-      const res = await api.createEteaPayment({
+      const res = await api.createOrgPayment({
         applicantId: createForm.applicant_id,
         applicationId: createForm.application_id,
         postingId: createForm.posting_id,
@@ -113,7 +113,7 @@ const ETEAPayments = () => {
         customerName: createForm.customer_name || createForm.applicant_id,
       });
 
-      const created = res.data as EteaCreatePaymentResponse;
+      const created = res.data as OrgCreatePaymentResponse;
       setCreateResult(created);
       setLookupApplicationId(created.payment.applicationId);
       setLookupResult({
@@ -136,8 +136,8 @@ const ETEAPayments = () => {
     }
 
     try {
-      const res = await api.getEteaPaymentStatus(lookupApplicationId.trim());
-      const status = res.data as EteaPaymentStatusResponse;
+      const res = await api.getOrgPaymentStatus(lookupApplicationId.trim());
+      const status = res.data as OrgPaymentStatusResponse;
       setLookupResult(status);
       if (status.status === 'not_found') {
         toast.error('No payment record found for this application');
@@ -151,8 +151,8 @@ const ETEAPayments = () => {
 
   const handleHealthCheck = async () => {
     try {
-      const res = await api.eteaHealthCheck();
-      const healthResponse = res.data as EteaHealthResponse;
+      const res = await api.orgHealthCheck();
+      const healthResponse = res.data as OrgHealthResponse;
       setHealth(healthResponse);
       toast.success('Health check passed');
     } catch (error) {
@@ -162,8 +162,8 @@ const ETEAPayments = () => {
 
   const handleFetchAllPayments = async () => {
     try {
-      const res = await api.listEteaPayments();
-      setAllPaymentsResult((res.data as EteaPaymentRecord[]) ?? []);
+      const res = await api.listOrgPayments();
+      setAllPaymentsResult((res.data as OrgPaymentRecord[]) ?? []);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to fetch payments');
     }

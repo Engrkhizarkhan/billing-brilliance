@@ -1,4 +1,5 @@
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const { auditLog } = require('../middleware/auditLog');
@@ -667,6 +668,117 @@ const upsertSetting = async (req, res, next) => {
   }
 };
 
+// ---- Webhook Config (per-tenant, stored in tenants.settings JSON column) ----
+
+const parseTenantSettings = (raw) => {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
+  try { return JSON.parse(raw); } catch { return {}; }
+};
+
+const maskSecret = (secret) => {
+  if (!secret || typeof secret !== 'string' || secret.length < 1) return null;
+  if (secret.length <= 6) return '••••••';
+  return '••••••' + secret.slice(-6);
+};
+
+const getWebhookConfig = async (req, res, next) => {
+  try {
+    const tenantId = resolveTenantId(req);
+    if (!tenantId) throw new AppError('Tenant ID is required', 400);
+
+    const [rows] = await pool.query(
+      'SELECT settings FROM tenants WHERE id = ? AND deleted_at IS NULL',
+      [tenantId]
+    );
+    if (rows.length === 0) throw new AppError('Tenant not found', 404);
+
+    const settings = parseTenantSettings(rows[0].settings);
+    res.json({
+      data: {
+        notification_url: settings.notification_url || null,
+        webhook_secret_hint: maskSecret(settings.webhook_secret),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const saveWebhookConfig = async (req, res, next) => {
+  try {
+    const tenantId = resolveTenantId(req);
+    if (!tenantId) throw new AppError('Tenant ID is required', 400);
+
+    const { notification_url, webhook_secret } = req.body;
+
+    if (!notification_url || !/^https:\/\/.+/.test(notification_url)) {
+      throw new AppError('notification_url must be a valid https:// URL', 400);
+    }
+
+    const patch = { notification_url };
+    if (webhook_secret !== undefined && webhook_secret !== '') {
+      patch.webhook_secret = webhook_secret;
+    }
+
+    await pool.query(
+      `UPDATE tenants
+         SET settings = JSON_MERGE_PATCH(COALESCE(settings, '{}'), ?)
+       WHERE id = ? AND deleted_at IS NULL`,
+      [JSON.stringify(patch), tenantId]
+    );
+
+    await auditLog(req, 'update', 'tenant_webhook_config', tenantId, 'Webhook config updated');
+    res.json({ data: { saved: true }, message: 'Webhook configuration saved' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const testWebhookConfig = async (req, res, next) => {
+  try {
+    const tenantId = resolveTenantId(req);
+    if (!tenantId) throw new AppError('Tenant ID is required', 400);
+
+    const [rows] = await pool.query(
+      'SELECT settings FROM tenants WHERE id = ? AND deleted_at IS NULL',
+      [tenantId]
+    );
+    if (rows.length === 0) throw new AppError('Tenant not found', 404);
+
+    const settings = parseTenantSettings(rows[0].settings);
+    const notificationUrl = settings.notification_url || '';
+    const webhookSecret = settings.webhook_secret || '';
+
+    if (!notificationUrl) {
+      throw new AppError('Notification URL is not configured. Save a webhook URL first.', 400);
+    }
+
+    const payload = { status: 'test', application_id: 'TEST-0000' };
+    const sig = crypto
+      .createHmac('sha256', webhookSecret)
+      .update(JSON.stringify(payload))
+      .digest('hex');
+
+    try {
+      const response = await fetch(notificationUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Webhook-Signature': sig,
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(8000),
+      });
+      res.json({ data: { status: response.status, ok: response.ok } });
+    } catch (fetchErr) {
+      res.json({ data: { status: 0, ok: false, error: fetchErr.message } });
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   fetchFeePlans,
   createFeePlan,
@@ -686,4 +798,7 @@ module.exports = {
   deletePaymentPlanAssignment,
   getSetting,
   upsertSetting,
+  getWebhookConfig,
+  saveWebhookConfig,
+  testWebhookConfig,
 };

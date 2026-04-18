@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../config/database');
+const logger = require('../config/logger');
 
 const auditLog = async (req, action, entity, entityId, details) => {
   try {
@@ -16,7 +17,7 @@ const auditLog = async (req, action, entity, entityId, details) => {
     );
   } catch (err) {
     // Audit logging should not fail the request
-    console.error('Audit log error:', err.message);
+    logger.error('Audit log error:', err.message);
   }
 };
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ETEAPosting } from '@/types';
+import { OrgPosting } from '@/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { FilterBar } from '@/components/FilterBar';
 import { ExportButton } from '@/components/ExportButton';
@@ -30,7 +30,7 @@ const initialForm = {
   testDate: '',
 };
 
-const toFormValues = (posting: ETEAPosting) => ({
+const toFormValues = (posting: OrgPosting) => ({
   title: posting.title,
   type: posting.type,
   department: posting.department,
@@ -43,18 +43,18 @@ const toFormValues = (posting: ETEAPosting) => ({
 
 const ETEAPostings = () => {
   const { data: postingsData, loading, refetch } = useApiQuery(() => api.fetchPostings(), []);
-  const [postings, setPostings] = useState<ETEAPosting[]>([]);
+  const [postings, setPostings] = useState<OrgPosting[]>([]);
   const [search, setSearch] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
-  const [selectedPosting, setSelectedPosting] = useState<ETEAPosting | null>(null);
+  const [selectedPosting, setSelectedPosting] = useState<OrgPosting | null>(null);
   const [editingPostingId, setEditingPostingId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [form, setForm] = useState(initialForm);
 
   useEffect(() => {
-    if (postingsData) setPostings(postingsData as ETEAPosting[]);
+    if (postingsData) setPostings(postingsData as OrgPosting[]);
   }, [postingsData]);
 
   const filtered = postings.filter(p => p.title.toLowerCase().includes(search.toLowerCase()) || p.department.toLowerCase().includes(search.toLowerCase()));
@@ -112,18 +112,18 @@ const ETEAPostings = () => {
     setForm(initialForm);
   };
 
-  const handleView = (posting: ETEAPosting) => {
+  const handleView = (posting: OrgPosting) => {
     setSelectedPosting(posting);
     setViewOpen(true);
   };
 
-  const handleEdit = (posting: ETEAPosting) => {
+  const handleEdit = (posting: OrgPosting) => {
     setEditingPostingId(posting.id);
     setForm(toFormValues(posting));
     setAddOpen(true);
   };
 
-  const handleClone = async (posting: ETEAPosting) => {
+  const handleClone = async (posting: OrgPosting) => {
     try {
       await api.createPosting({
         ...posting,

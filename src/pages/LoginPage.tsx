@@ -29,7 +29,8 @@ const LoginPage = () => {
     if (success) {
       toast.success('Signed in successfully');
       const user = useAuthStore.getState().user;
-      navigate(`/${user!.role}`);
+      const roleRedirects: Record<string, string> = { admin: '/admin', school: '/school', org: '/org' };
+      navigate(roleRedirects[user!.role] ?? `/${user!.role}`);
     } else {
       toast.error('Invalid credentials');
     }

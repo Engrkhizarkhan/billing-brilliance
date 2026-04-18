@@ -9,7 +9,7 @@ import type {
   PcidKey,
   BundlePackage,
   FetchBundleResponse,
-  ETEAPosting,
+  OrgPosting,
   FeePlan,
   Invoice,
   LedgerEntry,
@@ -19,8 +19,8 @@ import type {
   User,
   Biller,
   StudentFinancialSnapshot,
-  EteaPaymentRecord,
-  EteaPaymentNotification,
+  OrgPaymentRecord,
+  OrgPaymentNotification,
   PaymentPlanAssignment,
   AppNotification,
   AuditLog,
@@ -265,53 +265,53 @@ export const api = {
     return patch<ApiResponse<Applicant | null>>(`/applicants/${applicantId}/result`, { marks, status });
   },
 
-  // ---- ETEA Postings & Services ----
-  async fetchPostings(): Promise<ApiResponse<ETEAPosting[]>> {
-    return get<ApiResponse<ETEAPosting[]>>('/etea/postings');
+  // ---- Org Postings & Services ----
+  async fetchPostings(): Promise<ApiResponse<OrgPosting[]>> {
+    return get<ApiResponse<OrgPosting[]>>('/org/postings');
   },
 
-  async createPosting(payload: Partial<ETEAPosting>): Promise<ApiResponse<ETEAPosting>> {
-    return post<ApiResponse<ETEAPosting>>('/etea/postings', payload);
+  async createPosting(payload: Partial<OrgPosting>): Promise<ApiResponse<OrgPosting>> {
+    return post<ApiResponse<OrgPosting>>('/org/postings', payload);
   },
 
-  async updatePosting(id: string, payload: Partial<ETEAPosting>): Promise<ApiResponse<ETEAPosting>> {
-    return put<ApiResponse<ETEAPosting>>(`/etea/postings/${id}`, payload);
+  async updatePosting(id: string, payload: Partial<OrgPosting>): Promise<ApiResponse<OrgPosting>> {
+    return put<ApiResponse<OrgPosting>>(`/org/postings/${id}`, payload);
   },
 
-  async updatePostingStatus(id: string, status: string): Promise<ApiResponse<ETEAPosting>> {
-    return patch<ApiResponse<ETEAPosting>>(`/etea/postings/${id}/status`, { status });
+  async updatePostingStatus(id: string, status: string): Promise<ApiResponse<OrgPosting>> {
+    return patch<ApiResponse<OrgPosting>>(`/org/postings/${id}/status`, { status });
   },
 
   async fetchServices(): Promise<ApiResponse<Service[]>> {
-    return get<ApiResponse<Service[]>>('/etea/services');
+    return get<ApiResponse<Service[]>>('/org/services');
   },
 
   async createService(payload: Partial<Service>): Promise<ApiResponse<Service>> {
-    return post<ApiResponse<Service>>('/etea/services', payload);
+    return post<ApiResponse<Service>>('/org/services', payload);
   },
 
-  // ---- ETEA Payments ----
-  async createEteaPayment(payload: unknown): Promise<ApiResponse<unknown>> {
+  // ---- Org Payments ----
+  async createOrgPayment(payload: unknown): Promise<ApiResponse<unknown>> {
     return post<ApiResponse<unknown>>('/payments/create', payload);
   },
 
-  async getEteaPaymentStatus(applicationId: string): Promise<ApiResponse<unknown>> {
+  async getOrgPaymentStatus(applicationId: string): Promise<ApiResponse<unknown>> {
     return get<ApiResponse<unknown>>(`/payments/${applicationId}`);
   },
 
-  async listEteaPayments(): Promise<ApiResponse<EteaPaymentRecord[]>> {
-    return get<ApiResponse<EteaPaymentRecord[]>>('/payments');
+  async listOrgPayments(): Promise<ApiResponse<OrgPaymentRecord[]>> {
+    return get<ApiResponse<OrgPaymentRecord[]>>('/payments');
   },
 
-  async listEteaPaymentNotifications(): Promise<ApiResponse<EteaPaymentNotification[]>> {
-    return get<ApiResponse<EteaPaymentNotification[]>>('/payment-notifications');
+  async listOrgPaymentNotifications(): Promise<ApiResponse<OrgPaymentNotification[]>> {
+    return get<ApiResponse<OrgPaymentNotification[]>>('/payment-notifications');
   },
 
-  async eteaHealthCheck(): Promise<ApiResponse<{ status: string; service: string; timestamp: string }>> {
+  async orgHealthCheck(): Promise<ApiResponse<{ status: string; service: string; timestamp: string }>> {
     return get<ApiResponse<{ status: string; service: string; timestamp: string }>>('/health', { skipAuth: true });
   },
 
-  async processEteaPaymentCallback(payload: unknown): Promise<ApiResponse<unknown>> {
+  async processOrgPaymentCallback(payload: unknown): Promise<ApiResponse<unknown>> {
     return post<ApiResponse<unknown>>('/payments/callback', payload);
   },
 
@@ -319,7 +319,7 @@ export const api = {
     return post<ApiResponse<{ expired: number }>>('/payments/expire', {});
   },
 
-  async getEteaStats(): Promise<ApiResponse<{
+  async getOrgStats(): Promise<ApiResponse<{
     totalRequests: number;
     pending: number;
     paid: number;
@@ -413,6 +413,22 @@ export const api = {
     return put<ApiResponse<T>>(`/settings/${encodeURIComponent(key)}`, { value });
   },
 
+  // ---- Webhook Config ----
+  async fetchWebhookConfig(): Promise<ApiResponse<{ notificationUrl: string | null; webhookSecretHint: string | null }>> {
+    return get<ApiResponse<{ notificationUrl: string | null; webhookSecretHint: string | null }>>('/org/webhook-config');
+  },
+
+  async saveWebhookConfig(payload: { notificationUrl: string; webhookSecret?: string }): Promise<ApiResponse<{ saved: boolean }>> {
+    return put<ApiResponse<{ saved: boolean }>>('/org/webhook-config', {
+      notification_url: payload.notificationUrl,
+      webhook_secret: payload.webhookSecret,
+    });
+  },
+
+  async testWebhookConfig(): Promise<ApiResponse<{ status: number; ok: boolean; error?: string }>> {
+    return post<ApiResponse<{ status: number; ok: boolean; error?: string }>>('/org/webhook-config/test', {});
+  },
+
   async generateInvoices(payload: { month?: string } = {}): Promise<ApiResponse<{ month: string; created: number; skipped: number }>> {
     return post<ApiResponse<{ month: string; created: number; skipped: number }>>('/invoices/generate', payload);
   },
@@ -470,5 +486,15 @@ export const api = {
     totalApplicants: number; totalRevenue: number;
   }>> {
     return get('/reports/platform-summary');
+  },
+
+  // ---- Admin Dev Tools ----
+  async verifyHash(hash: string, plaintext: string): Promise<ApiResponse<{ match: boolean }>> {
+    return post<ApiResponse<{ match: boolean }>>('/admin/tools/verify-hash', { hash, plaintext });
+  },
+
+  // ---- Admin Impersonation ----
+  async impersonateUser(userId: string): Promise<ApiResponse<{ token: string; user: User }>> {
+    return post<ApiResponse<{ token: string; user: User }>>('/auth/impersonate', { userId });
   },
 };

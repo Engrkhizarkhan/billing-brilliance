@@ -4,22 +4,22 @@ const { authenticate } = require('../middleware/auth');
 const { handleValidation } = require('../middleware/handleValidation');
 const { createPaymentValidation, paymentCallbackValidation } = require('../middleware/validate');
 const { tenantScope } = require('../middleware/auth');
-const eteaPaymentController = require('../controllers/eteaPaymentController');
+const orgPaymentController = require('../controllers/eteaPaymentController');
 
 // Public health check
-router.get('/health', eteaPaymentController.healthCheck);
+router.get('/health', orgPaymentController.healthCheck);
 
 // Payment endpoints (API key auth is handled inside the controller - assertSecurity)
-router.post('/payments/create', authenticate, tenantScope, createPaymentValidation, handleValidation, eteaPaymentController.createPayment);
-router.get('/payments/:applicationId', authenticate, eteaPaymentController.getPaymentStatus);
+router.post('/payments/create', authenticate, tenantScope, createPaymentValidation, handleValidation, orgPaymentController.createPayment);
+router.get('/payments/:applicationId', authenticate, orgPaymentController.getPaymentStatus);
 
 // Callback endpoint (webhook - uses its own security validation)
-router.post('/payment/callback', paymentCallbackValidation, handleValidation, eteaPaymentController.processPaymentCallback);
+router.post('/payment/callback', paymentCallbackValidation, handleValidation, orgPaymentController.processPaymentCallback);
 
 // Admin endpoints
-router.get('/stats', authenticate, tenantScope, eteaPaymentController.getStats);
-router.get('/payments', authenticate, tenantScope, eteaPaymentController.listPayments);
-router.get('/payment-notifications', authenticate, tenantScope, eteaPaymentController.listNotifications);
-router.post('/payments/expire', authenticate, eteaPaymentController.expireOverduePayments);
+router.get('/stats', authenticate, tenantScope, orgPaymentController.getStats);
+router.get('/payments', authenticate, tenantScope, orgPaymentController.listPayments);
+router.get('/payment-notifications', authenticate, tenantScope, orgPaymentController.listNotifications);
+router.post('/payments/expire', authenticate, orgPaymentController.expireOverduePayments);
 
 module.exports = router;

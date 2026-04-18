@@ -75,8 +75,6 @@ const apiKeyAuth = async (req, res, next) => {
 
 router.use(apiKeyAuth);
 
-router.use(apiKeyAuth);
-
 // ── API 1: POST /api/saas/v1/check-payment ───────────────────────────────────
 /**
  * Check whether a consumer has paid their most recent invoice.

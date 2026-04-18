@@ -1,25 +1,23 @@
-require('dotenv').config();
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
-const mysql = require('mysql2/promise');
-const config = require('../config');
+const { createConnection } = require('./db');      // also loads .env
 const logger = require('../config/logger');
 
-const FINTECH_PREFIX = config.fintechPrefix;
+const FINTECH_PREFIX = process.env.FINTECH_PREFIX || '123456';
 
 function generateConsumerNumber(billerCode, num) {
   return `${FINTECH_PREFIX}${billerCode}${String(num).padStart(14, '0')}`;
 }
 
 async function seed() {
-  const connection = await mysql.createConnection({
-    host: config.db.host,
-    port: config.db.port,
-    user: config.db.user,
-    password: config.db.password,
-    database: config.db.database,
-    multipleStatements: true,
-  });
+  // --fresh: truncate all data before seeding
+  if (process.argv.includes('--fresh')) {
+    logger.info('--fresh flag detected — resetting database before seeding...');
+    const reset = require('./reset');
+    await reset();
+  }
+
+  const connection = await createConnection();
 
   try {
     logger.info('Starting database seed...');
@@ -28,7 +26,7 @@ async function seed() {
     const tenants = [
       { id: uuidv4(), name: 'Beacon House School', type: 'school', biller_code: '1001', email: 'info@beaconhouse.edu', phone: '0300-1234567' },
       { id: uuidv4(), name: 'City Grammar School', type: 'school', biller_code: '1002', email: 'admin@citygrammar.edu', phone: '0301-2345678' },
-      { id: uuidv4(), name: 'ETEA KPK', type: 'etea', biller_code: '2001', email: 'contact@etea.edu.pk', phone: '0302-3456789' },
+      { id: uuidv4(), name: 'KPK Organization', type: 'org', biller_code: '2001', email: 'contact@kpkorg.pk', phone: '0302-3456789' },
       { id: uuidv4(), name: 'Premier Academy', type: 'school', biller_code: '1003', email: 'hello@premieracademy.edu', phone: '0303-4567890' },
       { id: uuidv4(), name: 'Peshawar University', type: 'school', biller_code: '1004', email: 'info@uop.edu.pk', phone: '0304-5678901' },
     ];
@@ -49,7 +47,7 @@ async function seed() {
       { id: uuidv4(), name: 'school_finance', description: 'School finance officer', is_system: 1 },
       { id: uuidv4(), name: 'school_staff', description: 'School staff member', is_system: 1 },
       { id: uuidv4(), name: 'school_viewer', description: 'School read-only viewer', is_system: 1 },
-      { id: uuidv4(), name: 'etea_admin', description: 'ETEA administrator', is_system: 1 },
+      { id: uuidv4(), name: 'org_admin', description: 'Organization administrator', is_system: 1 },
     ];
 
     for (const r of roles) {
@@ -87,10 +85,14 @@ async function seed() {
     logger.info(`Seeded ${permissions.length} permissions`);
 
     // ---- 4. Users ----
-    const passwordHash = await bcrypt.hash('123456', 12);
+    const adminPassword = process.env.ADMIN_PASSWORD || '123456';
+    if (adminPassword === '123456' || adminPassword === 'admin' || adminPassword === 'password') {
+      logger.warn('WARNING: ADMIN_PASSWORD is set to an insecure default ("' + adminPassword + '"). Change it before deploying to production.');
+    }
+    const passwordHash = await bcrypt.hash(adminPassword, 12);
 
     const beaconHouse = tenants[0];
-    const eteaKpk = tenants[2];
+    const orgTenant = tenants[2];
 
     const users = [
       {
@@ -117,10 +119,10 @@ async function seed() {
       },
       {
         id: uuidv4(),
-        tenant_id: eteaKpk.id,
-        email: 'etea@example.com',
-        name: 'ETEA Manager',
-        role: 'etea',
+        tenant_id: orgTenant.id,
+        email: 'org@example.com',
+        name: 'Org Manager',
+        role: 'org',
         school_access_role: null,
         school_ref: null,
         main_school_user_id: null,
@@ -147,10 +149,10 @@ async function seed() {
 
     const bannedUser = {
       id: uuidv4(),
-      tenant_id: eteaKpk.id,
+      tenant_id: orgTenant.id,
       email: 'jane@agency.com',
       name: 'Jane Smith',
-      role: 'etea',
+      role: 'org',
       school_access_role: null,
       school_ref: null,
       main_school_user_id: null,
@@ -286,7 +288,7 @@ async function seed() {
     }
     logger.info(`Seeded ${scholarshipsData.length} scholarships`);
 
-    // ---- 9. ETEA Postings ----
+    // ---- 9. Org Postings ----
     const postings = [
       { title: 'MDCAT 2025', type: 'entry_test', department: 'Medical', total_seats: 5000, application_fee: 3500, start_date: '2025-01-01', end_date: '2025-06-30', test_date: '2025-09-15', status: 'active', applications_received: 3247 },
       { title: 'ECAT Engineering 2025', type: 'entry_test', department: 'Engineering', total_seats: 3000, application_fee: 3500, start_date: '2025-02-01', end_date: '2025-07-31', test_date: '2025-10-01', status: 'active', applications_received: 1892 },
@@ -296,13 +298,13 @@ async function seed() {
 
     for (const p of postings) {
       await connection.query(
-        `INSERT INTO etea_postings (id, tenant_id, title, type, department, total_seats, application_fee, start_date, end_date, test_date, status, applications_received)
+        `INSERT INTO org_postings (id, tenant_id, title, type, department, total_seats, application_fee, start_date, end_date, test_date, status, applications_received)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE title = VALUES(title)`,
-        [uuidv4(), eteaKpk.id, p.title, p.type, p.department, p.total_seats, p.application_fee, p.start_date, p.end_date, p.test_date, p.status, p.applications_received]
+        [uuidv4(), orgTenant.id, p.title, p.type, p.department, p.total_seats, p.application_fee, p.start_date, p.end_date, p.test_date, p.status, p.applications_received]
       );
     }
-    logger.info(`Seeded ${postings.length} ETEA postings`);
+    logger.info(`Seeded ${postings.length} Org postings`);
 
     // ---- 10. Services ----
     const servicesData = [
@@ -318,7 +320,7 @@ async function seed() {
         `INSERT INTO services (id, tenant_id, name, payment_type, amount, status)
          VALUES (?, ?, ?, ?, ?, 'active')
          ON DUPLICATE KEY UPDATE name = VALUES(name)`,
-        [uuidv4(), eteaKpk.id, s.name, s.payment_type, s.amount]
+        [uuidv4(), orgTenant.id, s.name, s.payment_type, s.amount]
       );
     }
     logger.info(`Seeded ${servicesData.length} services`);
@@ -334,14 +336,14 @@ async function seed() {
 
     for (let i = 0; i < applicantNames.length; i++) {
       const consumerNumber = generateConsumerNumber('2001', String(i + 1));
-      const billId = `ETEA-MDCAT25-${String(i + 1).padStart(5, '0')}`;
+      const billId = `ORG-MDCAT25-${String(i + 1).padStart(5, '0')}`;
 
       await connection.query(
         `INSERT INTO applicants (id, tenant_id, name, father_name, cnic, phone, email, district, gender, date_of_birth, qualification, consumer_number, bill_id, payment_status, application_status, service_id, roll_number, test_center, marks, applied_date)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE name = VALUES(name)`,
         [
-          uuidv4(), eteaKpk.id, applicantNames[i],
+          uuidv4(), orgTenant.id, applicantNames[i],
           fatherNames[i % fatherNames.length],
           `${35301 + i}-${String(7654321 + i)}-${i % 10}`,
           `03${i % 10}0-${String(5000000 + i)}`,
@@ -361,7 +363,7 @@ async function seed() {
         ]
       );
     }
-    logger.info(`Seeded ${applicantNames.length} applicants`);
+    logger.info(`Seeded ${applicantNames.length} applicants (Org)`);
 
     // ---- 12. Invoices ----
     const invoiceMonths = ['Jan 2025', 'Feb 2025', 'Mar 2025'];
@@ -462,4 +464,7 @@ async function seed() {
   }
 }
 
-seed();
+seed().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

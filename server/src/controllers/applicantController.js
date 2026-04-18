@@ -59,32 +59,55 @@ const createApplicant = async (req, res, next) => {
     if (tenants.length === 0) throw new AppError('Tenant not found', 404);
     const billerCode = tenants[0].biller_code;
 
-    // Get sequence
-    const [seqRows] = await pool.query('SELECT COUNT(*) as cnt FROM applicants WHERE tenant_id = ?', [tenantId]);
-    const seq = seqRows[0].cnt + 1;
+    // Get sequence — use MAX()+1 inside a transaction to avoid race conditions
+    const conn = await pool.getConnection();
+    let seq, id, consumerNumber, billId;
+    try {
+      await conn.beginTransaction();
+      // Lock the tenant row to serialize concurrent inserts
+      await conn.query('SELECT id FROM tenants WHERE id = ? FOR UPDATE', [tenantId]);
+      const [[seqRow]] = await conn.query(
+        'SELECT COALESCE(MAX(seq_number), 0) + 1 AS next_seq FROM applicants WHERE tenant_id = ?',
+        [tenantId]
+      );
+      seq = seqRow.next_seq;
 
-    const FINTECH_PREFIX = require('../config').fintechPrefix || '123456';
-    const consumerNumber = `${FINTECH_PREFIX}${billerCode}${String(seq).padStart(14, '0')}`;
-    const billId = `ETEA-MDCAT25-${String(seq).padStart(5, '0')}`;
+      const FINTECH_PREFIX = require('../config').fintechPrefix || '123456';
+      consumerNumber = `${FINTECH_PREFIX}${billerCode}${String(seq).padStart(14, '0')}`;
 
-    const id = uuidv4();
-    const {
-      name, fatherName, cnic, phone, email, district, gender,
-      dateOfBirth, qualification, serviceId,
-    } = req.body;
+      // Derive bill ID prefix from service title or fall back to biller code
+      let billPrefix = `ORG-${billerCode}`;
+      if (serviceId) {
+        const [[svc]] = await conn.query('SELECT title FROM org_postings WHERE id = ? LIMIT 1', [serviceId]);
+        if (svc && svc.title) {
+          billPrefix = svc.title.replace(/\s+/g, '-').toUpperCase().slice(0, 12);
+        }
+      }
+      billId = `${billPrefix}-${String(seq).padStart(5, '0')}`;
 
-    await pool.query(
-      `INSERT INTO applicants (id, tenant_id, name, father_name, cnic, phone, email, district, gender,
-        date_of_birth, qualification, consumer_number, bill_id, payment_status, application_status,
-        service_id, applied_date)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'submitted', ?, CURDATE())`,
-      [id, tenantId, name, fatherName, cnic, phone || null, email || null, district || null, gender,
-        dateOfBirth || null, qualification || null, consumerNumber, billId, serviceId || null]
-    );
+      id = uuidv4();
+      const {
+        name, fatherName, cnic, phone, email, district, gender,
+        dateOfBirth, qualification,
+      } = req.body;
 
-    await auditLog(req, 'create', 'applicant', id, `Applicant ${name} created`);
+      await conn.query(
+        `INSERT INTO applicants (id, tenant_id, name, father_name, cnic, phone, email, district, gender,
+          date_of_birth, qualification, consumer_number, bill_id, seq_number, payment_status, application_status,
+          service_id, applied_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'submitted', ?, CURDATE())`,
+        [id, tenantId, name, fatherName, cnic, phone || null, email || null, district || null, gender,
+          dateOfBirth || null, qualification || null, consumerNumber, billId, seq, serviceId || null]
+      );
 
-    const [rows] = await pool.query('SELECT * FROM applicants WHERE id = ?', [id]);
+      await conn.commit();
+    } catch (txErr) {
+      await conn.rollback();
+      conn.release();
+      throw txErr;
+    }
+    conn.release();
+
     res.status(201).json({ data: rows[0], message: 'Applicant created' });
   } catch (err) {
     next(err);

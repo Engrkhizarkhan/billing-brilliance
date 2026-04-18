@@ -11,4 +11,8 @@ router.post('/logout', authenticate, authController.logout);
 router.get('/profile', authenticate, authController.getProfile);
 router.put('/change-password', authenticate, authController.changePassword);
 
+// Admin-only: start a silent maintenance session as another user
+const { authorize } = require('../middleware/auth');
+router.post('/impersonate', authenticate, authorize('admin'), authController.impersonate);
+
 module.exports = router;

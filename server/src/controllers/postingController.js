@@ -4,14 +4,14 @@ const { AppError } = require('../middleware/errorHandler');
 const { auditLog } = require('../middleware/auditLog');
 const { createRequestNotification } = require('../services/notificationService');
 
-// ---- ETEA Postings ----
+// ---- Org Postings ----
 const fetchPostings = async (req, res, next) => {
   try {
     let where = 'WHERE deleted_at IS NULL';
     const params = [];
     if (req.tenantId) { where += ' AND tenant_id = ?'; params.push(req.tenantId); }
 
-    const [rows] = await pool.query(`SELECT * FROM etea_postings ${where} ORDER BY created_at DESC`, params);
+    const [rows] = await pool.query(`SELECT * FROM org_postings ${where} ORDER BY created_at DESC`, params);
     res.json({ data: rows });
   } catch (err) {
     next(err);
@@ -24,7 +24,7 @@ const getPosting = async (req, res, next) => {
     const params = [req.params.id];
     if (req.tenantId) { where += ' AND tenant_id = ?'; params.push(req.tenantId); }
 
-    const [rows] = await pool.query(`SELECT * FROM etea_postings ${where}`, params);
+    const [rows] = await pool.query(`SELECT * FROM org_postings ${where}`, params);
     if (rows.length === 0) throw new AppError('Posting not found', 404);
 
     res.json({ data: rows[0] });
@@ -42,7 +42,7 @@ const createPosting = async (req, res, next) => {
 
     const id = uuidv4();
     await pool.query(
-      `INSERT INTO etea_postings (id, tenant_id, title, type, department, total_seats, application_fee, start_date, end_date, test_date, status)
+      `INSERT INTO org_postings (id, tenant_id, title, type, department, total_seats, application_fee, start_date, end_date, test_date, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')`,
       [id, tenantId, title, type, department || null, totalSeats || 0, applicationFee || 0, startDate, endDate, testDate || null]
     );
@@ -55,7 +55,7 @@ const createPosting = async (req, res, next) => {
       tenantId,
     });
 
-    const [rows] = await pool.query('SELECT * FROM etea_postings WHERE id = ?', [id]);
+    const [rows] = await pool.query('SELECT * FROM org_postings WHERE id = ?', [id]);
     res.status(201).json({ data: rows[0], message: 'Posting created' });
   } catch (err) {
     next(err);
@@ -73,7 +73,7 @@ const updatePosting = async (req, res, next) => {
       params.push(req.tenantId);
     }
 
-    const [existing] = await pool.query(`SELECT * FROM etea_postings ${where}`, params);
+    const [existing] = await pool.query(`SELECT * FROM org_postings ${where}`, params);
     if (existing.length === 0) throw new AppError('Posting not found', 404);
 
     const mapping = {
@@ -100,7 +100,7 @@ const updatePosting = async (req, res, next) => {
     if (updates.length === 0) throw new AppError('No fields to update', 400);
 
     values.push(req.params.id);
-    await pool.query(`UPDATE etea_postings SET ${updates.join(', ')} WHERE id = ?`, values);
+    await pool.query(`UPDATE org_postings SET ${updates.join(', ')} WHERE id = ?`, values);
     await auditLog(req, 'update', 'posting', req.params.id, `Posting ${existing[0].title} updated`);
     await createRequestNotification(req, {
       title: 'Posting updated',
@@ -108,7 +108,7 @@ const updatePosting = async (req, res, next) => {
       type: 'system',
     });
 
-    const [rows] = await pool.query('SELECT * FROM etea_postings WHERE id = ?', [req.params.id]);
+    const [rows] = await pool.query('SELECT * FROM org_postings WHERE id = ?', [req.params.id]);
     res.json({ data: rows[0], message: 'Posting updated' });
   } catch (err) {
     next(err);
@@ -126,10 +126,10 @@ const updatePostingStatus = async (req, res, next) => {
     const params = [req.params.id];
     if (req.tenantId) { where += ' AND tenant_id = ?'; params.push(req.tenantId); }
 
-    const [existing] = await pool.query(`SELECT id, title FROM etea_postings ${where}`, params);
+    const [existing] = await pool.query(`SELECT id, title FROM org_postings ${where}`, params);
     if (existing.length === 0) throw new AppError('Posting not found', 404);
 
-    await pool.query('UPDATE etea_postings SET status = ? WHERE id = ?', [status, req.params.id]);
+    await pool.query('UPDATE org_postings SET status = ? WHERE id = ?', [status, req.params.id]);
     await auditLog(req, 'update', 'posting', req.params.id, `Posting status → ${status}`);
     await createRequestNotification(req, {
       title: 'Posting status updated',
@@ -137,7 +137,7 @@ const updatePostingStatus = async (req, res, next) => {
       type: 'system',
     });
 
-    const [rows] = await pool.query('SELECT * FROM etea_postings WHERE id = ?', [req.params.id]);
+    const [rows] = await pool.query('SELECT * FROM org_postings WHERE id = ?', [req.params.id]);
     res.json({ data: rows[0], message: 'Posting updated' });
   } catch (err) {
     next(err);

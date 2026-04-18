@@ -1,5 +1,5 @@
--- Billing Brilliance - Full Database Schema
--- Multi-Tenant Education & ETEA Payment Platform
+-- Payniva - Full Database Schema
+-- Multi-Tenant Education & Org Payment Platform
 
 SET FOREIGN_KEY_CHECKS = 0;
 
@@ -9,7 +9,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 CREATE TABLE IF NOT EXISTS tenants (
   id VARCHAR(36) PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
-  type ENUM('school', 'etea', 'private_agency') NOT NULL,
+  type ENUM('school', 'org', 'private_agency') NOT NULL,
   biller_code VARCHAR(20) NOT NULL UNIQUE,
   email VARCHAR(255) NOT NULL,
   phone VARCHAR(20),
@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(255) NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
   name VARCHAR(255) NOT NULL,
-  role ENUM('admin', 'school', 'etea') NOT NULL,
+  role ENUM('admin', 'school', 'org') NOT NULL,
   school_access_role ENUM('admin', 'finance', 'staff', 'viewer') NULL,
   school_ref VARCHAR(50) NULL,
   main_school_user_id VARCHAR(36) NULL,
@@ -309,9 +309,9 @@ CREATE TABLE IF NOT EXISTS payments (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
--- 12. ETEA POSTINGS
+-- 12. ORG POSTINGS
 -- ============================================================
-CREATE TABLE IF NOT EXISTS etea_postings (
+CREATE TABLE IF NOT EXISTS org_postings (
   id VARCHAR(36) PRIMARY KEY,
   tenant_id VARCHAR(36) NOT NULL,
   title VARCHAR(255) NOT NULL,
@@ -370,7 +370,7 @@ CREATE TABLE IF NOT EXISTS applicants (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
--- 14. SERVICES (ETEA)
+-- 14. SERVICES (Org)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS services (
   id VARCHAR(36) PRIMARY KEY,
@@ -387,9 +387,9 @@ CREATE TABLE IF NOT EXISTS services (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
--- 15. ETEA PAYMENT RECORDS
+-- 15. ORG PAYMENT RECORDS
 -- ============================================================
-CREATE TABLE IF NOT EXISTS etea_payment_records (
+CREATE TABLE IF NOT EXISTS org_payment_records (
   id VARCHAR(36) PRIMARY KEY,
   tenant_id VARCHAR(36) NOT NULL,
   application_id VARCHAR(100) NOT NULL,
@@ -405,19 +405,19 @@ CREATE TABLE IF NOT EXISTS etea_payment_records (
   transaction_id VARCHAR(100) NULL,
   description TEXT,
   callback_url VARCHAR(500),
-  UNIQUE KEY uk_etea_pay_app (application_id, tenant_id),
-  UNIQUE KEY uk_etea_pay_bill (bill_id),
-  INDEX idx_etea_pay_tenant (tenant_id),
-  INDEX idx_etea_pay_status (status),
-  INDEX idx_etea_pay_applicant (applicant_id),
-  INDEX idx_etea_pay_txn (transaction_id),
+  UNIQUE KEY uk_org_pay_app (application_id, tenant_id),
+  UNIQUE KEY uk_org_pay_bill (bill_id),
+  INDEX idx_org_pay_tenant (tenant_id),
+  INDEX idx_org_pay_status (status),
+  INDEX idx_org_pay_applicant (applicant_id),
+  INDEX idx_org_pay_txn (transaction_id),
   FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
--- 16. ETEA PAYMENT NOTIFICATIONS
+-- 16. ORG PAYMENT NOTIFICATIONS
 -- ============================================================
-CREATE TABLE IF NOT EXISTS etea_payment_notifications (
+CREATE TABLE IF NOT EXISTS org_payment_notifications (
   id VARCHAR(36) PRIMARY KEY,
   tenant_id VARCHAR(36) NOT NULL,
   application_id VARCHAR(100) NOT NULL,
@@ -425,8 +425,8 @@ CREATE TABLE IF NOT EXISTS etea_payment_notifications (
   bill_id VARCHAR(100) NOT NULL,
   status ENUM('pending', 'paid', 'failed', 'expired') NOT NULL,
   sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_etea_notif_tenant (tenant_id),
-  INDEX idx_etea_notif_payment (payment_id),
+  INDEX idx_org_notif_tenant (tenant_id),
+  INDEX idx_org_notif_payment (payment_id),
   FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

@@ -8,7 +8,7 @@ const loginValidation = [
 const createUserValidation = [
   body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
   body('name').trim().isLength({ min: 2, max: 255 }).withMessage('Name must be 2-255 characters'),
-  body('role').isIn(['admin', 'school', 'etea']).withMessage('Valid role required'),
+  body('role').isIn(['admin', 'school', 'org']).withMessage('Valid role required'),
   body('password').optional().isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
   body('schoolRef').optional().trim(),
   body('schoolAccessRole').optional().isIn(['admin', 'finance', 'staff', 'viewer']),

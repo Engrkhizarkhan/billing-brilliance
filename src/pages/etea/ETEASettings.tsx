@@ -4,11 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useEteaSecurityStore } from '@/store/eteaSecurityStore';
+import { useOrgSecurityStore } from '@/store/orgSecurityStore';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import { useAuthStore } from '@/store/authStore';
-import { EteaRequestSecurityContext } from '@/types';
+import { OrgRequestSecurityContext } from '@/types';
 import { Copy, Eye, EyeOff, X, Plus } from 'lucide-react';
 
 const ETEASettings = () => {
@@ -19,8 +19,8 @@ const ETEASettings = () => {
 
   const { user } = useAuthStore();
 
-  const storedSourceIp = useEteaSecurityStore((state) => state.sourceIp);
-  const setSourceIp = useEteaSecurityStore((state) => state.setSourceIp);
+  const storedSourceIp = useOrgSecurityStore((state) => state.sourceIp);
+  const setSourceIp = useOrgSecurityStore((state) => state.setSourceIp);
 
   const [securitySourceIp, setSecuritySourceIp] = useState(storedSourceIp);
   const [ipList, setIpList] = useState<string[]>(
@@ -28,10 +28,10 @@ const ETEASettings = () => {
   );
   const [ipInput, setIpInput] = useState('');
   const [savingSecurityContext, setSavingSecurityContext] = useState(false);
-  const { data: securityContextData } = useApiQuery(() => api.fetchSetting<EteaRequestSecurityContext>('etea_security_context'), []);
+  const { data: securityContextData } = useApiQuery(() => api.fetchSetting<OrgRequestSecurityContext>('etea_security_context'), []);
 
   useEffect(() => {
-    const securityContext = securityContextData as EteaRequestSecurityContext | null;
+    const securityContext = securityContextData as OrgRequestSecurityContext | null;
     if (!securityContext) return;
 
     const nextSourceIp = securityContext.sourceIp || storedSourceIp;
