@@ -51,6 +51,15 @@ if (config.nodeEnv === 'production') {
 
 const app = express();
 
+// Trust exactly one reverse-proxy hop (nginx).
+// This makes req.ip reflect the real client IP from X-Forwarded-For
+// instead of nginx's loopback address (127.0.0.1).
+// Keep this at 1 (not true) to prevent callers from spoofing their IP
+// by injecting a fake X-Forwarded-For header directly.
+if (config.nodeEnv === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // ---- Security middleware ----
 app.use(helmet());
 app.use(cors({

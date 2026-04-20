@@ -78,6 +78,7 @@ const assertSecurity = async (req, options = {}) => {
           const raw = req.ip || req.connection?.remoteAddress || '';
           const ip = raw.startsWith('::ffff:') ? raw.slice(7) : raw;
           if (!allowedIps.includes(ip)) {
+            logger.warn(`IP_BLOCKED: incoming="${ip}" (raw="${raw}"), allowed=[${allowedIps.join(', ')}]`);
             throw new AppError('Source IP not whitelisted', 403, 'IP_BLOCKED');
           }
         }
