@@ -15,8 +15,8 @@ const SchoolDashboard = () => {
   const navigate = useNavigate();
   const paymentVersion = usePaymentStore((state) => state.version);
 
-  const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({}), []);
-  const { data: invoicesData, loading: li } = useApiQuery(() => api.fetchInvoices({}), [paymentVersion]);
+  const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({ pageSize: 9999 }), []);
+  const { data: invoicesData, loading: li } = useApiQuery(() => api.fetchInvoices({ pageSize: 9999 }), [paymentVersion]);
   const { data: paymentHistoryData, loading: lp } = useApiQuery(() => api.fetchPaymentHistory(), [paymentVersion]);
   const { data: feeByPlanData, loading: lFee } = useApiQuery(() => api.getCollectionByFeePlan(), [paymentVersion]);
   const { data: dashStatsData } = useApiQuery(() => api.getDashboardStats(), [paymentVersion]);

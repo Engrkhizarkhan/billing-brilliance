@@ -17,7 +17,7 @@ import { Plus, GraduationCap, CheckCircle2, Search, Pencil, Trash2, Loader2 } fr
 const allClasses = ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
 
 const PaymentPrograms = () => {
-  const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({}), []);
+  const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({ pageSize: 9999 }), []);
   const { data: feePlansData, loading: lf } = useApiQuery(() => api.fetchFeePlans(), []);
   const { data: assignmentsData, loading: la, refetch: refetchAssignments } = useApiQuery(() => api.fetchPaymentPlanAssignments(), []);
   const students = useMemo(() => (studentsData || []) as Student[], [studentsData]);
@@ -318,8 +318,8 @@ const PaymentPrograms = () => {
                     </div>
                   )}
 
-                  <Button onClick={handleClassAssign} className="w-full h-10 rounded-xl mt-3">
-                    Assign to {totalStudentsSelected} Students
+                  <Button onClick={handleClassAssign} className="w-full h-10 rounded-xl mt-3" disabled={assigning}>
+                    {assigning ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Assigning…</> : `Assign to ${totalStudentsSelected} Students`}
                   </Button>
                 </div>
 
@@ -457,8 +457,8 @@ const PaymentPrograms = () => {
                   )}
                 </div>
 
-                <Button onClick={handleSingleAssign} className="w-full h-10 rounded-xl">
-                  Assign to {selectedStudents.length} Student(s)
+                <Button onClick={handleSingleAssign} className="w-full h-10 rounded-xl" disabled={assigning}>
+                  {assigning ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Assigning…</> : `Assign to ${selectedStudents.length} Student(s)`}
                 </Button>
               </div>
             </DialogContent>

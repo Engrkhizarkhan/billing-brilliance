@@ -12,7 +12,6 @@ const CALLBACK_URL = config.org.callbackUrl;
 const WEBHOOK_SECRET = config.org.webhookSecret;
 const REQUIRE_WEBHOOK_SIGNATURE = config.org.requireWebhookSignature;
 const DEFAULT_EXPIRY_HOURS = config.org.paymentExpiryHours;
-const ALLOWED_IPS = config.org.allowedIps;
 
 // ---- Signature helpers ----
 // HMAC-SHA256 over canonical payload: billId|status|transactionId|paidAt
@@ -41,10 +40,10 @@ const normalizeCreateRequest = (body) => ({
 });
 
 // ---- Assert security context ----
-const assertSecurity = (req, options = {}) => {
+const assertSecurity = async (req, options = {}) => {
   // Protocol check
   const protocol = req.protocol || (req.headers['x-forwarded-proto'] || 'http');
-  if (config.nodeEnv === 'production' && protocol !== 'https') {
+  if (config.requireHttps && protocol !== 'https') {
     throw new AppError('HTTPS is required', 403, 'HTTPS_REQUIRED');
   }
 
@@ -57,11 +56,23 @@ const assertSecurity = (req, options = {}) => {
       throw new AppError('Invalid API key', 401, 'INVALID_API_KEY');
     }
 
-    // IP whitelist (external callers only, production only)
-    if (ALLOWED_IPS.length > 0 && config.nodeEnv === 'production') {
-      const ip = req.ip || req.connection?.remoteAddress;
-      if (!ALLOWED_IPS.includes(ip)) {
-        throw new AppError('Source IP not whitelisted', 403, 'IP_BLOCKED');
+    // Per-tenant IP whitelist — configured by org admin in settings, stored in DB
+    if (req.tenantId) {
+      const [settingRows] = await pool.query(
+        "SELECT value FROM settings WHERE tenant_id = ? AND `key` = 'etea_security_context' LIMIT 1",
+        [req.tenantId]
+      );
+      if (settingRows.length > 0) {
+        let setting = {};
+        try { setting = JSON.parse(settingRows[0].value); } catch { /* ignore malformed */ }
+        const allowedIps = (setting.sourceIp || '').split(',').map(s => s.trim()).filter(Boolean);
+        if (allowedIps.length > 0) {
+          const raw = req.ip || req.connection?.remoteAddress || '';
+          const ip = raw.startsWith('::ffff:') ? raw.slice(7) : raw;
+          if (!allowedIps.includes(ip)) {
+            throw new AppError('Source IP not whitelisted', 403, 'IP_BLOCKED');
+          }
+        }
       }
     }
   }
@@ -99,7 +110,7 @@ const ensurePaymentNotStale = async (payment) => {
 // ---- POST /api/payments/create ----
 const createPayment = async (req, res, next) => {
   try {
-    assertSecurity(req);
+    await assertSecurity(req);
 
     const normalized = normalizeCreateRequest(req.body);
     const tenantId = req.tenantId || req.body.tenantId;
@@ -200,7 +211,7 @@ const createPayment = async (req, res, next) => {
 // ---- GET /api/payments/:applicationId ----
 const getPaymentStatus = async (req, res, next) => {
   try {
-    assertSecurity(req);
+    await assertSecurity(req);
 
     const { applicationId } = req.params;
 
@@ -230,7 +241,7 @@ const getPaymentStatus = async (req, res, next) => {
 const processPaymentCallback = async (req, res, next) => {
   try {
     const callback = req.body;
-    assertSecurity(req, { requireWebhookSignature: true, callback });
+    await assertSecurity(req, { requireWebhookSignature: true, callback });
 
     const idempotencyKey = (req.headers['x-idempotency-key'] || '').trim();
 

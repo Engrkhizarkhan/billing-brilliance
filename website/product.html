@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How Payniva Works — Platform Overview</title>
+  <meta name="description" content="Payniva connects schools and organizations to Pakistan's national payment network. Two portals, every bank, real-time updates.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://payniva.io/product.html">
+  <meta property="og:title" content="How Payniva Works — Platform Overview">
+  <meta property="og:description" content="Two portals for schools and organizations, connected to every bank in Pakistan. Simple to use, powerful under the hood.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://payniva.io/product.html">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/components.css">
+  <link rel="stylesheet" href="assets/css/animations.css">
+  <script src="assets/js/theme.js"></script>
+</head>
+<body>
+
+<nav class="navbar" role="navigation" aria-label="Main navigation">
+  <input type="checkbox" id="nav-toggle" class="sr-only">
+  <div class="navbar__inner">
+    <a href="index.html" class="navbar__logo"><span class="navbar__logo-mark" aria-hidden="true">PN</span>Payniva</a>
+    <ul class="navbar__nav" role="list">
+      <li><a href="product.html" class="active">How It Works</a></li>
+      <li><a href="schools.html">For Schools</a></li>
+      <li><a href="organizations.html">For Organizations</a></li>
+      <li><a href="security.html">Security</a></li>
+      <li><a href="pricing.html">Pricing</a></li>
+    </ul>
+    <div class="navbar__actions">
+      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark mode">
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+      <a href="contact.html" class="btn btn-primary btn-sm">Get Started</a>
+    </div>
+    <label for="nav-toggle" class="navbar__toggle" aria-label="Toggle navigation"><span></span><span></span><span></span></label>
+  </div>
+</nav>
+
+<main>
+
+  <!-- HERO -->
+  <section class="hero hero--center bg-dots" aria-labelledby="product-heading">
+    <div class="container">
+      <p class="hero__eyebrow">Platform Overview</p>
+      <h1 id="product-heading">One Platform.<br>Two Portals.<br>Every Bank in Pakistan.</h1>
+      <p class="section-sub">Payniva gives schools and organizations a simple way to collect payments through Pakistan's national banking network. No new apps for payers. No manual reconciliation for you.</p>
+      <div class="hero__actions">
+        <a href="contact.html" class="btn btn-primary">Request a Demo</a>
+        <a href="how-it-works.html" class="btn btn-outline">See How It Works</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ARCHITECTURE DIAGRAM -->
+  <section class="bg-obsidian border-top border-bottom" aria-labelledby="arch-heading">
+    <div class="container">
+      <div class="section-header section-header--center reveal-up">
+        <span class="section-label">Architecture</span>
+        <h2 id="arch-heading">How the Platform is Structured</h2>
+        <p class="section-sub">A clean separation between portals, the API layer, and the 1LINK/1BILL payment network.</p>
+      </div>
+      <div class="arch-diagram reveal-up" role="img" aria-label="Platform architecture diagram">
+        <div class="arch-label">User Portals</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box arch-box--blue">School Portal</div>
+          </div>
+          <div class="arch-arrow">·</div>
+          <div class="arch-group">
+            <div class="arch-box arch-box--green">Organization Portal</div>
+          </div>
+        </div>
+        <span class="arch-arrow--vert">↓</span>
+        <div class="arch-label">Payniva Platform (Secure Payment Layer)</div>
+        <div class="arch-row">
+          <div class="arch-box arch-box--amber" style="min-width:400px;">Payniva — Manages Vouchers, Tracks Payments, Stores Records</div>
+        </div>
+        <span class="arch-arrow--vert">↕</span>
+        <div class="arch-label">Pakistan's National Payment Network</div>
+        <div class="arch-row">
+          <div class="arch-group">
+            <div class="arch-box">1LINK / 1BILL</div>
+          </div>
+          <div class="arch-arrow">↔</div>
+          <div class="arch-group">
+            <div class="arch-box">Banking Channels<br><span style="font-size:0.65rem;color:var(--text-dim)">ATM · Branch · Internet · Mobile</span></div>
+          </div>
+        </div>
+        <span class="arch-arrow--vert">↕</span>
+        <div class="arch-label">Secure Data Storage</div>
+        <div class="arch-row">
+          <div class="arch-box arch-box--slate">All Records Encrypted — Each Organization's Data Kept Separate</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DATA PRIVACY -->
+  <section aria-labelledby="privacy-heading">
+    <div class="container">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:4rem; align-items:start;">
+        <div class="reveal-left">
+          <span class="section-label">Your Data</span>
+          <h2 id="privacy-heading">Your Data is Always Yours.<br>Nobody Else Can See It.</h2>
+          <p style="margin-bottom:1.5rem;">Every school and organization on Payniva has a completely separate space. There is no way for one organization to see another's data — not even accidentally.</p>
+          <div class="checklist">
+            <div class="checklist__item">School A users can never see School B's students or payments</div>
+            <div class="checklist__item">Each organization's records are stored and accessed separately</div>
+            <div class="checklist__item">Every login is verified before accessing any data</div>
+            <div class="checklist__item">Reports and exports only show your organization's own data</div>
+            <div class="checklist__item">All data is encrypted in storage and in transit</div>
+            <div class="checklist__item">Access is controlled by role — staff only see what they need</div>
+          </div>
+        </div>
+        <div class="reveal-right">
+          <div style="background:var(--obsidian);border:1px solid var(--border);padding:2rem;">
+            <p style="font-family:var(--font-mono);font-size:.7rem;color:var(--amber);text-transform:uppercase;letter-spacing:.08em;margin-bottom:1.25rem;">How Data Separation Works</p>
+            <div style="display:flex;flex-direction:column;gap:1rem;">
+              <div style="background:rgba(42,157,92,.05);border:1px solid rgba(42,157,92,.2);padding:1rem;">
+                <p style="font-size:.8rem;color:var(--warm-white);font-weight:600;margin-bottom:.3rem;">Al-Noor School</p>
+                <p style="font-size:.75rem;color:var(--text-dim);">Can see: their own students, fees, and payments only.</p>
+              </div>
+              <div style="background:rgba(42,157,92,.05);border:1px solid rgba(42,157,92,.2);padding:1rem;">
+                <p style="font-size:.8rem;color:var(--warm-white);font-weight:600;margin-bottom:.3rem;">City Grammar School</p>
+                <p style="font-size:.75rem;color:var(--text-dim);">Can see: their own students, fees, and payments only.</p>
+              </div>
+              <div style="background:rgba(201,151,58,.05);border:1px solid rgba(201,151,58,.2);padding:1rem;">
+                <p style="font-size:.8rem;color:var(--warm-white);font-weight:600;margin-bottom:.3rem;">ETEA (Exam Authority)</p>
+                <p style="font-size:.75rem;color:var(--text-dim);">Can see: their own applicants and fees only.</p>
+              </div>
+            </div>
+            <p style="font-size:.75rem;color:var(--text-dim);margin-top:1rem;">No organization can ever access another's data.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURE MATRIX -->
+  <section class="bg-obsidian border-top border-bottom" aria-labelledby="features-heading">
+    <div class="container">
+      <div class="section-header reveal-up">
+        <span class="section-label">What Each Portal Can Do</span>
+        <h2 id="features-heading">School Portal vs. Organization Portal</h2>
+      </div>
+      <div class="table-wrapper reveal-up">
+        <table class="data-table" aria-label="Feature comparison by portal">
+          <thead>
+            <tr>
+              <th>Capability</th>
+              <th>School Portal</th>
+              <th>Organization Portal</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Post fee bills for individuals</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td></tr>
+            <tr><td>Issue payment vouchers</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td></tr>
+            <tr><td>Accept payment from any bank</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td></tr>
+            <tr><td>See payments in real time</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td></tr>
+            <tr><td>Generate receipts</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td></tr>
+            <tr><td>Export payment reports</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td></tr>
+            <tr><td>Manage staff access levels</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td></tr>
+            <tr><td>Fee plans by class or group</td><td><span class="check">✓</span></td><td class="dash">—</td></tr>
+            <tr><td>Scholarships &amp; concessions</td><td><span class="check">✓</span></td><td class="dash">—</td></tr>
+            <tr><td>Defaulter tracking</td><td><span class="check">✓</span></td><td class="dash">—</td></tr>
+            <tr><td>Connect existing software</td><td class="dash">—</td><td><span class="check">✓</span></td></tr>
+            <tr><td>Automatic payment notifications</td><td class="dash">—</td><td><span class="check">✓</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <div class="cta-band">
+    <div class="container">
+      <h2 class="reveal-up">See it running live.</h2>
+      <p class="reveal-up" data-delay="0.1">Get a walkthrough of the School Portal and Organization Portal with real payment flows.</p>
+      <div class="reveal-up" data-delay="0.2">
+        <a href="contact.html" class="btn btn-primary btn-lg">Request a Demo</a>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer class="footer" role="contentinfo">
+  <div class="container">
+    <div class="footer__grid">
+      <div class="footer__brand">
+        <a href="index.html" class="navbar__logo"><span class="navbar__logo-mark" aria-hidden="true">PN</span>Payniva</a>
+        <p>Payment collection platform for schools and organizations in Pakistan. Connected to the national 1LINK payment network.</p>
+      </div>
+      <div class="footer__col"><h5>Solutions</h5><ul role="list"><li><a href="schools.html">For Schools</a></li><li><a href="organizations.html">For Organizations</a></li><li><a href="pricing.html">Pricing</a></li><li><a href="contact.html">Get Started</a></li></ul></div>
+      <div class="footer__col"><h5>Platform</h5><ul role="list"><li><a href="product.html">How It Works</a></li><li><a href="security.html">Security &amp; Privacy</a></li><li><a href="integration.html">API Access</a></li><li><a href="docs.html">Documentation</a></li></ul></div>
+      <div class="footer__col"><h5>Company</h5><ul role="list"><li><a href="contact.html">Contact Us</a></li><li><a href="#">Privacy Policy</a></li><li><a href="#">Terms of Service</a></li></ul></div>
+    </div>
+    <div class="footer__bottom"><p>&copy; 2026 Payniva. All rights reserved.</p><span class="footer__badge">1LINK INTEGRATED</span></div>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+<script src="assets/js/animations.js" defer></script>
+</body>
+</html>

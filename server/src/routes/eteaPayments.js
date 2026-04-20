@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authenticateOrApiKey } = require('../middleware/auth');
 const { handleValidation } = require('../middleware/handleValidation');
 const { createPaymentValidation, paymentCallbackValidation } = require('../middleware/validate');
 const { tenantScope } = require('../middleware/auth');
@@ -9,9 +9,9 @@ const orgPaymentController = require('../controllers/eteaPaymentController');
 // Public health check
 router.get('/health', orgPaymentController.healthCheck);
 
-// Payment endpoints (API key auth is handled inside the controller - assertSecurity)
-router.post('/payments/create', authenticate, tenantScope, createPaymentValidation, handleValidation, orgPaymentController.createPayment);
-router.get('/payments/:applicationId', authenticate, orgPaymentController.getPaymentStatus);
+// Payment endpoints — accept both JWT (dashboard) and X-API-Key (external integrations)
+router.post('/payments/create', authenticateOrApiKey, tenantScope, createPaymentValidation, handleValidation, orgPaymentController.createPayment);
+router.get('/payments/:applicationId', authenticateOrApiKey, orgPaymentController.getPaymentStatus);
 
 // Callback endpoint (webhook - uses its own security validation)
 router.post('/payment/callback', paymentCallbackValidation, handleValidation, orgPaymentController.processPaymentCallback);

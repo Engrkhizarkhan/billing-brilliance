@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Documentation — Payniva Platform Guide</title>
+  <meta name="description" content="Complete guide to Payniva. Platform overview, School Portal guide, Organization Portal guide, API reference, security, and changelog.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://payniva.io/docs.html">
+  <meta property="og:title" content="Documentation — Payniva Platform Guide">
+  <meta property="og:description" content="Full Payniva documentation. From getting started to API reference and security overview.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://payniva.io/docs.html">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/components.css">
+  <link rel="stylesheet" href="assets/css/animations.css">
+  <script src="assets/js/theme.js"></script>
+</head>
+<body>
+
+<nav class="navbar" role="navigation" aria-label="Main navigation">
+  <input type="checkbox" id="nav-toggle" class="sr-only">
+  <div class="navbar__inner">
+    <a href="index.html" class="navbar__logo"><span class="navbar__logo-mark" aria-hidden="true">PN</span>Payniva</a>
+    <ul class="navbar__nav" role="list">
+      <li><a href="product.html">How It Works</a></li>
+      <li><a href="schools.html">For Schools</a></li>
+      <li><a href="organizations.html">For Organizations</a></li>
+      <li><a href="security.html">Security</a></li>
+      <li><a href="pricing.html">Pricing</a></li>
+    </ul>
+    <div class="navbar__actions">
+      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark mode">
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+      <a href="contact.html" class="btn btn-primary btn-sm">Get Started</a>
+    </div>
+    <label for="nav-toggle" class="navbar__toggle" aria-label="Toggle navigation"><span></span><span></span><span></span></label>
+  </div>
+</nav>
+
+<main>
+  <!-- DOCS PAGE HEADER -->
+  <div style="background:var(--navy);border-bottom:1px solid var(--border);padding:2.5rem 0 2rem;">
+    <div class="container" style="display:flex;align-items:center;justify-content:space-between;gap:1.5rem;flex-wrap:wrap;">
+      <div>
+        <span class="section-label" style="margin-bottom:0.5rem;">Documentation</span>
+        <h1 style="font-size:clamp(1.5rem,3vw,2rem);margin:0;">Payniva Platform Guide</h1>
+      </div>
+      <div class="docs-search-wrap">
+        <input type="search" id="docs-search" class="form-input" placeholder="Search docs…" aria-label="Search documentation" style="min-width:260px;">
+      </div>
+    </div>
+  </div>
+
+  <!-- TWO-PANEL DOCS LAYOUT -->
+  <div class="docs-layout container">
+
+    <!-- SIDEBAR -->
+    <aside class="docs-sidebar" aria-label="Documentation navigation">
+      <nav class="docs-nav" role="navigation">
+        <p class="docs-nav__group">Getting Started</p>
+        <a href="#overview" class="docs-nav__link active">Platform Overview</a>
+        <a href="#architecture" class="docs-nav__link">How It's Built</a>
+
+        <p class="docs-nav__group">Admin Guide</p>
+        <a href="#admin-billers" class="docs-nav__link">Managing Organizations</a>
+        <a href="#admin-users" class="docs-nav__link">User Management</a>
+        <a href="#admin-audit" class="docs-nav__link">Activity Log</a>
+
+        <p class="docs-nav__group">School Guide</p>
+        <a href="#school-fee-plans" class="docs-nav__link">Fee Plans</a>
+        <a href="#school-invoices" class="docs-nav__link">Invoices &amp; Payment Vouchers</a>
+        <a href="#school-ledger" class="docs-nav__link">Ledger &amp; Payment Records</a>
+
+        <p class="docs-nav__group">Organization Guide</p>
+        <a href="#etea-postings" class="docs-nav__link">Creating Payment Batches</a>
+        <a href="#etea-payments" class="docs-nav__link">Payment Requests</a>
+        <a href="#etea-callbacks" class="docs-nav__link">Automatic Confirmations</a>
+
+        <p class="docs-nav__group">API Reference</p>
+        <a href="#api-auth" class="docs-nav__link">Authentication</a>
+        <a href="#api-1bill" class="docs-nav__link">Payment Network Endpoints</a>
+        <a href="#api-etea" class="docs-nav__link">Organization Endpoints</a>
+        <a href="#api-school" class="docs-nav__link">School Endpoints</a>
+
+        <p class="docs-nav__group">Security</p>
+        <a href="#sec-isolation" class="docs-nav__link">Data Separation</a>
+        <a href="#sec-hmac" class="docs-nav__link">Payment Verification</a>
+        <a href="#sec-jwt" class="docs-nav__link">Login &amp; Sessions</a>
+
+        <p class="docs-nav__group">Changelog</p>
+        <a href="#changelog" class="docs-nav__link">v1.0 &middot; Release 1</a>
+      </nav>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <div class="docs-content">
+
+      <section class="docs-section" id="overview" aria-labelledby="h-overview">
+        <h2 id="h-overview">Platform Overview</h2>
+        <p>Payniva is a payment collection platform with two portals — School Portal and Organization Portal — each scoped to their own data, and connected to Pakistan's national 1LINK/1BILL payment network.</p>
+        <p>Schools use Payniva to manage student fee collection, generate payment vouchers, receive payment confirmations, and maintain a complete payment ledger. Organizations (exam authorities, hospitals, government bodies) use Payniva to connect their own systems to the payment network.</p>
+        <div class="callout" style="margin-top:1.5rem;">
+          <span class="callout__label">Payment Network</span>
+          <p>Payniva is built on Pakistan's national 1LINK/1BILL payment standard, which means payments accepted through Payniva are recognized at every bank, ATM, and mobile banking app connected to the national network.</p>
+        </div>
+      </section>
+
+      <section class="docs-section" id="architecture" aria-labelledby="h-arch">
+        <h2 id="h-arch">How It's Built</h2>
+        <p>Payniva is a REST API server with separate frontend portals for schools and organizations. The API handles all payment logic, connects to the 1LINK/1BILL network, and keeps each organization's data completely separate.</p>
+        <p>The server-side handles payment creation, status lookups, confirmation receipts from the banking network, and ledger updates. The frontend portals are the dashboards that school finance staff and organization users log into.</p>
+        <div class="callout" style="margin-top:1.5rem;">
+          <span class="callout__label">Data Separation</span>
+          <p>Every school and organization has a completely isolated data space. A user from School A cannot access School B's data under any circumstances. See <a href="security.html">Security &amp; Privacy</a> for more details.</p>
+        </div>
+      </section>
+
+      <section class="docs-section" id="admin-billers" aria-labelledby="h-billers">
+        <h2 id="h-billers">Managing Organizations</h2>
+        <p>Each school or organization connected to Payniva is registered as a separate entity on the payment network. The platform administrator manages which organizations are active on the platform.</p>
+        <ul style="margin:1rem 0 0 1.25rem;line-height:1.9;">
+          <li><strong>States:</strong> Created → Active → Suspended</li>
+          <li><strong>Identifier:</strong> Each organization gets a unique reference code registered with the payment network</li>
+          <li><strong>Suspending:</strong> Stops new payments but preserves all historical records</li>
+        </ul>
+      </section>
+
+      <section class="docs-section" id="admin-users" aria-labelledby="h-users">
+        <h2 id="h-users">User Management</h2>
+        <p>The platform administrator can create user accounts with specific roles. Each user's role determines what they can see and do within their organization's portal.</p>
+        <p>Roles include: Finance Manager, School Administrator, Cashier, Teacher (class view only), and Organization User. Each role is limited to the data of the organization they belong to.</p>
+      </section>
+
+      <section class="docs-section" id="admin-audit" aria-labelledby="h-audit">
+        <h2 id="h-audit">Activity Log</h2>
+        <p>Every significant action taken in Payniva is recorded in an activity log. This includes creating fees, recording payments, changing user access, and any data exports. Each entry includes:</p>
+        <ul style="margin:1rem 0 0 1.25rem;line-height:1.9;">
+          <li><strong>Date &amp; Time</strong> — when the action occurred</li>
+          <li><strong>Who did it</strong> — the staff member's name and role</li>
+          <li><strong>What happened</strong> — a plain description of the action</li>
+          <li><strong>Which record</strong> — the specific student, payment, or fee affected</li>
+        </ul>
+      </section>
+
+      <section class="docs-section" id="school-fee-plans" aria-labelledby="h-feeplans">
+        <h2 id="h-feeplans">Fee Plans</h2>
+        <p>Fee plans define the payment amount, due date, and applicable student cohort. Each fee plan generates a batch of invoices — one per student in scope.</p>
+        <p>Fee plans can be:</p>
+        <ul style="margin:1rem 0 0 1.25rem;line-height:1.9;">
+          <li><strong>Annual</strong> — full year fee in one invoice</li>
+          <li><strong>Quarterly</strong> — four invoices per year</li>
+          <li><strong>Custom</strong> — one-time or irregular amounts</li>
+        </ul>
+      </section>
+
+      <section class="docs-section" id="school-invoices" aria-labelledby="h-inv">
+        <h2 id="h-inv">Invoices &amp; Payment Vouchers</h2>
+        <p>Creating an invoice for a student automatically generates a payment voucher number via the 1BILL registration. This voucher number is printed on the fee slip and can be given to the student directly.</p>
+        <p>Once a payment voucher is issued, the student can pay using that number at any 1LINK-connected bank — ATM, mobile app, internet banking, or over the counter.</p>
+      </section>
+
+      <section class="docs-section" id="school-ledger" aria-labelledby="h-ledger">
+        <h2 id="h-ledger">Ledger &amp; Payment Records</h2>
+        <p>Confirmed payments are automatically recorded in the payment ledger. Each record contains:</p>
+        <ul style="margin:1rem 0 0 1.25rem;line-height:1.9;">
+          <li>Student reference</li>
+          <li>Invoice and payment voucher number</li>
+          <li>Amount paid and payment channel used</li>
+          <li>Bank-side transaction reference for traceability</li>
+          <li>Date, time, and confirmation status</li>
+        </ul>
+        <p style="margin-top:1rem;">Finance managers can export payment reports in CSV or PDF at any time.</p>
+      </section>
+
+      <section class="docs-section" id="etea-postings" aria-labelledby="h-postings">
+        <h2 id="h-postings">Creating Payment Batches (Organization)</h2>
+        <p>A payment batch represents an exam session, recruitment cycle, or any collection period. It defines the fee amount, payment deadline, and reference for that group of applicants or participants.</p>
+        <p>Once a batch is created, your system can register individual applicants against it and issue payment vouchers for each one.</p>
+      </section>
+
+      <section class="docs-section" id="etea-payments" aria-labelledby="h-etea-pay">
+        <h2 id="h-etea-pay">Payment Requests (Organization)</h2>
+        <p>Your source system calls <code>POST /api/payments/create</code> to register an applicant for payment. Payniva generates and returns a payment voucher number. Store this in your source system to track payment status.</p>
+        <a href="integration.html" class="btn btn-outline btn-sm" style="margin-top:0.75rem;">View full API details →</a>
+      </section>
+
+      <section class="docs-section" id="etea-callbacks" aria-labelledby="h-etea-cb">
+        <h2 id="h-etea-cb">Automatic Confirmations (Organization)</h2>
+        <p>After a payment is made at a bank channel, the banking network sends a confirmation to Payniva. Payniva verifies the confirmation, updates the payment status, and automatically notifies your source system.</p>
+        <p>See <a href="product.html">How It Works</a> for the full payment flow diagram.</p>
+      </section>
+
+      <section class="docs-section" id="api-auth" aria-labelledby="h-api-auth">
+        <h2 id="h-api-auth">Authentication</h2>
+        <p>All portal API endpoints require a valid authentication token passed in the request header. Tokens expire after 15 minutes for security. A refresh mechanism allows sessions to continue without re-entering credentials repeatedly.</p>
+        <p>Payment network endpoints (<code>/api/bill/*</code>, <code>/api/payment/callback</code>) use cryptographic signature verification instead of user tokens. These are server-to-server endpoints, not user-facing.</p>
+      </section>
+
+      <section class="docs-section" id="api-1bill" aria-labelledby="h-1bill">
+        <h2 id="h-1bill">Payment Network Endpoints</h2>
+        <div class="table-wrapper">
+          <table class="data-table" aria-label="Payment network endpoints">
+            <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td>POST</td><td>/api/bill/inquiry</td><td>Look up bill status from banking network</td></tr>
+              <tr><td>POST</td><td>/api/bill/payment</td><td>Process payment confirmation from banking network</td></tr>
+              <tr><td>POST</td><td>/api/bill/fetchBundle</td><td>Return bundle for package-based payments</td></tr>
+              <tr><td>POST</td><td>/api/payment/callback</td><td>Receive verified payment confirmation</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="docs-section" id="api-etea" aria-labelledby="h-api-etea">
+        <h2 id="h-api-etea">Organization Endpoints</h2>
+        <div class="table-wrapper">
+          <table class="data-table" aria-label="Organization endpoints">
+            <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td>POST</td><td>/api/payments/create</td><td>Create payment request, get voucher number</td></tr>
+              <tr><td>GET</td><td>/api/payments/{application_id}</td><td>Look up payment by application ID</td></tr>
+              <tr><td>POST</td><td>/api/etea/payment-status</td><td>Notify upstream source system of payment status</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="docs-section" id="api-school" aria-labelledby="h-api-school">
+        <h2 id="h-api-school">School Endpoints</h2>
+        <div class="table-wrapper">
+          <table class="data-table" aria-label="School endpoints">
+            <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td>GET</td><td>/api/invoices</td><td>List tenant invoices</td></tr>
+              <tr><td>POST</td><td>/api/invoices</td><td>Create invoice for student</td></tr>
+              <tr><td>GET</td><td>/api/ledger</td><td>Get tenant ledger entries</td></tr>
+              <tr><td>GET</td><td>/api/students</td><td>List tenant students</td></tr>
+              <tr><td>POST</td><td>/api/students</td><td>Add student to tenant</td></tr>
+              <tr><td>GET</td><td>/api/fee-plans</td><td>List tenant fee plans</td></tr>
+              <tr><td>POST</td><td>/api/fee-plans</td><td>Create new fee plan</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="docs-section" id="sec-isolation" aria-labelledby="h-sec-iso">
+        <h2 id="h-sec-iso">Data Separation</h2>
+        <p>Every school and organization has a completely isolated data space. Users can only access data for their own organization. See <a href="security.html">Security &amp; Privacy</a> for the full explanation of how access control works.</p>
+      </section>
+
+      <section class="docs-section" id="sec-hmac" aria-labelledby="h-hmac">
+        <h2 id="h-hmac">Payment Verification</h2>
+        <p>Every payment confirmation received from the banking network is cryptographically verified before being recorded. Unverified or tampered confirmations are rejected and logged. This prevents any fake or duplicate payment records from being created.</p>
+      </section>
+
+      <section class="docs-section" id="sec-jwt" aria-labelledby="h-jwt">
+        <h2 id="h-jwt">Login &amp; Sessions</h2>
+        <p>Login sessions expire automatically after 15 minutes of inactivity. A background refresh mechanism keeps active users logged in without interruption. Inactive sessions are terminated automatically. All login events are logged.</p>
+      </section>
+
+      <section class="docs-section" id="changelog" aria-labelledby="h-changelog">
+        <h2 id="h-changelog">Changelog</h2>
+        <div style="border-left:2px solid var(--amber);padding-left:1.5rem;margin-top:1rem;">
+          <p style="font-family:var(--font-mono);font-size:0.75rem;color:var(--amber);margin-bottom:0.25rem;">v1.0.0 · Release 1 · April 2026</p>
+          <ul style="margin:0.5rem 0 0 1.25rem;line-height:1.9;font-size:0.9rem;">
+            <li>School Portal and Organization Portal with separate data spaces</li>
+            <li>Accept payments from all banks via Pakistan's national payment network</li>
+            <li>Payment voucher generation and management</li>
+            <li>Automatic payment confirmation from banking network</li>
+            <li>Student ledger, invoice management, and fee plans</li>
+            <li>Platform-wide activity log for all operations</li>
+            <li>Fee slip PDF generation</li>
+          </ul>
+        </div>
+        <div style="border-left:2px solid var(--border-light);padding-left:1.5rem;margin-top:1.5rem;">
+          <p style="font-family:var(--font-mono);font-size:0.75rem;color:var(--text-dim);margin-bottom:0.25rem;">v2.0.0 · Release 2 · Planned</p>
+          <ul style="margin:0.5rem 0 0 1.25rem;line-height:1.9;font-size:0.9rem;color:var(--text-dim);">
+            <li>Exam roll assignment, admit cards, and results management for organizations</li>
+            <li>Multi-payment programs for exam categories</li>
+            <li>Enhanced reporting and analytics dashboard</li>
+          </ul>
+        </div>
+      </section>
+
+    </div><!-- /docs-content -->
+  </div><!-- /docs-layout -->
+</main>
+
+<footer class="footer" role="contentinfo">
+  <div class="container">
+    <div class="footer__grid">
+      <div class="footer__brand">
+        <a href="index.html" class="navbar__logo"><span class="navbar__logo-mark" aria-hidden="true">PN</span>Payniva</a>
+        <p>Payment collection platform for schools and organizations in Pakistan. Connected to the national 1LINK payment network.</p>
+      </div>
+      <div class="footer__col"><h5>Solutions</h5><ul role="list"><li><a href="schools.html">For Schools</a></li><li><a href="organizations.html">For Organizations</a></li><li><a href="pricing.html">Pricing</a></li><li><a href="contact.html">Get Started</a></li></ul></div>
+      <div class="footer__col"><h5>Platform</h5><ul role="list"><li><a href="product.html">How It Works</a></li><li><a href="security.html">Security &amp; Privacy</a></li><li><a href="integration.html">API Access</a></li><li><a href="docs.html">Documentation</a></li></ul></div>
+      <div class="footer__col"><h5>Company</h5><ul role="list"><li><a href="contact.html">Contact Us</a></li><li><a href="#">Privacy Policy</a></li><li><a href="#">Terms of Service</a></li></ul></div>
+    </div>
+    <div class="footer__bottom"><p>&copy; 2026 Payniva. All rights reserved.</p><span class="footer__badge">1LINK INTEGRATED</span></div>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+<script src="assets/js/copy-code.js" defer></script>
+<script src="assets/js/docs-search.js" defer></script>
+<script src="assets/js/animations.js" defer></script>
+</body>
+</html>

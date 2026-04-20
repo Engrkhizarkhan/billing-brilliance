@@ -52,7 +52,7 @@ const SchoolPayments = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  const { data: studentsData } = useApiQuery(() => api.fetchStudents({}), []);
+  const { data: studentsData } = useApiQuery(() => api.fetchStudents({ pageSize: 9999 }), []);
   const students = useMemo(() => (studentsData || []) as Student[], [studentsData]);
 
   const { data: historyRaw, meta: historyMeta } = useApiQuery(

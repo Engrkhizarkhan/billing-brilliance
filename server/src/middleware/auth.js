@@ -112,6 +112,9 @@ const authenticateOrApiKey = async (req, res, next) => {
 };
 
 const tenantScope = async (req, res, next) => {
+  // API key auth already resolved the tenant — skip JWT-based resolution
+  if (req.tenantId) return next();
+
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }

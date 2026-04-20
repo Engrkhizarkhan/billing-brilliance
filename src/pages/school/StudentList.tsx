@@ -24,7 +24,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { Plus, Upload, Download, FileText, Users, GraduationCap, Eye, Pencil, Trash2, Loader2 } from 'lucide-react';
+import { Plus, Upload, Download, FileText, Users, GraduationCap, Eye, Pencil, Trash2, Loader2, Trash } from 'lucide-react';
 import { formatCNIC, formatPhone, formatPKR } from '@/lib/formatters';
 import { useNavigate } from 'react-router-dom';
 
@@ -105,17 +105,65 @@ const StudentList = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+  const [bulkImporting, setBulkImporting] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [form, setForm] = useState<StudentFormState>(emptyStudentForm);
   const [editForm, setEditForm] = useState<StudentFormState>(emptyStudentForm);
   const [studentBeingEdited, setStudentBeingEdited] = useState<Student | null>(null);
   const [studentBeingDeleted, setStudentBeingDeleted] = useState<Student | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
   const refreshStudents = () => {
     refetch();
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === paginated.length && paginated.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(paginated.map((s) => s.id)));
+    }
+  };
+
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    const ids = Array.from(selectedIds);
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await api.deleteStudent(id);
+      } catch {
+        failed++;
+      }
+    }
+    setBulkDeleting(false);
+    setBulkDeleteDialogOpen(false);
+    setSelectedIds(new Set());
+    setStudentList((prev) => {
+      const next = prev.filter((s) => !ids.includes(s.id));
+      const maxPage = Math.max(1, Math.ceil(next.length / pageSize));
+      setPage((cur) => Math.min(cur, maxPage));
+      return next;
+    });
+    void refreshStudents();
+    if (failed === 0) {
+      toast.success(`${ids.length} student(s) deleted`);
+    } else {
+      toast.warning(`${ids.length - failed} deleted, ${failed} failed`);
+    }
   };
 
   const classSummary = useMemo(() => {
@@ -312,37 +360,103 @@ const StudentList = () => {
     }
   };
 
-  const handleBulkUpload = async () => {
-    const sampleStudents = [
-      { name: 'Ali Hassan', fatherName: 'Hassan Ali', class: 'Class 5', section: 'E', gender: 'male' as const, dateOfBirth: '2012-01-15', phone: '0300-0000001', cnic: '35201-9000000-0' },
-      { name: 'Ayesha Siddiqui', fatherName: 'Siddiqui Sahib', class: 'Class 6', section: 'A', gender: 'female' as const, dateOfBirth: '2012-02-15', phone: '0300-0000002', cnic: '35201-9000001-1' },
-      { name: 'Hamza Tariq', fatherName: 'Tariq Khan', class: 'Class 7', section: 'B', gender: 'male' as const, dateOfBirth: '2012-03-15', phone: '0300-0000003', cnic: '35201-9000002-2' },
-      { name: 'Maryam Ahmed', fatherName: 'Ahmed Raza', class: 'Class 8', section: 'C', gender: 'female' as const, dateOfBirth: '2012-04-15', phone: '0300-0000004', cnic: '35201-9000003-3' },
-      { name: 'Usman Ghani', fatherName: 'Ghani Muhammad', class: 'Class 9', section: 'D', gender: 'male' as const, dateOfBirth: '2012-05-15', phone: '0300-0000005', cnic: '35201-9000004-4' },
-    ];
+  // Normalise date strings to YYYY-MM-DD (handles M/D/YYYY, MM/DD/YYYY, YYYY-MM-DD, YYYY-M-D)
+  const normalizeDate = (raw: string): string => {
+    const s = raw?.trim();
+    if (!s) return '';
+    // Already ISO: YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    // YYYY-M-D or YYYY-MM-D
+    if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)) {
+      const [y, m, d] = s.split('-');
+      return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    }
+    // M/D/YYYY or MM/DD/YYYY
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
+      const [m, d, y] = s.split('/');
+      return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    }
+    return s;
+  };
 
-    try {
-      for (const s of sampleStudents) {
-        const usesBus = sampleStudents.indexOf(s) % 2 === 0;
+  // Normalise YYYY-M to YYYY-MM
+  const normalizeYearMonth = (raw: string): string => {
+    const s = raw?.trim();
+    if (!s) return s;
+    if (/^\d{4}-\d{1}$/.test(s)) return `${s.slice(0, 5)}0${s.slice(5)}`;
+    return s;
+  };
+
+  const parseCsvLine = (line: string): string[] => {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        inQuotes = !inQuotes;
+      } else if (ch === ',' && !inQuotes) {
+        result.push(current);
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    result.push(current);
+    return result;
+  };
+
+  const handleFileImport = async (file: File) => {
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    if (lines.length < 2) {
+      toast.error('CSV file is empty or has no data rows');
+      return;
+    }
+    const dataRows = lines.slice(1);
+    setBulkImporting(true);
+    let successCount = 0;
+    let failCount = 0;
+    for (const line of dataRows) {
+      const cols = parseCsvLine(line);
+      if (cols.length < 4) continue;
+      const [name, fatherName, rollNumber, cls, section, phone, cnic, gender, dateOfBirth, address, busService, busStartMonth, busMonthlyFeeStr] = cols;
+      if (!name?.trim() || !fatherName?.trim()) { failCount++; continue; }
+      const usesBus = busService?.trim().toLowerCase() === 'yes';
+      try {
         await api.createStudent({
-          ...s,
-          rollNumber: `R${String(studentList.length + sampleStudents.indexOf(s) + 1).padStart(4, '0')}`,
+          name: name.trim(),
+          fatherName: fatherName.trim(),
+          rollNumber: rollNumber?.trim() || '',
+          class: cls?.trim() || 'Class 1',
+          section: section?.trim() || 'A',
+          phone: phone?.trim() || '',
+          cnic: cnic?.trim() || '',
           status: 'active',
           billerId: '1',
           balance: 0,
-          admissionDate: '2025-03-01',
-          address: `House ${sampleStudents.indexOf(s) + 1}, Peshawar`,
+          admissionDate: new Date().toISOString().split('T')[0],
+          gender: (gender?.trim().toLowerCase() === 'female' ? 'female' : 'male') as 'male' | 'female',
+          dateOfBirth: normalizeDate(dateOfBirth),
+          address: address?.trim() || '',
           usesBusService: usesBus,
-          busServiceStartMonth: usesBus ? '2025-01' : null,
+          busServiceStartMonth: usesBus ? (normalizeYearMonth(busStartMonth) || null) : null,
           busServiceEndMonth: null,
-          busMonthlyFee: usesBus ? 1500 : 0,
+          busMonthlyFee: usesBus ? (Number(busMonthlyFeeStr?.trim()) || 0) : 0,
         });
+        successCount++;
+      } catch {
+        failCount++;
       }
-      refreshStudents();
-      setBulkDialogOpen(false);
-      toast.success('5 students imported and assigned to their classes');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Bulk import failed');
+    }
+    setBulkImporting(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    refreshStudents();
+    setBulkDialogOpen(false);
+    if (failCount === 0) {
+      toast.success(`${successCount} student(s) imported successfully`);
+    } else {
+      toast.warning(`${successCount} imported, ${failCount} failed — check names and required fields`);
     }
   };
 
@@ -394,11 +508,12 @@ const StudentList = () => {
                   <FileText className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
                   <p className="text-sm font-semibold">Upload CSV file</p>
                   <p className="text-xs text-muted-foreground mt-1">Name, Father Name, Roll #, Class, Section, Phone, CNIC, Bus Service, Bus Start Month, Bus Monthly Fee</p>
-                  <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={() => handleBulkUpload()} />
-                  <Button variant="outline" size="sm" className="mt-4 rounded-lg" onClick={() => fileInputRef.current?.click()}>Choose File</Button>
+                  <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileImport(f); }} />
+                  <Button variant="outline" size="sm" className="mt-4 rounded-lg" onClick={() => fileInputRef.current?.click()} disabled={bulkImporting}>
+                    {bulkImporting ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Importing…</> : 'Choose File'}
+                  </Button>
                 </div>
                 <Button variant="ghost" size="sm" className="w-full" onClick={downloadTemplate}><Download className="w-4 h-4 mr-1.5" />Download CSV Template</Button>
-                <Button onClick={handleBulkUpload} className="w-full rounded-lg">Simulate Bulk Import (5 Students)</Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -644,14 +759,29 @@ const StudentList = () => {
 
       <div className="table-container">
         <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-          <p className="text-sm font-semibold">
-            {selectedClass === 'all'
-              ? 'All Students'
-              : selectedSection === 'all'
-                ? `${selectedClass} • All Sections`
-                : `${selectedClass} • Section ${selectedSection}`}
-            <span className="text-muted-foreground font-normal ml-2">({filtered.length})</span>
-          </p>
+          {selectedIds.size > 0 ? (
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-semibold">{selectedIds.size} selected</span>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-8 rounded-lg"
+                onClick={() => setBulkDeleteDialogOpen(true)}
+              >
+                <Trash className="w-3.5 h-3.5 mr-1.5" />Delete Selected
+              </Button>
+              <Button variant="ghost" size="sm" className="h-8 rounded-lg" onClick={() => setSelectedIds(new Set())}>Clear</Button>
+            </div>
+          ) : (
+            <p className="text-sm font-semibold">
+              {selectedClass === 'all'
+                ? 'All Students'
+                : selectedSection === 'all'
+                  ? `${selectedClass} • All Sections`
+                  : `${selectedClass} • Section ${selectedSection}`}
+              <span className="text-muted-foreground font-normal ml-2">({filtered.length})</span>
+            </p>
+          )}
         </div>
         {paginated.length === 0 ? (
           <EmptyState icon={GraduationCap} title="No students found" description="No students match your search criteria. Try adjusting your filters." />
@@ -659,6 +789,13 @@ const StudentList = () => {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={paginated.length > 0 && selectedIds.size === paginated.length}
+                    onCheckedChange={toggleSelectAll}
+                    aria-label="Select all on page"
+                  />
+                </TableHead>
                 <TableHead className="text-xs font-semibold">Name</TableHead>
                 <TableHead className="text-xs font-semibold">Father Name</TableHead>
                 <TableHead className="text-xs font-semibold">Roll #</TableHead>
@@ -685,7 +822,14 @@ const StudentList = () => {
                 };
 
                 return (
-                  <TableRow key={s.id} className="hover:bg-muted/30 cursor-pointer" onClick={() => navigate(`/school/fee-ledger?student=${s.id}`)}>
+                  <TableRow key={s.id} className={`hover:bg-muted/30 cursor-pointer ${selectedIds.has(s.id) ? 'bg-primary/5' : ''}`} onClick={() => navigate(`/school/fee-ledger?student=${s.id}`)}>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIds.has(s.id)}
+                        onCheckedChange={() => toggleSelectOne(s.id)}
+                        aria-label={`Select ${s.name}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium text-sm">{s.name}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{s.fatherName}</TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">{s.rollNumber}</TableCell>
@@ -749,6 +893,29 @@ const StudentList = () => {
             </TableBody>
           </Table>
         )}
+        <AlertDialog
+          open={bulkDeleteDialogOpen}
+          onOpenChange={(open) => { if (!bulkDeleting) setBulkDeleteDialogOpen(open); }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete {selectedIds.size} Student{selectedIds.size !== 1 ? 's' : ''}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently remove {selectedIds.size} student{selectedIds.size !== 1 ? 's' : ''} from the directory, including their fee records and assignments. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={bulkDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+              >
+                {bulkDeleting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Deleting…</> : `Delete ${selectedIds.size} Student${selectedIds.size !== 1 ? 's' : ''}`}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         <AlertDialog
           open={deleteDialogOpen}
           onOpenChange={(open) => {

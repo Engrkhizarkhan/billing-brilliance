@@ -1,0 +1,45 @@
+/* =====================================================
+   animations.css — Payniva Scroll Animation Classes
+   Base classes for GSAP ScrollTrigger + CSS fallbacks
+   ===================================================== */
+
+/* Base reveal states (GSAP animates these via inline styles) */
+.reveal-up    { opacity: 0; transform: translateY(40px); }
+.reveal-left  { opacity: 0; transform: translateX(-30px); }
+.reveal-right { opacity: 0; transform: translateX(30px); }
+.reveal-fade  { opacity: 0; }
+
+/* Stagger container — GSAP targets direct children */
+.stagger-children > * { opacity: 0; transform: translateY(30px); }
+
+/* No-JS fallback: show everything */
+@media (scripting: none) {
+  .reveal-up, .reveal-left, .reveal-right, .reveal-fade,
+  .stagger-children > * {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* Reduced motion: skip all transforms */
+@media (prefers-reduced-motion: reduce) {
+  .reveal-up, .reveal-left, .reveal-right, .reveal-fade,
+  .stagger-children > * {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .ticker__track { animation-duration: 200s !important; }
+}
+
+/* Page-level fade-in on <main> */
+main {
+  animation: page-in 0.35s ease both;
+}
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  main { animation: none; }
+}

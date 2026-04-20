@@ -26,11 +26,12 @@ module.exports = {
     name: process.env.ADMIN_NAME || 'Platform Administrator',
   },
 
+  requireHttps: (process.env.REQUIRE_HTTPS || 'false').toLowerCase() !== 'false',
+
   org: {
     callbackUrl: process.env.ORG_CALLBACK_URL || '/api/payment/callback',
     webhookSecret: process.env.ORG_WEBHOOK_SECRET || 'change-me',
     paymentExpiryHours: parseInt(process.env.ORG_PAYMENT_EXPIRY_HOURS, 10) || 48,
-    allowedIps: (process.env.ORG_ALLOWED_IPS || '127.0.0.1,::1').split(',').map(s => s.trim()).filter(Boolean),
     requireWebhookSignature: (process.env.REQUIRE_WEBHOOK_SIGNATURE || 'true').toLowerCase() !== 'false',
   },
 

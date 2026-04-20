@@ -6,6 +6,16 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -23,6 +33,11 @@ const Scholarships = () => {
   const [assignments, setAssignments] = useState<StudentScholarshipAssignment[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [deactivateTarget, setDeactivateTarget] = useState<Scholarship | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
+  const [unassigningId, setUnassigningId] = useState<string | null>(null);
   const [studentLookup, setStudentLookup] = useState('');
   const [expandedScholarshipId, setExpandedScholarshipId] = useState<string | null>(null);
   const [assignmentSearchTerm, setAssignmentSearchTerm] = useState('');
@@ -101,7 +116,6 @@ const Scholarships = () => {
 
   const activeScholarshipsWithAssignments = useMemo(() => {
     return list
-      .filter((scholarship) => scholarship.status === 'active')
       .map((scholarship) => ({
         scholarship,
         assignedCount: assignmentCountByScholarship[scholarship.id] || 0,
@@ -143,6 +157,7 @@ const Scholarships = () => {
       return;
     }
 
+    setSaving(true);
     try {
       await api.createScholarship({
         name: form.name,
@@ -158,16 +173,24 @@ const Scholarships = () => {
       toast.success(`Scholarship "${form.name}" created. Discount will be applied to invoices.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to create scholarship');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const deactivateScholarship = async (id: string) => {
+  const deactivateScholarship = async () => {
+    if (!deactivateTarget) return;
+    const id = deactivateTarget.id;
+    setDeactivateTarget(null);
+    setDeactivating(true);
     try {
       await api.updateScholarshipStatus(id, 'inactive');
       refetchScholarships();
       toast.success('Scholarship deactivated');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to deactivate scholarship');
+    } finally {
+      setDeactivating(false);
     }
   };
 
@@ -204,6 +227,7 @@ const Scholarships = () => {
       return;
     }
 
+    setAssigning(true);
     try {
       for (const studentId of toCreate) {
         await api.createScholarshipAssignment({
@@ -226,16 +250,21 @@ const Scholarships = () => {
       toast.success(`${toCreate.length} student(s) assigned to scholarship`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to assign scholarship');
+    } finally {
+      setAssigning(false);
     }
   };
 
   const unassignScholarship = async (assignmentId: string) => {
+    setUnassigningId(assignmentId);
     try {
       await api.updateScholarshipAssignment(assignmentId, 'inactive');
       refetchAssignments();
       toast.success('Scholarship assignment removed');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to remove assignment');
+    } finally {
+      setUnassigningId(null);
     }
   };
 
@@ -392,7 +421,9 @@ const Scholarships = () => {
                   Assignment preview: {assignmentTargetPreview} student(s) will be linked to the selected scholarship.
                 </p>
 
-                <Button onClick={assignScholarship} className="w-full">Assign Scholarship</Button>
+                <Button onClick={assignScholarship} className="w-full" disabled={assigning}>
+                  {assigning ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Assigning…</> : 'Assign Scholarship'}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -432,7 +463,9 @@ const Scholarships = () => {
                     onChange={(e) => setForm({ ...form, endDate: e.target.value })}
                   />
                 </div>
-                <Button onClick={handleCreate} className="w-full">Create</Button>
+                <Button onClick={handleCreate} className="w-full" disabled={saving}>
+                  {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating…</> : 'Create'}
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -441,7 +474,7 @@ const Scholarships = () => {
 
       <div className="table-container">
         <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-          <p className="text-sm font-semibold">Active Scholarship Assignments</p>
+          <p className="text-sm font-semibold">Scholarships</p>
           <p className="text-xs text-muted-foreground">{assignmentRows.length} mapped students</p>
         </div>
         <Table>
@@ -460,7 +493,7 @@ const Scholarships = () => {
             {activeScholarshipsWithAssignments.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-8">
-                  No active scholarships available.
+                  No scholarships found. Create one using the button above.
                 </TableCell>
               </TableRow>
             ) : (
@@ -478,8 +511,8 @@ const Scholarships = () => {
                       <TableCell><StatusBadge status={scholarship.status} /></TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2 justify-end">
-                          <Button variant="outline" size="sm" className="h-8" onClick={() => deactivateScholarship(scholarship.id)}>
-                            <Power className="w-3.5 h-3.5 mr-1.5" />Deactivate
+                          <Button variant="outline" size="sm" className="h-8" onClick={() => setDeactivateTarget(scholarship)} disabled={scholarship.status === 'inactive' || deactivating}>
+                            {deactivating ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Power className="w-3.5 h-3.5 mr-1.5" />}Deactivate
                           </Button>
                           <Button
                             variant="ghost"
@@ -548,8 +581,8 @@ const Scholarships = () => {
                                       <TableCell>{row.assignment.effectiveFrom}</TableCell>
                                       <TableCell><StatusBadge status={row.assignment.status} /></TableCell>
                                       <TableCell className="text-right">
-                                        <Button variant="ghost" size="sm" className="h-8 text-destructive" onClick={() => unassignScholarship(row.assignment.id)}>
-                                          <X className="w-3.5 h-3.5 mr-1.5" />Unassign
+                                        <Button variant="ghost" size="sm" className="h-8 text-destructive" onClick={() => unassignScholarship(row.assignment.id)} disabled={unassigningId === row.assignment.id}>
+                                          {unassigningId === row.assignment.id ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <X className="w-3.5 h-3.5 mr-1.5" />}Unassign
                                         </Button>
                                       </TableCell>
                                     </TableRow>
@@ -571,6 +604,24 @@ const Scholarships = () => {
           </TableBody>
         </Table>
       </div>
+
+      <AlertDialog open={!!deactivateTarget} onOpenChange={(open) => { if (!open) setDeactivateTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Deactivate Scholarship</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to deactivate <span className="font-semibold">{deactivateTarget?.name}</span>?
+              All active assignments under this scholarship will stop applying from the next billing cycle.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={deactivateScholarship} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Deactivate
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

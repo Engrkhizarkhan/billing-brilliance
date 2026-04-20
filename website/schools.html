@@ -1,0 +1,356 @@
+﻿<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payniva for Schools — Collect School Fees Through Any Bank in Pakistan</title>
+  <meta name="description" content="Payniva helps schools collect tuition fees, transport charges, and all other payments through every bank in Pakistan. Parents pay from their phone. You see it instantly.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://payniva.io/schools.html">
+  <meta property="og:title" content="Payniva for Schools — Collect Fees Through Any Bank">
+  <meta property="og:description" content="Issue fee bills, let parents pay through any bank or ATM, and track every payment in real time. No cash, no manual work.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://payniva.io/schools.html">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/components.css">
+  <link rel="stylesheet" href="assets/css/animations.css">
+  <script src="assets/js/theme.js"></script>
+  <style>
+    .fee-visual { display:grid; grid-template-columns:1fr 1fr; gap:1rem; max-width:480px; }
+    @media(max-width:600px){.fee-visual{grid-template-columns:1fr;}}
+    .fee-tile { background:var(--obsidian); border:1px solid var(--border); padding:1.25rem; }
+    .fee-tile__label { font-size:.7rem; font-family:var(--font-mono); color:var(--text-dim); letter-spacing:.08em; text-transform:uppercase; margin-bottom:.5rem; }
+    .fee-tile__val { font-family:var(--font-mono); font-size:1.25rem; font-weight:700; color:var(--warm-white); }
+    .fee-tile__sub { font-size:.75rem; color:var(--text-dim); margin-top:.25rem; }
+    .fee-tile--green .fee-tile__val { color:var(--green); }
+    .fee-tile--amber .fee-tile__val { color:var(--amber); }
+    .fee-tile--wide { grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; gap:1rem; }
+    .fee-tile--wide .fee-tile__val { font-size:1rem; }
+    .fee-badge { display:inline-block; padding:.2rem .6rem; font-size:.7rem; font-family:var(--font-mono); }
+    .fee-badge--paid { background:rgba(42,157,92,.1); color:var(--green); border:1px solid rgba(42,157,92,.3); }
+    .fee-badge--due { background:rgba(201,151,58,.1); color:var(--amber); border:1px solid rgba(201,151,58,.3); }
+
+    .feature-strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:2rem; }
+    .feature-strip__item { display:flex; gap:1.25rem; align-items:flex-start; padding:2rem; background:var(--obsidian); border:1px solid var(--border); }
+    .feature-strip__icon { width:44px; height:44px; flex-shrink:0; background:rgba(201,151,58,.1); border:1px solid rgba(201,151,58,.2); display:flex; align-items:center; justify-content:center; font-size:1.25rem; }
+    .feature-strip__body h3 { font-size:1rem; margin-bottom:.4rem; }
+    .feature-strip__body p { font-size:.875rem; }
+
+    .steps-vertical { display:flex; flex-direction:column; gap:0; border:1px solid var(--border); }
+    .step-row { display:grid; grid-template-columns:80px 1fr; border-bottom:1px solid var(--border); }
+    .step-row:last-child { border-bottom:none; }
+    .step-row__num { background:var(--obsidian); display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-size:.8rem; color:var(--amber); font-weight:700; padding:2rem 1rem; border-right:1px solid var(--border); }
+    .step-row__body { padding:1.75rem 2rem; }
+    .step-row__body h3 { font-size:1rem; margin-bottom:.4rem; }
+    .step-row__body p { font-size:.875rem; }
+
+    .role-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:1.5rem; }
+    .role-card { background:var(--obsidian); border:1px solid var(--border); padding:1.75rem; }
+    .role-card__tag { font-family:var(--font-mono); font-size:.65rem; letter-spacing:.1em; text-transform:uppercase; color:var(--amber); margin-bottom:1rem; display:block; }
+    .role-card h4 { font-size:1rem; margin-bottom:.625rem; }
+    .role-card ul { margin-top:.75rem; display:flex; flex-direction:column; gap:.5rem; }
+    .role-card ul li { font-size:.825rem; color:var(--text-dim); padding-left:1rem; position:relative; }
+    .role-card ul li::before { content:'·'; position:absolute; left:0; color:var(--amber); }
+
+    .faq-pair { border:1px solid var(--border); margin-bottom:1rem; }
+    .faq-q { padding:1.25rem 1.5rem; font-weight:600; font-size:.95rem; cursor:default; display:flex; justify-content:space-between; align-items:center; }
+    .faq-a { padding:0 1.5rem 1.25rem; font-size:.875rem; color:var(--text-dim); line-height:1.75; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar" role="navigation" aria-label="Main navigation">
+  <input type="checkbox" id="nav-toggle" class="sr-only">
+  <div class="navbar__inner">
+    <a href="index.html" class="navbar__logo"><span class="navbar__logo-mark" aria-hidden="true">PN</span>Payniva</a>
+    <ul class="navbar__nav" role="list">
+      <li><a href="product.html">How It Works</a></li>
+      <li><a href="schools.html" class="active">For Schools</a></li>
+      <li><a href="organizations.html">For Organizations</a></li>
+      <li><a href="security.html">Security</a></li>
+      <li><a href="pricing.html">Pricing</a></li>
+    </ul>
+    <div class="navbar__actions">
+      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark mode">
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+      <a href="contact.html" class="btn btn-primary btn-sm">Get Started</a>
+    </div>
+    <label for="nav-toggle" class="navbar__toggle" aria-label="Toggle navigation"><span></span><span></span><span></span></label>
+  </div>
+</nav>
+
+<main>
+
+  <!-- HERO -->
+  <section class="hero bg-dots" aria-labelledby="schools-hero-heading">
+    <div class="container">
+      <div class="hero__grid">
+        <div class="hero__content">
+          <p class="hero__eyebrow">School Portal</p>
+          <h1 id="schools-hero-heading">No More Fee Counters.<br>No More Chasing Parents.</h1>
+          <p class="section-sub">Your finance team creates the bill. Parents pay from their phone, any bank app, or nearest ATM. You see the payment the moment it happens.</p>
+          <div class="hero__actions">
+            <a href="contact.html" class="btn btn-primary btn-lg">See It in Action</a>
+            <a href="pricing.html" class="btn btn-outline btn-lg">View Pricing</a>
+          </div>
+        </div>
+        <div class="hero__visual reveal-right">
+          <div class="fee-visual" role="img" aria-label="School fee dashboard overview">
+            <div class="fee-tile fee-tile--green">
+              <div class="fee-tile__label">Collected Today</div>
+              <div class="fee-tile__val">PKR 2,34,500</div>
+              <div class="fee-tile__sub">47 payments received</div>
+            </div>
+            <div class="fee-tile fee-tile--amber">
+              <div class="fee-tile__label">Still Pending</div>
+              <div class="fee-tile__val">PKR 1,12,000</div>
+              <div class="fee-tile__sub">23 students remaining</div>
+            </div>
+            <div class="fee-tile fee-tile--wide">
+              <div>
+                <div class="fee-tile__label">Latest Payment</div>
+                <div class="fee-tile__val">Sara Ahmed — PKR 18,500</div>
+                <div class="fee-tile__sub">2 minutes ago via HBL Mobile</div>
+              </div>
+              <span class="fee-badge fee-badge--paid">PAID</span>
+            </div>
+            <div class="fee-tile fee-tile--wide">
+              <div>
+                <div class="fee-tile__label">Upcoming</div>
+                <div class="fee-tile__val">Ali Hassan — PKR 15,000</div>
+                <div class="fee-tile__sub">Due 30 Apr 2026</div>
+              </div>
+              <span class="fee-badge fee-badge--due">DUE SOON</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS FOR SCHOOLS -->
+  <section class="bg-obsidian border-top border-bottom" aria-labelledby="school-steps-heading">
+    <div class="container">
+      <div class="section-header reveal-up">
+        <span class="section-label">How It Works</span>
+        <h2 id="school-steps-heading">From Posting a Fee to<br>Receiving the Money.</h2>
+        <p class="section-sub">Here's exactly what happens when you use Payniva for your school's fee collection.</p>
+      </div>
+      <div class="steps-vertical reveal-up">
+        <div class="step-row">
+          <div class="step-row__num">01</div>
+          <div class="step-row__body">
+            <h3>Your admin posts the fee bill</h3>
+            <p>A staff member logs into the School Portal, selects the student or class, enters the fee amount and due date, and saves it. That's the whole process on your end.</p>
+          </div>
+        </div>
+        <div class="step-row">
+          <div class="step-row__num">02</div>
+          <div class="step-row__body">
+            <h3>Payniva generates a payment voucher</h3>
+            <p>A unique voucher number is created for each fee bill. This number is what the parent uses when they go to pay — no app, no login, just their bank.</p>
+          </div>
+        </div>
+        <div class="step-row">
+          <div class="step-row__num">03</div>
+          <div class="step-row__body">
+            <h3>The parent pays at any bank</h3>
+            <p>The parent opens their bank app, visits an ATM, or walks into any bank branch. They enter the voucher number, confirm the amount, and pay. Done — in under two minutes.</p>
+          </div>
+        </div>
+        <div class="step-row">
+          <div class="step-row__num">04</div>
+          <div class="step-row__body">
+            <h3>Your portal updates in real time</h3>
+            <p>The moment the bank confirms the payment, your School Portal marks the fee as paid. You don't need to check with anyone or enter anything manually.</p>
+          </div>
+        </div>
+        <div class="step-row">
+          <div class="step-row__num">05</div>
+          <div class="step-row__body">
+            <h3>Reports are always ready</h3>
+            <p>At any time — daily, weekly, monthly — you can see who has paid, who hasn't, and how much has been collected in total. Export to a spreadsheet in one click.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section aria-labelledby="features-heading">
+    <div class="container">
+      <div class="section-header section-header--center reveal-up">
+        <span class="section-label">What You Get</span>
+        <h2 id="features-heading">Everything Your Finance Team<br>Actually Needs.</h2>
+      </div>
+      <div class="feature-strip stagger-children">
+        <div class="feature-strip__item">
+          <div class="feature-strip__icon">🧾</div>
+          <div class="feature-strip__body">
+            <h3>Post Any Type of Fee</h3>
+            <p>Tuition, transport, uniform, exam, hostel, activity — create any fee type and post bills for individual students or entire classes at once.</p>
+          </div>
+        </div>
+        <div class="feature-strip__item">
+          <div class="feature-strip__icon">🔔</div>
+          <div class="feature-strip__body">
+            <h3>See Who Hasn't Paid</h3>
+            <p>Your defaulter list updates automatically. No spreadsheets. No manual tracking. The portal shows exactly which students have outstanding fees.</p>
+          </div>
+        </div>
+        <div class="feature-strip__item">
+          <div class="feature-strip__icon">🎓</div>
+          <div class="feature-strip__body">
+            <h3>Scholarships &amp; Concessions</h3>
+            <p>Apply partial or full fee waivers to specific students. The discounted amount is reflected in the fee slip and reported separately.</p>
+          </div>
+        </div>
+        <div class="feature-strip__item">
+          <div class="feature-strip__icon">📄</div>
+          <div class="feature-strip__body">
+            <h3>Fee Slips on Demand</h3>
+            <p>Print or download a payment receipt for any student at any time. Parents can get their fee slip the moment payment is confirmed.</p>
+          </div>
+        </div>
+        <div class="feature-strip__item">
+          <div class="feature-strip__icon">📅</div>
+          <div class="feature-strip__body">
+            <h3>Late Fee Calculation</h3>
+            <p>Set a due date when you create the fee. After the due date, the system can automatically apply a late fee — you set the amount, it handles the rest.</p>
+          </div>
+        </div>
+        <div class="feature-strip__item">
+          <div class="feature-strip__icon">👥</div>
+          <div class="feature-strip__body">
+            <h3>Manage Your Team's Access</h3>
+            <p>Give different staff members access to only what they need. Finance staff see fee records. Admins see everything. Nobody sees more than they should.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WHO USES THE SCHOOL PORTAL -->
+  <section class="bg-obsidian border-top border-bottom" aria-labelledby="roles-heading">
+    <div class="container">
+      <div class="section-header reveal-up">
+        <span class="section-label">Staff Roles</span>
+        <h2 id="roles-heading">The Right Access for<br>Every Team Member.</h2>
+        <p class="section-sub">Each person on your team gets a role that matches what they do — nothing more, nothing less.</p>
+      </div>
+      <div class="role-cards stagger-children">
+        <div class="role-card">
+          <span class="role-card__tag">Finance Team</span>
+          <h4>Finance Manager</h4>
+          <p>The main person in charge of all fee operations for the school.</p>
+          <ul role="list">
+            <li>Post and manage all fee bills</li>
+            <li>View full payment history</li>
+            <li>Export monthly reports</li>
+            <li>Manage scholarships</li>
+          </ul>
+        </div>
+        <div class="role-card">
+          <span class="role-card__tag">Admin Staff</span>
+          <h4>School Administrator</h4>
+          <p>Oversees day-to-day school operations and needs access to financial summaries.</p>
+          <ul role="list">
+            <li>View dashboard &amp; reports</li>
+            <li>Check student payment status</li>
+            <li>Access fee slips</li>
+          </ul>
+        </div>
+        <div class="role-card">
+          <span class="role-card__tag">Cashier</span>
+          <h4>Front Desk / Cashier</h4>
+          <p>Handles day-to-day queries about payment status from parents.</p>
+          <ul role="list">
+            <li>Check if a specific fee is paid</li>
+            <li>Print fee slips for parents</li>
+            <li>View voucher numbers</li>
+          </ul>
+        </div>
+        <div class="role-card">
+          <span class="role-card__tag">Viewer</span>
+          <h4>Class Teacher</h4>
+          <p>Needs to know which students in their class have cleared dues.</p>
+          <ul role="list">
+            <li>View class-level fee status</li>
+            <li>See paid / unpaid counts</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section aria-labelledby="faq-heading">
+    <div class="container container--narrow">
+      <div class="section-header section-header--center reveal-up">
+        <span class="section-label">Common Questions</span>
+        <h2 id="faq-heading">Questions Schools Ask<br>Before Getting Started.</h2>
+      </div>
+      <div class="reveal-up">
+        <div class="faq-pair">
+          <div class="faq-q">Do parents need to download an app? <span>→</span></div>
+          <div class="faq-a">No. Parents use their existing bank app, internet banking, ATM, or a bank branch counter. There's nothing new to install or register for.</div>
+        </div>
+        <div class="faq-pair">
+          <div class="faq-q">How long does it take to get set up? <span>→</span></div>
+          <div class="faq-a">Most schools are up and running within a few days. Our team handles the registration on the payment network and walks your finance staff through the portal.</div>
+        </div>
+        <div class="faq-pair">
+          <div class="faq-q">What if a parent pays the wrong amount? <span>→</span></div>
+          <div class="faq-a">The payment voucher is tied to a specific amount. The bank will only accept the exact amount listed on the bill, so overpayment and underpayment are prevented automatically.</div>
+        </div>
+        <div class="faq-pair">
+          <div class="faq-q">Can we use this for a school network with multiple branches? <span>→</span></div>
+          <div class="faq-a">Yes. Each branch is set up as its own school in the system. All data stays separate between branches, but the managing organization can see everything from one place.</div>
+        </div>
+        <div class="faq-pair">
+          <div class="faq-q">Is the money deposited directly into our school's account? <span>→</span></div>
+          <div class="faq-a">Yes. Payments go through the national payment network and are settled into your school's designated bank account according to the settlement schedule.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA BAND -->
+  <div class="cta-band">
+    <div class="container">
+      <span class="section-label" style="justify-content:center;">Get Started</span>
+      <h2 class="reveal-up">Ready to modernize<br>your school's fee collection?</h2>
+      <p class="reveal-up" data-delay="0.1">Book a free demo and we'll show you the School Portal live, tailored to your institution's setup.</p>
+      <div class="reveal-up" data-delay="0.2">
+        <a href="contact.html" class="btn btn-primary btn-lg">Book a Free Demo</a>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer class="footer" role="contentinfo">
+  <div class="container">
+    <div class="footer__grid">
+      <div class="footer__brand">
+        <a href="index.html" class="navbar__logo"><span class="navbar__logo-mark" aria-hidden="true">PN</span>Payniva</a>
+        <p>Payment collection platform for schools and organizations in Pakistan. Connected to the national 1LINK payment network.</p>
+      </div>
+      <div class="footer__col"><h5>Solutions</h5><ul role="list"><li><a href="schools.html">For Schools</a></li><li><a href="organizations.html">For Organizations</a></li><li><a href="pricing.html">Pricing</a></li><li><a href="contact.html">Get Started</a></li></ul></div>
+      <div class="footer__col"><h5>Platform</h5><ul role="list"><li><a href="product.html">How It Works</a></li><li><a href="security.html">Security &amp; Privacy</a></li><li><a href="integration.html">API Access</a></li><li><a href="docs.html">Documentation</a></li></ul></div>
+      <div class="footer__col"><h5>Company</h5><ul role="list"><li><a href="contact.html">Contact Us</a></li><li><a href="#">Privacy Policy</a></li><li><a href="#">Terms of Service</a></li></ul></div>
+    </div>
+    <div class="footer__bottom"><p>&copy; 2026 Payniva. All rights reserved.</p><span class="footer__badge">1LINK INTEGRATED</span></div>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+<script src="assets/js/animations.js" defer></script>
+</body>
+</html>

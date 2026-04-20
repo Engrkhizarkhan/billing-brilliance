@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Access — Connect Your System to Payniva</title>
+  <meta name="description" content="Connect your existing software to Payniva and accept payments from every bank in Pakistan. No technical complexity for end users.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://payniva.io/integration.html">
+  <meta property="og:title" content="API Access — Payniva">
+  <meta property="og:description" content="Connect your existing system to Payniva and start accepting payments through Pakistan's national payment network.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://payniva.io/integration.html">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/components.css">
+  <link rel="stylesheet" href="assets/css/animations.css">
+  <script src="assets/js/theme.js"></script>
+</head>
+<body>
+
+<nav class="navbar" role="navigation" aria-label="Main navigation">
+  <input type="checkbox" id="nav-toggle" class="sr-only">
+  <div class="navbar__inner">
+    <a href="index.html" class="navbar__logo"><span class="navbar__logo-mark" aria-hidden="true">PN</span>Payniva</a>
+    <ul class="navbar__nav" role="list">
+      <li><a href="product.html">How It Works</a></li>
+      <li><a href="schools.html">For Schools</a></li>
+      <li><a href="organizations.html">For Organizations</a></li>
+      <li><a href="security.html">Security</a></li>
+      <li><a href="pricing.html">Pricing</a></li>
+    </ul>
+    <div class="navbar__actions">
+      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark mode">
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+      <a href="contact.html" class="btn btn-primary btn-sm">Get Started</a>
+    </div>
+    <label for="nav-toggle" class="navbar__toggle" aria-label="Toggle navigation"><span></span><span></span><span></span></label>
+  </div>
+</nav>
+
+<main>
+
+  <!-- HERO -->
+  <section class="hero hero--center bg-dots" aria-labelledby="int-heading">
+    <div class="container">
+      <p class="hero__eyebrow">API Access</p>
+      <h1 id="int-heading">Connect Your System.<br>Accept Payments Everywhere.</h1>
+      <p class="section-sub">If your organization already has its own software, Payniva can connect to it. Your applicants and customers can pay from any bank in Pakistan — ATM, mobile app, internet banking, or over the counter.</p>
+      <div class="hero__actions">
+        <a href="docs.html" class="btn btn-primary">View Documentation</a>
+        <a href="contact.html" class="btn btn-outline">Talk to Our Team</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- INTEGRATION ARCHITECTURE -->
+  <section class="bg-obsidian border-top border-bottom" aria-labelledby="arch-heading">
+    <div class="container">
+      <div class="section-header section-header--center reveal-up">
+        <span class="section-label">Architecture</span>
+        <h2 id="arch-heading">Integration Architecture</h2>
+      </div>
+      <div class="arch-diagram reveal-up" role="img" aria-label="Integration architecture from Payniva through 1LINK to banking channels">
+        <div class="arch-label">Your Portals</div>
+        <div class="arch-row">
+          <div class="arch-box arch-box--amber">School Portal</div>
+          <div class="arch-arrow">·</div>
+          <div class="arch-box arch-box--green">Organization Portal</div>
+        </div>
+        <span class="arch-arrow--vert">↕</span>
+        <div class="arch-label">Payniva Secure Payment Layer</div>
+        <div class="arch-row">
+          <div class="arch-box arch-box--amber" style="min-width:380px;">Payniva — Verified, Secure, Connected</div>
+        </div>
+        <span class="arch-arrow--vert">↕</span>
+        <div class="arch-label">Pakistan's National Payment Network</div>
+        <div class="arch-row">
+          <div class="arch-box">1LINK Gateway</div>
+          <div class="arch-arrow">↔</div>
+          <div class="arch-box">1BILL Aggregator</div>
+        </div>
+        <span class="arch-arrow--vert">↕</span>
+        <div class="arch-label">Banking Channels</div>
+        <div class="arch-row">
+          <div class="arch-box">ATM</div>
+          <div class="arch-arrow">·</div>
+          <div class="arch-box">OTC / Agents</div>
+          <div class="arch-arrow">·</div>
+          <div class="arch-box">Internet Banking</div>
+          <div class="arch-arrow">·</div>
+          <div class="arch-box">Mobile Banking</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CAPABILITIES -->
+  <section aria-labelledby="cap-heading">
+    <div class="container">
+      <div class="section-header reveal-up">
+        <span class="section-label">What the Connection Does</span>
+        <h2 id="cap-heading">Four Things Payniva<br>Does for Your System</h2>
+      </div>
+      <div class="cards-grid stagger-children" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));">
+        <div class="card">
+          <div class="card__icon">01</div>
+          <div class="card__title">Create a Payment Request</div>
+          <p class="card__text">Your system sends us a person's name and the amount due. Payniva creates a payment voucher they can use at any bank to pay.</p>
+        </div>
+        <div class="card">
+          <div class="card__icon">02</div>
+          <div class="card__title">Check Payment Status</div>
+          <p class="card__text">At any time, your system can ask Payniva whether a specific payment has been made. You get a clear Paid / Unpaid answer.</p>
+        </div>
+        <div class="card">
+          <div class="card__icon">03</div>
+          <div class="card__title">Receive Payment Confirmation</div>
+          <p class="card__text">The moment a payment goes through at any bank, Payniva automatically notifies your system. No manual checking needed.</p>
+        </div>
+        <div class="card">
+          <div class="card__icon">04</div>
+          <div class="card__title">Track Payment History</div>
+          <p class="card__text">Your system can pull a list of all payments — who paid, how much, when, and through which bank — at any time.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- NETWORK SECURITY -->
+  <section class="bg-obsidian border-top border-bottom" aria-labelledby="netsec-heading">
+    <div class="container">
+      <div class="section-header reveal-up">
+        <span class="section-label">Built on Pakistan's National Standard</span>
+        <h2 id="netsec-heading">Connected Through<br>Pakistan's National Payment Network</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:3rem;" class="stagger-children">
+        <div>
+          <div class="checklist">
+            <div class="checklist__item">All connections are fully encrypted — data cannot be intercepted in transit</div>
+            <div class="checklist__item">Every payment confirmation is verified before being recorded</div>
+            <div class="checklist__item">Only approved banking network servers can send payment data</div>
+            <div class="checklist__item">Each payment has a unique reference that cannot be duplicated</div>
+            <div class="checklist__item">The same payment cannot be recorded twice, even if the network sends it twice</div>
+            <div class="checklist__item">Full sandbox testing completed before any live payments are processed</div>
+          </div>
+        </div>
+        <div class="callout">
+          <span class="callout__label">1LINK National Payment Network</span>
+          <p style="margin-bottom:1rem;">Payniva is built on 1LINK — Pakistan's national interbank payment network. Payments made through Payniva vouchers are processed through the same infrastructure used by major banks, ATM networks, and mobile banking apps across Pakistan.</p>
+          <a href="security.html" class="btn btn-outline btn-sm">View Security Details</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <div class="cta-band">
+    <div class="container">
+      <h2 class="reveal-up">Ready to connect your system?</h2>
+      <p class="reveal-up" data-delay="0.1">Our team will walk you through the setup, answer technical questions, and support you all the way to your first live payment.</p>
+      <div class="reveal-up" data-delay="0.2"><a href="contact.html" class="btn btn-primary btn-lg">Contact Our Team</a></div>
+    </div>
+  </div>
+
+</main>
+
+<footer class="footer" role="contentinfo">
+  <div class="container">
+    <div class="footer__grid">
+      <div class="footer__brand">
+        <a href="index.html" class="navbar__logo"><span class="navbar__logo-mark" aria-hidden="true">PN</span>Payniva</a>
+        <p>Payment collection platform for schools and organizations in Pakistan. Connected to the national 1LINK payment network.</p>
+      </div>
+      <div class="footer__col"><h5>Solutions</h5><ul role="list"><li><a href="schools.html">For Schools</a></li><li><a href="organizations.html">For Organizations</a></li><li><a href="pricing.html">Pricing</a></li><li><a href="contact.html">Get Started</a></li></ul></div>
+      <div class="footer__col"><h5>Platform</h5><ul role="list"><li><a href="product.html">How It Works</a></li><li><a href="security.html">Security &amp; Privacy</a></li><li><a href="integration.html">API Access</a></li><li><a href="docs.html">Documentation</a></li></ul></div>
+      <div class="footer__col"><h5>Company</h5><ul role="list"><li><a href="contact.html">Contact Us</a></li><li><a href="#">Privacy Policy</a></li><li><a href="#">Terms of Service</a></li></ul></div>
+    </div>
+    <div class="footer__bottom"><p>&copy; 2026 Payniva. All rights reserved.</p><span class="footer__badge">1LINK INTEGRATED</span></div>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+<script src="assets/js/animations.js" defer></script>
+</body>
+</html>

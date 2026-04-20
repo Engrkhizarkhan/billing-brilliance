@@ -10,8 +10,8 @@ import { formatPKR } from '@/lib/formatters';
 const CHART_COLORS = ['hsl(221, 83%, 53%)', 'hsl(160, 84%, 39%)', 'hsl(38, 92%, 50%)', 'hsl(271, 55%, 55%)', 'hsl(0, 72%, 51%)'];
 
 const SchoolReports = () => {
-  const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({}), []);
-  const { data: invoicesData, loading: li } = useApiQuery(() => api.fetchInvoices({}), []);
+  const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({ pageSize: 9999 }), []);
+  const { data: invoicesData, loading: li } = useApiQuery(() => api.fetchInvoices({ pageSize: 9999 }), []);
   const { data: statsData, loading: lStats } = useApiQuery(() => api.getDashboardStats(), []);
   const { data: monthlyTrendData, loading: lTrend } = useApiQuery(() => api.getMonthlyTrend(), []);
   const { data: feeByPlanData, loading: lFee } = useApiQuery(() => api.getCollectionByFeePlan(), []);

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Control Panel — Payniva</title>
+  <meta name="description" content="The Payniva Admin Portal is your multi-tenant command center. Manage billers, users, platform-wide transactions, and audit events across all tenants.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://payniva.io/admin.html">
+  <meta property="og:title" content="Admin Control Panel — Payniva">
+  <meta property="og:description" content="Multi-tenant platform administration. Manage billers, users, API sandbox, and full audit trail across all school and ETEA tenants.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://payniva.io/admin.html">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/components.css">
+  <link rel="stylesheet" href="assets/css/animations.css">
+</head>
+<body>
+
+<nav class="navbar" role="navigation" aria-label="Main navigation">
+  <input type="checkbox" id="nav-toggle" class="sr-only">
+  <div class="navbar__inner">
+    <a href="index.html" class="navbar__logo"><span class="navbar__logo-mark">PN</span>Payniva</a>
+    <ul class="navbar__nav" role="list">
+      <li><a href="product.html">Product</a></li>
+      <li><a href="schools.html">Schools</a></li>
+      <li><a href="etea.html">ETEA</a></li>
+      <li><a href="how-it-works.html">How It Works</a></li>
+      <li><a href="integration.html">Integration</a></li>
+      <li><a href="docs.html">Docs</a></li>
+      <li><a href="pricing.html">Pricing</a></li>
+    </ul>
+    <div class="navbar__actions"><a href="contact.html" class="btn btn-primary btn-sm">Get Started</a></div>
+    <label for="nav-toggle" class="navbar__toggle"><span></span><span></span><span></span></label>
+  </div>
+</nav>
+
+<main>
+
+  <!-- HERO -->
+  <section class="hero hero--center bg-dots" aria-labelledby="admin-heading">
+    <div class="container">
+      <p class="hero__eyebrow">Admin Portal</p>
+      <h1 id="admin-heading">The Multi-Tenant<br>Command Center.</h1>
+      <p class="section-sub">Full visibility and control across every biller, tenant, user, and transaction on the platform. One login, every lever.</p>
+      <div class="hero__actions">
+        <a href="contact.html" class="btn btn-primary">Request a Demo</a>
+        <a href="security.html" class="btn btn-outline">Security &amp; Compliance</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- CAPABILITIES -->
+  <section class="bg-obsidian border-top border-bottom" aria-labelledby="cap-heading">
+    <div class="container">
+      <div class="section-header reveal-up">
+        <span class="section-label">Admin Capabilities</span>
+        <h2 id="cap-heading">What the Platform Admin Controls</h2>
+      </div>
+      <div class="cards-grid stagger-children" style="grid-template-columns:repeat(auto-fit,minmax(270px,1fr));">
+        <div class="card card--amber">
+          <div class="card__title">Biller Lifecycle Management</div>
+          <p class="card__text">Create, update, suspend, or ban billers. Unique biller codes are auto-generated and linked to their 1BILL registration.</p>
+        </div>
+        <div class="card card--amber">
+          <div class="card__title">User &amp; Role Management</div>
+          <p class="card__text">Create users with specific roles and optional tenant references. Ban, unban, and manage email verification states.</p>
+        </div>
+        <div class="card card--amber">
+          <div class="card__title">Platform Transaction Monitor</div>
+          <p class="card__text">Search, filter, and inspect every transaction across all tenants by status, amount, date, and payment channel.</p>
+        </div>
+        <div class="card card--amber">
+          <div class="card__title">Platform-Wide Audit Log</div>
+          <p class="card__text">Every mutation logged with timestamp, actor, action type, tenant, and IP address. Immutable and exportable.</p>
+        </div>
+        <div class="card card--amber">
+          <div class="card__title">API Sandbox</div>
+          <p class="card__text">Test BillInquiry, BillPayment, and callback flows against the 1LINK specification without touching production data.</p>
+        </div>
+        <div class="card card--amber">
+          <div class="card__title">Real-Time Payment Visibility</div>
+          <p class="card__text">Live feed of incoming payment callbacks across all tenants with status, channel, amount, and tenant context.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BILLER LIFECYCLE -->
+  <section aria-labelledby="biller-heading">
+    <div class="container">
+      <div class="section-header reveal-up">
+        <span class="section-label">Biller States</span>
+        <h2 id="biller-heading">Biller Lifecycle Diagram</h2>
+        <p class="section-sub">Every biller on the platform moves through a defined set of states — all transitions are audited.</p>
+      </div>
+      <div class="flow-diagram reveal-up" role="img" aria-label="Biller lifecycle states">
+        <div class="flow-step"><div class="flow-step__box"><span class="flow-step__num">STATE</span>Created<br><span class="badge badge--active" style="margin-top:0.375rem;display:inline-flex;">New</span></div></div>
+        <div class="flow-step"><div class="flow-step__box"><span class="flow-step__num">STATE</span>Active<br><span class="badge badge--paid" style="margin-top:0.375rem;display:inline-flex;">Live</span></div></div>
+        <div class="flow-step"><div class="flow-step__box"><span class="flow-step__num">STATE</span>Suspended<br><span class="badge badge--pending" style="margin-top:0.375rem;display:inline-flex;">Paused</span></div></div>
+        <div class="flow-step"><div class="flow-step__box"><span class="flow-step__num">STATE</span>Banned<br><span class="badge badge--failed" style="margin-top:0.375rem;display:inline-flex;">Blocked</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AUDIT LOG PREVIEW -->
+  <section class="bg-obsidian border-top border-bottom" aria-labelledby="audit-heading">
+    <div class="container">
+      <div class="section-header reveal-up">
+        <span class="section-label">Audit Trail</span>
+        <h2 id="audit-heading">Every Action, Logged.</h2>
+        <p class="section-sub">An immutable log of every platform operation — who did what, when, from where, and against which tenant.</p>
+      </div>
+      <div class="table-wrapper reveal-up">
+        <table class="data-table" aria-label="Sample audit log entries">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Actor</th>
+              <th>Action</th>
+              <th>Tenant</th>
+              <th>IP Address</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-size:0.75rem;">2026-04-20 08:42:11</td>
+              <td>admin@payniva.io</td>
+              <td>BILLER_CREATED · BLR-00041</td>
+              <td>Platform</td>
+              <td style="font-family:var(--font-mono);font-size:0.75rem;">203.81.12.4</td>
+              <td><span class="badge badge--paid">OK</span></td>
+            </tr>
+            <tr>
+              <td style="font-size:0.75rem;">2026-04-20 08:39:05</td>
+              <td>school@beacon-edu.pk</td>
+              <td>INVOICE_ISSUED · INV-2026-0041</td>
+              <td>Beacon School</td>
+              <td style="font-family:var(--font-mono);font-size:0.75rem;">182.191.44.12</td>
+              <td><span class="badge badge--paid">OK</span></td>
+            </tr>
+            <tr>
+              <td style="font-size:0.75rem;">2026-04-20 08:31:47</td>
+              <td>etea-ops@kpk.gov.pk</td>
+              <td>PAYMENT_CREATED · APP-2026-04192</td>
+              <td>ETEA-KPK</td>
+              <td style="font-family:var(--font-mono);font-size:0.75rem;">39.48.201.7</td>
+              <td><span class="badge badge--paid">OK</span></td>
+            </tr>
+            <tr>
+              <td style="font-size:0.75rem;">2026-04-20 08:22:00</td>
+              <td>admin@payniva.io</td>
+              <td>USER_SUSPENDED · USR-00198</td>
+              <td>Platform</td>
+              <td style="font-family:var(--font-mono);font-size:0.75rem;">203.81.12.4</td>
+              <td><span class="badge badge--pending">Warn</span></td>
+            </tr>
+            <tr>
+              <td style="font-size:0.75rem;">2026-04-20 07:58:33</td>
+              <td>finance@city-school.pk</td>
+              <td>LEDGER_EXPORT · Q1-2026</td>
+              <td>City School</td>
+              <td style="font-family:var(--font-mono);font-size:0.75rem;">110.37.98.21</td>
+              <td><span class="badge badge--paid">OK</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- USER ROLES TABLE -->
+  <section aria-labelledby="roles-heading">
+    <div class="container">
+      <div class="section-header reveal-up">
+        <span class="section-label">Access Control</span>
+        <h2 id="roles-heading">Platform Role Definitions</h2>
+        <p class="section-sub">Each role is scoped — either to the entire platform, or to a single tenant.</p>
+      </div>
+      <div class="table-wrapper reveal-up">
+        <table class="data-table" aria-label="Platform role definitions">
+          <thead>
+            <tr>
+              <th>Role</th>
+              <th>Scope</th>
+              <th>Can Manage Users</th>
+              <th>Cross-Tenant Access</th>
+              <th>API Sandbox</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Platform Admin</td><td>Entire platform</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td><td><span class="check">✓</span></td></tr>
+            <tr><td>School Admin</td><td>Single school tenant</td><td><span class="check">Within tenant</span></td><td class="dash">—</td><td class="dash">—</td></tr>
+            <tr><td>Finance Manager</td><td>Single school tenant</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+            <tr><td>School Staff</td><td>Single school tenant</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+            <tr><td>Viewer</td><td>Single school tenant</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+            <tr><td>ETEA Admin</td><td>Single ETEA tenant</td><td><span class="check">Within tenant</span></td><td class="dash">—</td><td class="dash">—</td></tr>
+            <tr><td>ETEA Operations</td><td>Single ETEA tenant</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <div class="cta-band">
+    <div class="container">
+      <h2 class="reveal-up">Need full platform control?</h2>
+      <p class="reveal-up" data-delay="0.1">Talk to us about onboarding your institution as a platform operator with full admin capabilities.</p>
+      <div class="reveal-up" data-delay="0.2"><a href="contact.html" class="btn btn-primary btn-lg">Get in Touch</a></div>
+    </div>
+  </div>
+
+</main>
+
+<footer class="footer" role="contentinfo">
+  <div class="container">
+    <div class="footer__grid">
+      <div class="footer__brand"><a href="index.html" class="navbar__logo"><span class="navbar__logo-mark">PN</span>Payniva</a><p>Multi-tenant education payment operating system. Built on 1LINK/1BILL rails.</p></div>
+      <div class="footer__col"><h5>Product</h5><ul role="list"><li><a href="product.html">Overview</a></li><li><a href="schools.html">For Schools</a></li><li><a href="etea.html">For ETEA</a></li><li><a href="admin.html">Admin Portal</a></li></ul></div>
+      <div class="footer__col"><h5>Developers</h5><ul role="list"><li><a href="how-it-works.html">How It Works</a></li><li><a href="integration.html">1LINK Integration</a></li><li><a href="security.html">Security</a></li><li><a href="docs.html">Documentation</a></li></ul></div>
+      <div class="footer__col"><h5>Company</h5><ul role="list"><li><a href="pricing.html">Pricing</a></li><li><a href="contact.html">Contact</a></li><li><a href="#">Privacy Policy</a></li><li><a href="#">Terms of Service</a></li></ul></div>
+    </div>
+    <div class="footer__bottom"><p>© 2026 Payniva. All rights reserved.</p><span class="footer__badge">1LINK INTEGRATED</span></div>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+<script src="assets/js/copy-code.js" defer></script>
+<script src="assets/js/animations.js" defer></script>
+</body>
+</html>

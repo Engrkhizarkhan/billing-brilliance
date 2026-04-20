@@ -123,6 +123,8 @@ const deleteFeePlan = async (req, res, next) => {
     );
     if (!existing.length) return res.status(404).json({ message: 'Fee plan not found' });
     await pool.query('UPDATE fee_plans SET deleted_at = NOW() WHERE id = ?', [id]);
+    // Remove all assignments for this fee plan so students no longer show it in payment programs
+    await pool.query('DELETE FROM payment_plan_assignments WHERE fee_plan_id = ?', [id]);
     await auditLog(req, 'delete', 'fee_plan', id, `Fee plan ${existing[0].name} deleted`);
     res.json({ message: 'Fee plan deleted' });
   } catch (err) {
@@ -430,7 +432,7 @@ const createPaymentPlanAssignment = async (req, res, next) => {
     }
 
     const [students] = await pool.query(
-      'SELECT id, name, bill_id FROM students WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL',
+      'SELECT id, name, bill_id, consumer_number FROM students WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL',
       [studentId, tenantId]
     );
     if (students.length === 0) throw new AppError('Student not found', 404);
@@ -505,6 +507,16 @@ const createPaymentPlanAssignment = async (req, res, next) => {
         [ledgerEntryId, tenantId, studentId, resolvedAssignedDate, plans[0].name, chargeAmount, newBalance, students[0].bill_id]
       );
       await pool.query('UPDATE students SET balance = balance + ? WHERE id = ?', [chargeAmount, studentId]);
+
+      // Create an invoice for this charge so it appears in the invoice list
+      const [invCountRows] = await pool.query('SELECT COUNT(*) as total FROM invoices WHERE tenant_id = ?', [tenantId]);
+      const invoiceNumber = `INV-${String(10001 + invCountRows[0].total)}`;
+      const invoiceId = uuidv4();
+      await pool.query(
+        `INSERT INTO invoices (id, tenant_id, invoice_number, student_id, fee_plan_id, student_name, consumer_number, month, amount, late_fee, status, due_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'pending', ?)`,
+        [invoiceId, tenantId, invoiceNumber, studentId, feePlanId, students[0].name, students[0].consumer_number, resolvedAssignedDate.slice(0, 7), chargeAmount, resolvedAssignedDate]
+      );
     }
 
     await auditLog(req, 'create', 'payment_plan_assignment', id, `${students[0].name} assigned ${plans[0].name}`);

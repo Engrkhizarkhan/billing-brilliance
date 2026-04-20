@@ -41,8 +41,8 @@ const InvoiceList = () => {
     }
   };
 
-  const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({}), []);
-  const { data: invoicesData, loading: li, refetch: refetchInvoices } = useApiQuery(() => api.fetchInvoices({}), [paymentVersion]);
+  const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({ pageSize: 9999 }), []);
+  const { data: invoicesData, loading: li, refetch: refetchInvoices } = useApiQuery(() => api.fetchInvoices({ pageSize: 9999 }), [paymentVersion]);
   const students = useMemo(() => (studentsData || []) as Student[], [studentsData]);
   const invoices = useMemo(() => (invoicesData || []) as Invoice[], [invoicesData]);
   const loading = ls || li;
@@ -51,7 +51,7 @@ const InvoiceList = () => {
     setGenerating(true);
     try {
       const result = await api.generateInvoices({ month: genMonth });
-      const { created, skipped } = result as unknown as { created: number; skipped: number };
+      const { created, skipped } = result.data as { created: number; skipped: number };
       toast.success(`Generated ${created} invoice${created !== 1 ? 's' : ''} for ${genMonth}${skipped > 0 ? ` (${skipped} skipped — already existed)` : ''}`);
       setGenDialogOpen(false);
       refetchInvoices();

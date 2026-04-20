@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payniva — Collect School Fees &amp; Payments Through Any Bank in Pakistan</title>
+  <meta name="description" content="Payniva helps schools and organizations collect payments through every bank in Pakistan — no cash, no manual work. Parents pay from their phone, you see it instantly.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://payniva.io/">
+  <meta property="og:title" content="Payniva — Collect Payments Through Any Bank in Pakistan">
+  <meta property="og:description" content="Schools and organizations use Payniva to issue bills and collect fees through Pakistan's national payment network. Real-time, automatic, reliable.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://payniva.io/">
+  <meta property="og:site_name" content="Payniva">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/components.css">
+  <link rel="stylesheet" href="assets/css/animations.css">
+  <script src="assets/js/theme.js"></script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "Payniva",
+    "url": "https://payniva.io",
+    "description": "Payment collection platform for schools and organizations in Pakistan, connected to the national 1LINK payment network.",
+    "serviceType": "Payment Processing"
+  }
+  </script>
+  <style>
+    .pay-illustration { display:flex; flex-direction:column; gap:1rem; max-width:420px; }
+    .pay-card { background:var(--obsidian); border:1px solid var(--border); padding:1.5rem; }
+    .pay-card__header { display:flex; align-items:center; gap:0.75rem; margin-bottom:1.25rem; padding-bottom:1rem; border-bottom:1px solid var(--border); }
+    .pay-card__icon { width:36px; height:36px; background:rgba(201,151,58,.12); border:1px solid rgba(201,151,58,.25); display:flex; align-items:center; justify-content:center; font-size:1rem; flex-shrink:0; }
+    .pay-card__school { font-family:var(--font-heading); font-weight:600; font-size:.9rem; color:var(--warm-white); }
+    .pay-card__type { font-size:.75rem; color:var(--text-dim); margin-top:2px; }
+    .pay-card__row { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:.6rem; }
+    .pay-card__label { font-size:.8rem; color:var(--text-dim); }
+    .pay-card__val { font-family:var(--font-mono); font-size:.85rem; color:var(--warm-white); }
+    .pay-card__amount { font-family:var(--font-mono); font-size:1.5rem; font-weight:700; color:var(--amber); margin:1rem 0; }
+    .pay-card__action { display:flex; align-items:center; justify-content:center; gap:.5rem; padding:.625rem 1rem; background:var(--amber); color:var(--obsidian); font-family:var(--font-heading); font-weight:600; font-size:.875rem; width:100%; border:none; cursor:default; }
+    .pay-card__networks { display:flex; gap:.5rem; margin-top:.75rem; flex-wrap:wrap; }
+    .pay-card__net { font-size:.7rem; font-family:var(--font-mono); border:1px solid var(--border-light); color:var(--text-dim); padding:.2rem .5rem; }
+    .pay-status-card { background:var(--obsidian); border:1px solid var(--green); padding:1rem 1.5rem; display:flex; align-items:center; gap:1rem; }
+    .pay-status-dot { width:10px; height:10px; background:var(--green); border-radius:50%; flex-shrink:0; animation:pulse-dot 2s infinite; }
+    @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .pay-status-text { font-size:.875rem; color:var(--warm-white); }
+    .pay-status-sub { font-size:.75rem; color:var(--text-dim); font-family:var(--font-mono); }
+    .benefit-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:1.5rem; margin-top:3rem; }
+    .benefit-card { background:var(--obsidian); border:1px solid var(--border); padding:2rem; transition:border-color var(--transition); }
+    .benefit-card:hover { border-color:var(--border-light); }
+    .benefit-card__icon { width:44px; height:44px; background:rgba(201,151,58,.1); border:1px solid rgba(201,151,58,.2); display:flex; align-items:center; justify-content:center; font-size:1.25rem; margin-bottom:1.25rem; }
+    .benefit-card h3 { font-size:1.05rem; margin-bottom:.5rem; }
+    .benefit-card p { font-size:.875rem; line-height:1.7; }
+    .audience-grid { display:grid; grid-template-columns:1fr 1fr; gap:2rem; }
+    @media(max-width:768px){.audience-grid{grid-template-columns:1fr;}}
+    .audience-card { border:1px solid var(--border); padding:2.5rem; position:relative; overflow:hidden; }
+    .audience-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; }
+    .audience-card--school::before { background:var(--amber); }
+    .audience-card--org::before { background:var(--blue); }
+    .audience-card__num { font-family:var(--font-mono); font-size:.7rem; color:var(--text-dim); letter-spacing:.1em; margin-bottom:1.25rem; }
+    .audience-card ul { margin-top:1.25rem; display:flex; flex-direction:column; gap:.6rem; }
+    .audience-card ul li { font-size:.875rem; color:var(--text-dim); padding-left:1.25rem; position:relative; }
+    .audience-card ul li::before { content:'→'; position:absolute; left:0; color:var(--amber); font-size:.75rem; }
+    .audience-card .btn { margin-top:1.75rem; }
+    .simple-steps { display:grid; grid-template-columns:repeat(3,1fr); gap:0; border:1px solid var(--border); }
+    @media(max-width:640px){.simple-steps{grid-template-columns:1fr;}}
+    .simple-step { padding:2.5rem 2rem; border-right:1px solid var(--border); }
+    .simple-step:last-child { border-right:none; }
+    @media(max-width:640px){.simple-step{border-right:none;border-bottom:1px solid var(--border);}}
+    .simple-step__num { font-family:var(--font-mono); font-size:.7rem; color:var(--amber); letter-spacing:.1em; margin-bottom:1rem; display:block; }
+    .simple-step h3 { font-size:1.05rem; margin-bottom:.625rem; }
+    .simple-step p { font-size:.875rem; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar" role="navigation" aria-label="Main navigation">
+  <input type="checkbox" id="nav-toggle" class="sr-only">
+  <div class="navbar__inner">
+    <a href="index.html" class="navbar__logo" aria-label="Payniva — Home">
+      <span class="navbar__logo-mark" aria-hidden="true">PN</span>Payniva
+    </a>
+    <ul class="navbar__nav" role="list">
+      <li><a href="product.html">How It Works</a></li>
+      <li><a href="schools.html">For Schools</a></li>
+      <li><a href="organizations.html">For Organizations</a></li>
+      <li><a href="security.html">Security</a></li>
+      <li><a href="pricing.html">Pricing</a></li>
+    </ul>
+    <div class="navbar__actions">
+      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark mode">
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+      <a href="contact.html" class="btn btn-primary btn-sm">Get Started</a>
+    </div>
+    <label for="nav-toggle" class="navbar__toggle" aria-label="Toggle navigation">
+      <span></span><span></span><span></span>
+    </label>
+  </div>
+</nav>
+
+<main>
+
+  <!-- HERO -->
+  <section class="hero bg-dots" aria-labelledby="hero-heading">
+    <div class="container">
+      <div class="hero__grid">
+        <div class="hero__content">
+          <p class="hero__eyebrow">Pakistan's School &amp; Organization Payment Platform</p>
+          <h1 id="hero-heading">Collect Fees &amp; Payments<br>Through Every Bank.</h1>
+          <p class="section-sub">Schools create a bill. Parents pay from their phone, bank app, or ATM. The payment shows up in your dashboard — automatically, instantly, with no manual work.</p>
+          <div class="hero__actions">
+            <a href="contact.html" class="btn btn-primary btn-lg">Book a Free Demo</a>
+            <a href="product.html" class="btn btn-outline btn-lg">See How It Works</a>
+          </div>
+        </div>
+        <div class="hero__visual reveal-right">
+          <div class="pay-illustration" role="img" aria-label="Fee payment notification example">
+            <div class="pay-card">
+              <div class="pay-card__header">
+                <div class="pay-card__icon">🏫</div>
+                <div>
+                  <div class="pay-card__school">Beacon House School</div>
+                  <div class="pay-card__type">Spring 2026 — Fee Notice</div>
+                </div>
+              </div>
+              <div class="pay-card__row"><span class="pay-card__label">Student</span><span class="pay-card__val">Sara Ahmed</span></div>
+              <div class="pay-card__row"><span class="pay-card__label">Fee Type</span><span class="pay-card__val">Tuition + Transport</span></div>
+              <div class="pay-card__row"><span class="pay-card__label">Due Date</span><span class="pay-card__val">30 Apr 2026</span></div>
+              <div class="pay-card__amount">PKR 18,500</div>
+              <div class="pay-card__action">Pay via Any Bank →</div>
+              <div class="pay-card__networks">
+                <span class="pay-card__net">Internet Banking</span>
+                <span class="pay-card__net">Mobile App</span>
+                <span class="pay-card__net">ATM</span>
+                <span class="pay-card__net">OTC</span>
+              </div>
+            </div>
+            <div class="pay-status-card">
+              <div class="pay-status-dot"></div>
+              <div>
+                <div class="pay-status-text">Payment Confirmed</div>
+                <div class="pay-status-sub">PKR 18,500 · Today 10:42 AM · HBL</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TICKER -->
+  <div class="ticker" aria-hidden="true">
+    <div class="ticker__track">
+      <span class="ticker__item">Pay from any bank in Pakistan</span>
+      <span class="ticker__item">Real-time payment confirmation</span>
+      <span class="ticker__item">No cash handling</span>
+      <span class="ticker__item">Every bank &amp; ATM supported</span>
+      <span class="ticker__item">Automatic receipt generation</span>
+      <span class="ticker__item">Monthly fee reports</span>
+      <span class="ticker__item">Track who has paid and who hasn't</span>
+      <span class="ticker__item">Scholarship &amp; concession management</span>
+      <span class="ticker__item">Organizations connect via secure link</span>
+      <span class="ticker__item">Payment history always available</span>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="stat-bar">
+    <div class="container">
+      <div class="stat-bar__grid">
+        <div class="stat-item"><span class="stat-item__number">2</span><span class="stat-item__label">Portals (School &amp; Org)</span></div>
+        <div class="stat-item"><span class="stat-item__number">1LINK</span><span class="stat-item__label">National Payment Network</span></div>
+        <div class="stat-item"><span class="stat-item__number">30+</span><span class="stat-item__label">Banks &amp; Channels</span></div>
+        <div class="stat-item"><span class="stat-item__number">Real-Time</span><span class="stat-item__label">Payment Updates</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- WHO IT'S FOR -->
+  <section aria-labelledby="audience-heading">
+    <div class="container">
+      <div class="section-header reveal-up">
+        <span class="section-label">Who We Serve</span>
+        <h2 id="audience-heading">Built for Two Types<br>of Institutions.</h2>
+        <p class="section-sub">Whether you run a school network or an organization that needs to collect payments — Payniva has a dedicated portal for you.</p>
+      </div>
+      <div class="audience-grid stagger-children">
+        <article class="audience-card audience-card--school">
+          <p class="audience-card__num">01 / SCHOOLS</p>
+          <h3>School Portal</h3>
+          <p>For schools, colleges, and educational institutions. Your finance team creates the bills — parents pay from wherever is convenient for them.</p>
+          <ul role="list">
+            <li>Post term fees, transport, uniform &amp; more</li>
+            <li>Parents pay via any bank or ATM</li>
+            <li>See who has paid in real time</li>
+            <li>Generate reports for any period</li>
+            <li>Manage scholarships and concessions</li>
+          </ul>
+          <a href="schools.html" class="btn btn-outline">Explore School Portal →</a>
+        </article>
+        <article class="audience-card audience-card--org">
+          <p class="audience-card__num">02 / ORGANIZATIONS</p>
+          <h3>Organization Portal</h3>
+          <p>For exam authorities, hospitals, government bodies, and any organization that collects payments and wants to connect their existing system.</p>
+          <ul role="list">
+            <li>Connect your existing software to Payniva</li>
+            <li>Collect application or service fees automatically</li>
+            <li>Get payment confirmations in real time</li>
+            <li>Full payment history and reporting</li>
+            <li>Secure, reliable, and scalable</li>
+          </ul>
+          <a href="organizations.html" class="btn btn-outline" style="border-color:var(--blue);color:var(--blue);">Explore Organization Portal →</a>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS (3 steps) -->
+  <section class="bg-obsidian border-top border-bottom" aria-labelledby="steps-heading">
+    <div class="container">
+      <div class="section-header section-header--center reveal-up">
+        <span class="section-label">Simple Process</span>
+        <h2 id="steps-heading">It's as Simple as<br>Three Steps.</h2>
+        <p class="section-sub" style="margin-left:auto;margin-right:auto;">No complicated setup. No teaching parents a new app. They already have a bank account — that's all they need.</p>
+      </div>
+      <div class="simple-steps stagger-children">
+        <div class="simple-step">
+          <span class="simple-step__num">STEP 01</span>
+          <h3>Your institution creates a bill</h3>
+          <p>Your admin enters the fee details — student name, amount, due date. Payniva generates a unique payment voucher automatically.</p>
+        </div>
+        <div class="simple-step">
+          <span class="simple-step__num">STEP 02</span>
+          <h3>The person pays from any bank</h3>
+          <p>Parents or applicants pay using internet banking, a mobile app, ATM, or over the counter at any bank branch — whichever is easiest.</p>
+        </div>
+        <div class="simple-step">
+          <span class="simple-step__num">STEP 03</span>
+          <h3>Your dashboard updates instantly</h3>
+          <p>The moment payment is made, your portal marks it as paid. No manual entries, no phone calls to confirm, no delays.</p>
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:3rem;" class="reveal-up">
+        <a href="product.html" class="btn btn-outline">Full walkthrough →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- BENEFITS -->
+  <section aria-labelledby="benefits-heading">
+    <div class="container">
+      <div class="section-header section-header--center reveal-up">
+        <span class="section-label">Why Payniva</span>
+        <h2 id="benefits-heading">Everything You Need to<br>Ditch the Fee Counter.</h2>
+      </div>
+      <div class="benefit-grid stagger-children">
+        <div class="benefit-card">
+          <div class="benefit-card__icon">🏦</div>
+          <h3>Every Bank in Pakistan</h3>
+          <p>Payniva is connected to Pakistan's national payment network. Parents can pay through HBL, UBL, MCB, Meezan, JazzCash, EasyPaisa — any bank they already use.</p>
+        </div>
+        <div class="benefit-card">
+          <div class="benefit-card__icon">⚡</div>
+          <h3>Instant Confirmation</h3>
+          <p>As soon as a parent completes a payment, your school's dashboard updates. No waiting, no end-of-day reconciliation, no manual entry.</p>
+        </div>
+        <div class="benefit-card">
+          <div class="benefit-card__icon">📊</div>
+          <h3>Reports at a Click</h3>
+          <p>See total collected, pending, and overdue amounts at any time. Export reports for any date range in seconds.</p>
+        </div>
+        <div class="benefit-card">
+          <div class="benefit-card__icon">🔐</div>
+          <h3>Your Data Stays Yours</h3>
+          <p>Each school and organization has its own completely separate, secure space. No one outside your institution can see your student or payment data.</p>
+        </div>
+        <div class="benefit-card">
+          <div class="benefit-card__icon">📱</div>
+          <h3>No App to Install</h3>
+          <p>Parents don't need to download anything. They pay the same way they already pay utility bills — through their existing bank app or ATM.</p>
+        </div>
+        <div class="benefit-card">
+          <div class="benefit-card__icon">🤝</div>
+          <h3>We Handle the Setup</h3>
+          <p>Our team registers your institution on the payment network and walks your staff through the portal. You're up and running within days.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TRUST STRIP -->
+  <div class="trust-strip">
+    <div class="container">
+      <span class="trust-strip__label">Parents can pay via</span>
+      <div class="trust-strip__items">
+        <span class="trust-item">HBL</span>
+        <span class="trust-item">UBL</span>
+        <span class="trust-item">MCB</span>
+        <span class="trust-item">Meezan Bank</span>
+        <span class="trust-item">JazzCash</span>
+        <span class="trust-item">EasyPaisa</span>
+        <span class="trust-item">Any ATM</span>
+        <span class="trust-item">Bank Branch OTC</span>
+        <span class="trust-item">NADRA E-SAHULAT</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CTA BAND -->
+  <div class="cta-band">
+    <div class="container">
+      <span class="section-label" style="justify-content:center;">Get Started</span>
+      <h2 class="reveal-up">Ready to stop chasing<br>fee payments?</h2>
+      <p class="reveal-up" data-delay="0.1">Book a free demo. We'll show you exactly how Payniva works for your institution — no technical knowledge required.</p>
+      <div class="reveal-up" data-delay="0.2">
+        <a href="contact.html" class="btn btn-primary btn-lg">Book a Free Demo</a>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- FOOTER -->
+<footer class="footer" role="contentinfo">
+  <div class="container">
+    <div class="footer__grid">
+      <div class="footer__brand">
+        <a href="index.html" class="navbar__logo">
+          <span class="navbar__logo-mark" aria-hidden="true">PN</span>Payniva
+        </a>
+        <p>Payment collection platform for schools and organizations in Pakistan. Connected to the national 1LINK payment network.</p>
+      </div>
+      <div class="footer__col">
+        <h5>Solutions</h5>
+        <ul role="list">
+          <li><a href="schools.html">For Schools</a></li>
+          <li><a href="organizations.html">For Organizations</a></li>
+          <li><a href="pricing.html">Pricing</a></li>
+          <li><a href="contact.html">Get Started</a></li>
+        </ul>
+      </div>
+      <div class="footer__col">
+        <h5>Platform</h5>
+        <ul role="list">
+          <li><a href="product.html">How It Works</a></li>
+          <li><a href="security.html">Security &amp; Privacy</a></li>
+          <li><a href="integration.html">API Access</a></li>
+          <li><a href="docs.html">Documentation</a></li>
+        </ul>
+      </div>
+      <div class="footer__col">
+        <h5>Company</h5>
+        <ul role="list">
+          <li><a href="contact.html">Contact Us</a></li>
+          <li><a href="#">Privacy Policy</a></li>
+          <li><a href="#">Terms of Service</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer__bottom">
+      <p>© 2026 Payniva. All rights reserved.</p>
+      <span class="footer__badge">1LINK INTEGRATED</span>
+    </div>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+<script src="assets/js/ticker.js" defer></script>
+<script src="assets/js/animations.js" defer></script>
+</body>
+</html>

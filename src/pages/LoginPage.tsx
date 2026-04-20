@@ -5,14 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Lock, Mail, Building2, CheckCircle2, ArrowRight } from 'lucide-react';
-
-const features = [
-  'Multi-biller management with real-time reconciliation',
-  'Automated recurring billing & invoice generation',
-  'Class-level payment plan assignment',
-  'Enterprise-grade transaction monitoring',
-];
+import { Lock, Mail, Building2, ArrowRight } from 'lucide-react';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
@@ -53,7 +46,7 @@ const LoginPage = () => {
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-xl shadow-primary/30">
               <Building2 className="w-5 h-5 text-primary-foreground" />
             </div>
-            <span className="font-bold text-xl tracking-tight">FinBill</span>
+            <span className="font-bold text-xl tracking-tight">Payniva</span>
           </div>
         </div>
 
@@ -70,19 +63,10 @@ const LoginPage = () => {
               End-to-end payment orchestration for educational institutions and government agencies. Process thousands of transactions seamlessly.
             </p>
           </div>
-
-          <div className="space-y-3">
-            {features.map((f, i) => (
-              <div key={i} className="flex items-start gap-3 text-[13px] text-sidebar-foreground/60">
-                <CheckCircle2 className="w-4 h-4 text-accent mt-0.5 shrink-0" />
-                <span>{f}</span>
-              </div>
-            ))}
-          </div>
         </div>
 
         <div className="relative">
-          <p className="text-[11px] text-sidebar-muted">© 2025 FinBill. Enterprise Billing Platform v2.4.1</p>
+          <p className="text-[11px] text-sidebar-muted">© 2026 Payniva. Enterprise Billing Platform v1</p>
         </div>
       </div>
 
@@ -93,7 +77,7 @@ const LoginPage = () => {
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
               <Building2 className="w-5 h-5 text-primary-foreground" />
             </div>
-            <span className="font-bold text-xl tracking-tight">FinBill</span>
+            <span className="font-bold text-xl tracking-tight">Payniva</span>
           </div>
 
           <h2 className="text-2xl font-bold tracking-tight">Welcome back</h2>
@@ -141,7 +125,7 @@ const LoginPage = () => {
             <div className="rounded-xl bg-muted/60 border border-border p-4">
               <p className="text-[11px] font-semibold text-foreground mb-1.5">Access</p>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Use the credentials provisioned for your role. Platform-admin access is protected and managed from the server environment.
+                Use the credentials provided by your administrator. For support, contact at <a href="mailto:support@payniva.com" className='text-primary font-bold underline text-[13px]'>support@payniva.com</a>.
               </p>
             </div>
           </form>

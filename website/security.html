@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security &amp; Privacy — Payniva</title>
+  <meta name="description" content="Payniva keeps your school's and organization's data completely private and secure. Every payment goes through verified channels. Your data is never shared.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://payniva.io/security.html">
+  <meta property="og:title" content="Security &amp; Privacy — Payniva">
+  <meta property="og:description" content="Your financial data stays private, your payments go through secure national banking channels, and your staff access only what they need.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://payniva.io/security.html">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/components.css">
+  <link rel="stylesheet" href="assets/css/animations.css">
+  <script src="assets/js/theme.js"></script>
+</head>
+<body>
+
+<nav class="navbar" role="navigation" aria-label="Main navigation">
+  <input type="checkbox" id="nav-toggle" class="sr-only">
+  <div class="navbar__inner">
+    <a href="index.html" class="navbar__logo"><span class="navbar__logo-mark" aria-hidden="true">PN</span>Payniva</a>
+    <ul class="navbar__nav" role="list">
+      <li><a href="product.html">How It Works</a></li>
+      <li><a href="schools.html">For Schools</a></li>
+      <li><a href="organizations.html">For Organizations</a></li>
+      <li><a href="security.html" class="active">Security</a></li>
+      <li><a href="pricing.html">Pricing</a></li>
+    </ul>
+    <div class="navbar__actions">
+      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark mode">
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+      <a href="contact.html" class="btn btn-primary btn-sm">Get Started</a>
+    </div>
+    <label for="nav-toggle" class="navbar__toggle" aria-label="Toggle navigation"><span></span><span></span><span></span></label>
+  </div>
+</nav>
+
+<main>
+
+  <!-- HERO -->
+  <section class="hero hero--center bg-dots" aria-labelledby="sec-heading">
+    <div class="container">
+      <p class="hero__eyebrow">Security &amp; Privacy</p>
+      <h1 id="sec-heading">Your Data is Private.<br>Your Payments are Secure.</h1>
+      <p class="section-sub">Payniva is built so that your school's or organization's financial information is never shared, never exposed, and never accessible to anyone who shouldn't see it.</p>
+    </div>
+  </section>
+
+  <!-- SECURITY PILLARS -->
+  <section class="bg-obsidian border-top border-bottom" aria-labelledby="pillars-heading">
+    <div class="container">
+      <div class="section-header section-header--center reveal-up">
+        <span class="section-label">Four Pillars</span>
+        <h2 id="pillars-heading">Core Security Architecture</h2>
+      </div>
+      <div class="cards-grid stagger-children" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));">
+        <div class="card">
+          <div class="card__icon">⬡</div>
+          <div class="card__title">Your Data Stays Private</div>
+          <p class="card__text">Each school and organization has a completely separate space on Payniva. There is no way for one organization to access another's students, fees, or payment records.</p>
+        </div>
+        <div class="card">
+          <div class="card__icon">⬡</div>
+          <div class="card__title">Secure Login for Every Staff Member</div>
+          <p class="card__text">Every login is verified before granting access. Inactive sessions time out automatically. Each staff member sees only what their role allows.</p>
+        </div>
+        <div class="card">
+          <div class="card__icon">⬡</div>
+          <div class="card__title">Every Payment is Verified</div>
+          <p class="card__text">Each payment confirmation coming from the banking network is cryptographically verified by Payniva before it is recorded. Tampered or fake confirmations are rejected.</p>
+        </div>
+        <div class="card">
+          <div class="card__icon">⬡</div>
+          <div class="card__title">Encrypted in Transit and Storage</div>
+          <p class="card__text">All data moving between your portal and Payniva's servers is encrypted. All records stored in Payniva's database are encrypted at rest.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ACCESS FLOW -->
+  <section aria-labelledby="isolation-heading">
+    <div class="container">
+      <div class="section-header reveal-up">
+        <span class="section-label">How Access Works</span>
+        <h2 id="isolation-heading">Only the Right People<br>See the Right Things.</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4rem;align-items:start;" class="stagger-children">
+        <div>
+          <p>When a staff member logs in to Payniva, the system checks who they are and what role they have. Based on that role, they are given access to exactly the parts of the portal they need — and nothing else.</p>
+          <p style="margin-top:1rem;">A cashier can check if a specific payment has been made. A finance manager can post fees and download reports. An administrator can see everything for their school. No staff member from School A can ever see School B's data.</p>
+          <p style="margin-top:1rem;">If a staff member leaves or changes roles, their access can be updated or removed from the portal immediately.</p>
+        </div>
+        <div style="background:var(--obsidian);border:1px solid var(--border);padding:2rem;">
+          <p style="font-family:var(--font-mono);font-size:.7rem;color:var(--amber);text-transform:uppercase;letter-spacing:.08em;margin-bottom:1.25rem;">Access Control Example</p>
+          <div style="display:flex;flex-direction:column;gap:.75rem;">
+            <div style="background:var(--navy);border:1px solid var(--border);padding:.875rem 1rem;display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:.875rem;color:var(--warm-white);">Aisha (Finance Manager)</span>
+              <span style="font-size:.75rem;font-family:var(--font-mono);color:var(--green);">Full Access</span>
+            </div>
+            <div style="background:var(--navy);border:1px solid var(--border);padding:.875rem 1rem;display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:.875rem;color:var(--warm-white);">Tariq (Cashier)</span>
+              <span style="font-size:.75rem;font-family:var(--font-mono);color:var(--amber);">View &amp; Print Only</span>
+            </div>
+            <div style="background:var(--navy);border:1px solid var(--border);padding:.875rem 1rem;display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:.875rem;color:var(--warm-white);">Hassan (Teacher)</span>
+              <span style="font-size:.75rem;font-family:var(--font-mono);color:var(--blue);">Class Status Only</span>
+            </div>
+            <div style="background:var(--navy);border:1px solid var(--border);padding:.875rem 1rem;display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:.875rem;color:var(--warm-white);">Staff from another school</span>
+              <span style="font-size:.75rem;font-family:var(--font-mono);color:var(--text-dim);">No Access</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AUTH FLOW -->
+  <section class="bg-obsidian border-top border-bottom" aria-labelledby="authflow-heading">
+    <div class="container">
+      <div class="section-header section-header--center reveal-up">
+        <span class="section-label">Login &amp; Access Flow</span>
+        <h2 id="authflow-heading">How Logging In Works</h2>
+      </div>
+      <div class="flow-diagram reveal-up" role="img" aria-label="Login and access flow diagram">
+        <div class="flow-step"><div class="flow-step__box"><span class="flow-step__num">Log In</span>Enter email &amp; password</div></div>
+        <div class="flow-step"><div class="flow-step__box"><span class="flow-step__num">Identity Verified</span>Payniva checks your credentials</div></div>
+        <div class="flow-step"><div class="flow-step__box"><span class="flow-step__num">Role Confirmed</span>Your role &amp; organization identified</div></div>
+        <div class="flow-step"><div class="flow-step__box"><span class="flow-step__num">Scoped Access</span>You see only your organization's data</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 1LINK SECURITY CHECKLIST -->
+  <section aria-labelledby="compliance-heading">
+    <div class="container">
+      <div class="section-header reveal-up">
+        <span class="section-label">1LINK Compliance</span>
+        <h2 id="compliance-heading">1LINK Security Compliance Checklist</h2>
+      </div>
+      <div class="table-wrapper reveal-up">
+        <table class="data-table" aria-label="1LINK security compliance checklist">
+          <thead>
+            <tr><th>Security Requirement</th><th>What It Means</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Encrypted Connections</td><td>All communication between your browser and Payniva is encrypted (HTTPS)</td><td><span class="badge badge--paid">Done</span></td></tr>
+            <tr><td>Verified Payment Confirmations</td><td>Every payment confirmation from the banking network is authenticated before being recorded</td><td><span class="badge badge--paid">Done</span></td></tr>
+            <tr><td>Secure Network Access</td><td>Only approved banking network servers can send payment data to Payniva</td><td><span class="badge badge--paid">Done</span></td></tr>
+            <tr><td>Unique Payment References</td><td>Each payment has a unique reference that cannot be reused or duplicated</td><td><span class="badge badge--paid">Done</span></td></tr>
+            <tr><td>No Duplicate Payments</td><td>Payniva recognizes and prevents the same payment from being recorded twice</td><td><span class="badge badge--paid">Done</span></td></tr>
+            <tr><td>Secure Credentials</td><td>Network security credentials are stored securely and rotated on a schedule</td><td><span class="badge badge--paid">Done</span></td></tr>
+            <tr><td>Reliable Confirmation Handling</td><td>Payment confirmations are handled consistently even if the network sends them more than once</td><td><span class="badge badge--paid">Done</span></td></tr>
+            <tr><td>Pre-Launch Testing</td><td>Full end-to-end payment flow tested against the national network before going live</td><td><span class="badge badge--pending">In Progress</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- BUILT TO STANDARD -->
+  <section class="bg-obsidian border-top border-bottom" aria-labelledby="standard-heading">
+    <div class="container">
+      <div class="section-header reveal-up">
+        <span class="section-label">Built to Standard</span>
+        <h2 id="standard-heading">Designed to Protect<br>Financial Information.</h2>
+        <p class="section-sub">Payniva follows internationally recognized security standards for web applications and financial systems. Here's what that means for you in plain terms.</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:2rem;" class="stagger-children">
+        <div style="background:var(--navy);border:1px solid var(--border);padding:2rem;">
+          <h4 style="font-size:1rem;margin-bottom:.625rem;">Access Control</h4>
+          <p style="font-size:.875rem;">Only the right people can see the right data. Access is controlled by role and organization — there is no way for one school's staff to see another's records.</p>
+        </div>
+        <div style="background:var(--navy);border:1px solid var(--border);padding:2rem;">
+          <h4 style="font-size:1rem;margin-bottom:.625rem;">Password Security</h4>
+          <p style="font-size:.875rem;">Passwords are never stored as plain text. Only a secure, one-way hash is kept. Even Payniva's own team cannot read your password.</p>
+        </div>
+        <div style="background:var(--navy);border:1px solid var(--border);padding:2rem;">
+          <h4 style="font-size:1rem;margin-bottom:.625rem;">Safe Data Queries</h4>
+          <p style="font-size:.875rem;">All database lookups use safe, parameterized methods. This prevents common data injection attacks from ever reaching your records.</p>
+        </div>
+        <div style="background:var(--navy);border:1px solid var(--border);padding:2rem;">
+          <h4 style="font-size:1rem;margin-bottom:.625rem;">Login Protection</h4>
+          <p style="font-size:.875rem;">Sessions expire automatically when inactive. Repeated failed login attempts are rate-limited to prevent unauthorized access attempts.</p>
+        </div>
+        <div style="background:var(--navy);border:1px solid var(--border);padding:2rem;">
+          <h4 style="font-size:1rem;margin-bottom:.625rem;">Full Activity Log</h4>
+          <p style="font-size:.875rem;">Every significant action — fee posted, payment recorded, staff account changed — is logged with a timestamp and the identity of the person who did it.</p>
+        </div>
+        <div style="background:var(--navy);border:1px solid var(--border);padding:2rem;">
+          <h4 style="font-size:1rem;margin-bottom:.625rem;">No Unnecessary Connections</h4>
+          <p style="font-size:.875rem;">Payniva only communicates with verified, approved external systems. It cannot be redirected to send your data anywhere else.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <div class="cta-band">
+    <div class="container">
+      <h2 class="reveal-up">Questions about how we protect your data?</h2>
+      <p class="reveal-up" data-delay="0.1">Our team is happy to walk you through how Payniva keeps your school's or organization's information secure.</p>
+      <div class="reveal-up" data-delay="0.2"><a href="contact.html" class="btn btn-primary btn-lg">Talk to Security Team</a></div>
+    </div>
+  </div>
+
+</main>
+
+<footer class="footer" role="contentinfo">
+  <div class="container">
+    <div class="footer__grid">
+      <div class="footer__brand">
+        <a href="index.html" class="navbar__logo"><span class="navbar__logo-mark" aria-hidden="true">PN</span>Payniva</a>
+        <p>Payment collection platform for schools and organizations in Pakistan. Connected to the national 1LINK payment network.</p>
+      </div>
+      <div class="footer__col"><h5>Solutions</h5><ul role="list"><li><a href="schools.html">For Schools</a></li><li><a href="organizations.html">For Organizations</a></li><li><a href="pricing.html">Pricing</a></li><li><a href="contact.html">Get Started</a></li></ul></div>
+      <div class="footer__col"><h5>Platform</h5><ul role="list"><li><a href="product.html">How It Works</a></li><li><a href="security.html">Security &amp; Privacy</a></li><li><a href="integration.html">API Access</a></li><li><a href="docs.html">Documentation</a></li></ul></div>
+      <div class="footer__col"><h5>Company</h5><ul role="list"><li><a href="contact.html">Contact Us</a></li><li><a href="#">Privacy Policy</a></li><li><a href="#">Terms of Service</a></li></ul></div>
+    </div>
+    <div class="footer__bottom"><p>&copy; 2026 Payniva. All rights reserved.</p><span class="footer__badge">1LINK INTEGRATED</span></div>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+<script src="assets/js/animations.js" defer></script>
+</body>
+</html>

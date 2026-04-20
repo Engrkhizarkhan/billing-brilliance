@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ETEA Payment Orchestration — Payniva</title>
+  <meta name="description" content="Payment orchestration for test authorities on Payniva. Manage applicant payment requests, postings, callbacks, and real-time status with strict tenant boundaries.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://payniva.io/etea.html">
+  <meta property="og:title" content="ETEA Payment Orchestration — Payniva">
+  <meta property="og:description" content="ETEA portal for application-level payment processing. Postings, PSID generation, callback validation, and applicant status — all tenant-isolated.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://payniva.io/etea.html">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="assets/css/base.css">
+  <link rel="stylesheet" href="assets/css/components.css">
+  <link rel="stylesheet" href="assets/css/animations.css">
+</head>
+<body>
+
+<nav class="navbar" role="navigation" aria-label="Main navigation">
+  <input type="checkbox" id="nav-toggle" class="sr-only">
+  <div class="navbar__inner">
+    <a href="index.html" class="navbar__logo"><span class="navbar__logo-mark">PN</span>Payniva</a>
+    <ul class="navbar__nav" role="list">
+      <li><a href="product.html">Product</a></li>
+      <li><a href="schools.html">Schools</a></li>
+      <li><a href="etea.html" class="active">ETEA</a></li>
+      <li><a href="how-it-works.html">How It Works</a></li>
+      <li><a href="integration.html">Integration</a></li>
+      <li><a href="docs.html">Docs</a></li>
+      <li><a href="pricing.html">Pricing</a></li>
+    </ul>
+    <div class="navbar__actions"><a href="contact.html" class="btn btn-primary btn-sm">Get Started</a></div>
+    <label for="nav-toggle" class="navbar__toggle"><span></span><span></span><span></span></label>
+  </div>
+</nav>
+
+<main>
+
+  <!-- HERO -->
+  <section class="hero bg-dots" aria-labelledby="etea-heading">
+    <div class="container">
+      <div class="hero__grid">
+        <div>
+          <p class="hero__eyebrow">ETEA Portal</p>
+          <h1 id="etea-heading">Payment Orchestration for Test Authorities.</h1>
+          <p class="section-sub">Process applicant payments via PSID, validate 1BILL callbacks, notify your source system — without becoming an applicant database.</p>
+          <div class="hero__actions">
+            <a href="contact.html" class="btn btn-primary">Request a Demo</a>
+            <a href="integration.html" class="btn btn-outline">API Reference</a>
+          </div>
+        </div>
+        <div class="hero__visual reveal-right">
+          <div class="terminal-mock">
+            <div class="terminal-mock__bar">
+              <span class="terminal-mock__dot"></span><span class="terminal-mock__dot"></span><span class="terminal-mock__dot"></span>
+              <span class="terminal-mock__filename">POST /api/payments/create</span>
+            </div>
+            <div class="terminal-mock__body">
+              <pre>{
+  <span class="tk">"application_id"</span>:  <span class="ts">"APP-2026-04192"</span>,
+  <span class="tk">"applicant_name"</span>:  <span class="ts">"Zainab Hussain"</span>,
+  <span class="tk">"amount"</span>:          <span class="tn">2500.00</span>,
+  <span class="tk">"posting_id"</span>:      <span class="ts">"POST-2026-E01"</span>,
+  <span class="tk">"organization_id"</span>: <span class="ts">"ETEA-KPK-001"</span>
+}
+
+<span class="tc">// Response</span>
+{
+  <span class="tk">"psid"</span>:   <span class="ts">"762910384756200"</span>,
+  <span class="tk">"status"</span>: <span class="ts">"PENDING"</span>
+}<span class="terminal-mock__cursor"></span></pre>
+            </div>
+            <div class="terminal-mock__status">
+              <span class="terminal-mock__status-dot"></span>
+              ETEA-KPK-001 · Payment Created · 201
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- OWNERSHIP BOUNDARY CALLOUT -->
+  <section class="section--sm">
+    <div class="container">
+      <div class="callout reveal-up" role="note">
+        <span class="callout__label">Important — Ownership Boundary</span>
+        <h4 style="color:var(--warm-white);margin-bottom:0.5rem;">Payniva is your payment processor, not your applicant database.</h4>
+        <p>Applicant master data ownership remains with your source system (ETEA). Payniva stores temporary payment records scoped to each application — it processes payment create, status, and callback, then notifies your source system. It does not become the system of record for applicant profiles.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- WORKFLOW STEPS -->
+  <section class="bg-obsidian border-top border-bottom" aria-labelledby="workflow-heading">
+    <div class="container">
+      <div class="section-header reveal-up">
+        <span class="section-label">Workflow</span>
+        <h2 id="workflow-heading">The ETEA Payment Lifecycle</h2>
+        <p class="section-sub">From posting creation to source-system notification — every step is traceable and idempotent.</p>
+      </div>
+      <div class="timeline">
+        <div class="timeline__item">
+          <div class="timeline__dot timeline__dot--active"><span class="timeline__num">01</span></div>
+          <span class="timeline__tag">Posting Setup</span>
+          <h4>Create an Exam Posting</h4>
+          <p>Define the posting with fee amount, eligible applicants range, and payment deadline. The posting generates a unique biller reference registered with 1BILL.</p>
+        </div>
+        <div class="timeline__item">
+          <div class="timeline__dot timeline__dot--active"><span class="timeline__num">02</span></div>
+          <span class="timeline__tag">Payment Request</span>
+          <h4>Applicant Payment Created</h4>
+          <p>Your source system calls <code>POST /api/payments/create</code> with the application ID and amount. Payniva generates a PSID and returns it to your source system.</p>
+        </div>
+        <div class="timeline__item">
+          <div class="timeline__dot timeline__dot--active"><span class="timeline__num">03</span></div>
+          <span class="timeline__tag">Payment Execution</span>
+          <h4>Applicant Pays via Bank Channel</h4>
+          <p>The applicant uses their PSID at any 1LINK-connected bank: ATM, internet banking, mobile app, or OTC agent. No app download or Payniva account required.</p>
+        </div>
+        <div class="timeline__item">
+          <div class="timeline__dot timeline__dot--active"><span class="timeline__num">04</span></div>
+          <span class="timeline__tag">Callback Processing</span>
+          <h4>1BILL Sends Payment Callback</h4>
+          <p>1BILL POSTs a signed callback to Payniva. The signature is validated using HMAC, the transaction ID is checked for idempotency, and the payment record is updated.</p>
+        </div>
+        <div class="timeline__item">
+          <div class="timeline__dot timeline__dot--active"><span class="timeline__num">05</span></div>
+          <span class="timeline__tag">Status Notification</span>
+          <h4>Source System Notified</h4>
+          <p>Payniva calls <code>POST /api/etea/payment-status</code> to notify your upstream system of the final payment status — CONFIRMED or FAILED — so you can proceed with applicant processing.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- API ENDPOINTS -->
+  <section aria-labelledby="api-heading">
+    <div class="container">
+      <div class="section-header reveal-up">
+        <span class="section-label">API Reference</span>
+        <h2 id="api-heading">Five Canonical ETEA Endpoints</h2>
+        <p class="section-sub">Clean, predictable REST. Designed for direct integration from your source system.</p>
+      </div>
+      <div class="code-block reveal-up">
+        <div class="code-block__header">
+          <span class="code-block__lang">REST Endpoints</span>
+          <button class="code-block__copy" type="button" aria-label="Copy endpoints">COPY</button>
+        </div>
+        <pre><span class="tc"># Create a payment record for an applicant</span>
+<span class="tk">POST</span>  <span class="ts">/api/payments/create</span>
+
+<span class="tc"># Look up payment status by application ID</span>
+<span class="tk">GET</span>   <span class="ts">/api/payments/{application_id}</span>
+
+<span class="tc"># Receive callback from 1BILL after payment</span>
+<span class="tk">POST</span>  <span class="ts">/api/payment/callback</span>
+
+<span class="tc"># Notify your source system of payment status</span>
+<span class="tk">POST</span>  <span class="ts">/api/etea/payment-status</span>
+
+<span class="tc"># Health check for monitoring</span>
+<span class="tk">GET</span>   <span class="ts">/api/health</span></pre>
+      </div>
+      <div style="margin-top:1.5rem;" class="reveal-up">
+        <a href="integration.html" class="btn btn-outline">Full API Documentation →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- CALLBACK LIFECYCLE -->
+  <section class="bg-obsidian border-top border-bottom" aria-labelledby="callback-heading">
+    <div class="container">
+      <div class="section-header section-header--center reveal-up">
+        <span class="section-label">Callback Lifecycle</span>
+        <h2 id="callback-heading">Payment Status Progression</h2>
+      </div>
+      <div class="flow-diagram stagger-children" role="list">
+        <div class="flow-step" role="listitem"><div class="flow-step__box"><span class="flow-step__num">PSID Issued</span><span class="badge badge--active" style="margin-top:0.5rem;display:inline-flex;">Active</span></div></div>
+        <div class="flow-step" role="listitem"><div class="flow-step__box"><span class="flow-step__num">Callback Received</span><span class="badge badge--pending" style="margin-top:0.5rem;display:inline-flex;">Processing</span></div></div>
+        <div class="flow-step" role="listitem"><div class="flow-step__box"><span class="flow-step__num">Sig Validated</span><span class="badge badge--pending" style="margin-top:0.5rem;display:inline-flex;">Verifying</span></div></div>
+        <div class="flow-step" role="listitem"><div class="flow-step__box"><span class="flow-step__num">Record Updated</span><span class="badge badge--paid" style="margin-top:0.5rem;display:inline-flex;">Confirmed</span></div></div>
+        <div class="flow-step" role="listitem"><div class="flow-step__box"><span class="flow-step__num">Source Notified</span><span class="badge badge--paid" style="margin-top:0.5rem;display:inline-flex;">Done</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- UPCOMING FEATURES -->
+  <section aria-labelledby="upcoming-heading">
+    <div class="container">
+      <div class="section-header reveal-up">
+        <span class="section-label">Release 2 — Coming Next</span>
+        <h2 id="upcoming-heading">More ETEA Capabilities on the Roadmap</h2>
+      </div>
+      <div class="cards-grid stagger-children" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">
+        <div class="card">
+          <div class="card__title">Roll Assignment</div>
+          <p class="card__text">Assign roll numbers to paid applicants automatically after payment confirmation.</p>
+          <span class="badge badge--release2" style="margin-top:1rem;">Release 2</span>
+        </div>
+        <div class="card">
+          <div class="card__title">Admit Cards</div>
+          <p class="card__text">Generate and distribute admit cards to applicants whose payments are confirmed.</p>
+          <span class="badge badge--release2" style="margin-top:1rem;">Release 2</span>
+        </div>
+        <div class="card">
+          <div class="card__title">Results</div>
+          <p class="card__text">Manage and publish exam results within the same tenant-isolated portal.</p>
+          <span class="badge badge--release2" style="margin-top:1rem;">Release 2</span>
+        </div>
+        <div class="card">
+          <div class="card__title">ETEA Payment Programs</div>
+          <p class="card__text">Define multi-tier payment programs for different exam categories and fee schedules.</p>
+          <span class="badge badge--release2" style="margin-top:1rem;">Release 2</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <div class="cta-band">
+    <div class="container">
+      <h2 class="reveal-up">Ready to integrate your exam authority's payments?</h2>
+      <p class="reveal-up" data-delay="0.1">Our team will walk you through the API integration and portal setup from day one.</p>
+      <div class="reveal-up" data-delay="0.2"><a href="contact.html" class="btn btn-primary btn-lg">Talk to Us</a></div>
+    </div>
+  </div>
+
+</main>
+
+<footer class="footer" role="contentinfo">
+  <div class="container">
+    <div class="footer__grid">
+      <div class="footer__brand"><a href="index.html" class="navbar__logo"><span class="navbar__logo-mark">PN</span>Payniva</a><p>Multi-tenant education payment operating system. Built on 1LINK/1BILL rails.</p></div>
+      <div class="footer__col"><h5>Product</h5><ul role="list"><li><a href="product.html">Overview</a></li><li><a href="schools.html">For Schools</a></li><li><a href="etea.html">For ETEA</a></li><li><a href="admin.html">Admin Portal</a></li></ul></div>
+      <div class="footer__col"><h5>Developers</h5><ul role="list"><li><a href="how-it-works.html">How It Works</a></li><li><a href="integration.html">1LINK Integration</a></li><li><a href="security.html">Security</a></li><li><a href="docs.html">Documentation</a></li></ul></div>
+      <div class="footer__col"><h5>Company</h5><ul role="list"><li><a href="pricing.html">Pricing</a></li><li><a href="contact.html">Contact</a></li><li><a href="#">Privacy Policy</a></li><li><a href="#">Terms of Service</a></li></ul></div>
+    </div>
+    <div class="footer__bottom"><p>© 2026 Payniva. All rights reserved.</p><span class="footer__badge">1LINK INTEGRATED</span></div>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
+<script src="assets/js/copy-code.js" defer></script>
+<script src="assets/js/animations.js" defer></script>
+</body>
+</html>

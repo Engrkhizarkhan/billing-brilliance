@@ -184,7 +184,7 @@ const FeeLedger = () => {
   const totalCredit = filteredLedger.reduce((sum, e) => sum + Number(e.credit), 0);
   const scholarshipDiscountTotal = filteredLedger.reduce((sum, e) => sum + scholarshipDiscountForEntry(e), 0);
   const totalLateFees = filteredLedger.reduce((sum, e) => sum + (e.entryType === 'late_fee' ? Number(e.debit) : 0), 0);
-  const outstandingAllMonths = financialSnapshot?.totalDue || 0;
+  const outstandingAllMonths = Math.max(0, totalDebit - totalCredit);
   const overdueMonths = financialSnapshot?.overdueMonths || 0;
 
   // Build set of transaction references that had a late fee applied — used to badge payment rows

@@ -249,7 +249,21 @@ const billInquiry1Link = async (req, res) => {
       [consumerNumber]
     );
 
-    const totalDue = unpaid.reduce((s, inv) => s + parseFloat(inv.amount), 0);
+    // Also compute ledger outstanding so charges without invoices (e.g. one-time plan
+    // assignments that pre-date the invoice-creation fix) are included in the amount due.
+    const [ledgerTotals] = await pool.query(
+      `SELECT COALESCE(SUM(debit), 0) AS totalDebit, COALESCE(SUM(credit), 0) AS totalCredit
+       FROM ledger_entries WHERE student_id = ? AND tenant_id = ?`,
+      [student.id, student.tenant_id]
+    );
+    const ledgerOutstanding = Math.max(
+      0,
+      parseFloat(ledgerTotals[0].totalDebit) - parseFloat(ledgerTotals[0].totalCredit)
+    );
+
+    const invoiceDue = unpaid.reduce((s, inv) => s + parseFloat(inv.amount), 0);
+    // Use whichever is larger — ledger is authoritative when it includes charges beyond invoices
+    const totalDue = Math.max(ledgerOutstanding, invoiceDue);
     const oldest = unpaid[0] || null;
     const now = new Date();
 
@@ -368,7 +382,7 @@ const billInquiry1Link = async (req, res) => {
     }
 
     // --- Unpaid / overdue ---
-    const baseAmount = unpaid.reduce((s, inv) => s + parseFloat(inv.amount || 0), 0);
+    const baseAmount = totalDue;  // includes ledger-only charges (no invoice)
     const lateFeeTotal = unpaid.reduce((s, inv) => s + parseFloat(inv.late_fee || 0), 0);
     const isOverdue = unpaid.some((inv) => inv.due_date && new Date(inv.due_date) < now);
     const dueDate = oldest?.due_date ? fmtDate(oldest.due_date) : '';
