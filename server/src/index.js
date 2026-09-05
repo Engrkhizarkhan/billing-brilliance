@@ -223,7 +223,7 @@ const startServer = async () => {
 
     await ensureProtectedAdmin();
 
-    app.listen(config.port, "0.0.0.0", () => {
+    app.listen(config.port, '127.0.0.1', () => {
       logger.info(`Server running on port ${config.port} in ${config.nodeEnv} mode`);
       logger.info(`API base URL: http://localhost:${config.port}/api`);
     });
