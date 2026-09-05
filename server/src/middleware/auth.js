@@ -59,6 +59,9 @@ const authorize = (...roles) => {
 
 const authorizeSchoolRole = (...schoolRoles) => {
   return (req, res, next) => {
+    if (req.authType === 'apiKey' && req.tenantId) {
+      return next();
+    }
     if (!req.user) {
       return res.status(401).json({ error: 'Authentication required' });
     }
@@ -84,6 +87,7 @@ const apiKeyAuth = async (req, res, next) => {
     if (rows.length === 0) return res.status(401).json({ error: 'Invalid API key' });
 
     req.tenantId = rows[0].id;
+    req.authType = 'apiKey';
     next();
   } catch (err) {
     logger.error('API key auth error:', err);
@@ -102,6 +106,7 @@ const authenticateOrApiKey = async (req, res, next) => {
       );
       if (rows.length === 0) return res.status(401).json({ error: 'Invalid API key' });
       req.tenantId = rows[0].id;
+      req.authType = 'apiKey';
       return next();
     } catch (err) {
       logger.error('API key auth error:', err);

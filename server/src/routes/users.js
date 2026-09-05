@@ -13,6 +13,7 @@ router.post('/', authorize('admin'), createUserValidation, handleValidation, use
 router.put('/:id', idParam, handleValidation, userController.updateUser);
 router.patch('/:id/status', authorize('admin'), idParam, handleValidation, userController.updateUserStatus);
 router.put('/:id/reset-password', authorize('admin'), idParam, handleValidation, userController.resetPassword);
+router.delete('/:id', authorize('admin'), idParam, handleValidation, userController.deleteUser);
 
 // School sub-user management
 router.get('/school/:schoolRef', userController.fetchSchoolUsers);

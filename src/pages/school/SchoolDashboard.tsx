@@ -2,12 +2,11 @@ import { StatCard } from '@/components/StatCard';
 import { GraduationCap, Receipt, Wallet, Users, AlertTriangle, Calendar, TrendingUp, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 import { useMemo } from 'react';
 import { formatPKR } from '@/lib/formatters';
 import { useNavigate } from 'react-router-dom';
 import { usePaymentStore } from '@/store/paymentStore';
-import type { Student, Invoice } from '@/types';
 
 const CHART_COLORS = ['hsl(221, 83%, 53%)', 'hsl(160, 84%, 39%)', 'hsl(38, 92%, 50%)', 'hsl(271, 55%, 55%)', 'hsl(0, 72%, 51%)'];
 
@@ -15,68 +14,25 @@ const SchoolDashboard = () => {
   const navigate = useNavigate();
   const paymentVersion = usePaymentStore((state) => state.version);
 
-  const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({ pageSize: 9999 }), []);
-  const { data: invoicesData, loading: li } = useApiQuery(() => api.fetchInvoices({ pageSize: 9999 }), [paymentVersion]);
-  const { data: paymentHistoryData, loading: lp } = useApiQuery(() => api.fetchPaymentHistory(), [paymentVersion]);
+  const { data: paymentHistoryData, loading: lp } = useApiQuery(() => api.fetchPaymentHistory({ pageSize: 5 }), [paymentVersion]);
   const { data: feeByPlanData, loading: lFee } = useApiQuery(() => api.getCollectionByFeePlan(), [paymentVersion]);
-  const { data: dashStatsData } = useApiQuery(() => api.getDashboardStats(), [paymentVersion]);
+  const { data: monthlyTrendData, loading: lTrend } = useApiQuery(() => api.getMonthlyTrend(), [paymentVersion]);
+  const { data: dashStatsData, loading: lStats } = useApiQuery(() => api.getDashboardStats(), [paymentVersion]);
 
-  const students = useMemo(() => (studentsData || []) as Student[], [studentsData]);
-  const invoices = useMemo(() => (invoicesData || []) as Invoice[], [invoicesData]);
   const paymentHistory = useMemo(() => (paymentHistoryData || []) as Array<{ id: string; studentName: string; amount: number; date: string; note: string }>, [paymentHistoryData]);
   const feeByPlan = (feeByPlanData || []) as { name: string; value: number }[];
-  const totalLateFees = (dashStatsData as { totalLateFees?: number } | null)?.totalLateFees ?? 0;
-  const loading = ls || li || lp || lFee;
-
-  const classSummary = useMemo(() => {
-    const map: Record<string, number> = {};
-    students.forEach((s) => { map[s.class] = (map[s.class] || 0) + 1; });
-    return Object.entries(map).map(([name, count]) => ({ name: name.replace('Class ', 'C'), count })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [students]);
-
-  const defaulterInfo = useMemo(() => {
-    let totalOutstanding = 0;
-    let defaultersCount = 0;
-    students.forEach((student) => {
-      const due = invoices.filter((inv) => inv.consumerNumber === student.consumerNumber && (inv.status === 'overdue' || inv.status === 'pending')).reduce((sum, inv) => sum + Number(inv.amount), 0);
-      if (due > 0) { totalOutstanding += due; defaultersCount += 1; }
-    });
-    return { totalOutstanding, defaultersCount };
-  }, [students, invoices]);
-
-  const currentMonthKey = new Date().toISOString().slice(0, 7);
-
-  const collectedThisMonth = useMemo(
-    () => paymentHistory.filter((p) => p.date?.slice(0, 7) === currentMonthKey).reduce((sum, p) => sum + Number(p.amount || 0), 0),
-    [paymentHistory, currentMonthKey]
-  );
-
-  const monthlyCollectionData = useMemo(() => {
-    const map: Record<string, number> = {};
-    paymentHistory.forEach((p) => {
-      if (!p.date) return;
-      const key = p.date.slice(0, 7);
-      map[key] = (map[key] || 0) + Number(p.amount || 0);
-    });
-    const months: { month: string; collected: number }[] = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - i);
-      const key = d.toISOString().slice(0, 7);
-      months.push({ month: d.toLocaleDateString('en-US', { month: 'short' }), collected: map[key] || 0 });
-    }
-    return months;
-  }, [paymentHistory]);
-
-  // "Latest day" = the most recent distinct date in payment history (date may be ISO timestamp)
-  const latestPaymentDate = paymentHistory[0]?.date?.slice(0, 10) || null;
-  const latestDayPayments = latestPaymentDate
-    ? paymentHistory.filter((payment) => payment.date?.slice(0, 10) === latestPaymentDate)
-    : [];
-
-  const { totalOutstanding, defaultersCount } = defaulterInfo;
-  const todayPayments = latestDayPayments.length;
-  const latestDayAmount = latestDayPayments.reduce((sum, payment) => sum + payment.amount, 0);
+  const stats = dashStatsData || {};
+  const totalStudents = stats.totalStudents ?? 0;
+  const collectedThisMonth = stats.collectedThisMonth ?? 0;
+  const totalOutstanding = stats.pendingAmount ?? 0;
+  const defaultersCount = stats.defaultersCount ?? 0;
+  const todayPayments = stats.latestDayPayments ?? 0;
+  const latestDayAmount = stats.latestDayAmount ?? 0;
+  const latestPaymentDate = stats.latestPaymentDate ?? null;
+  const totalLateFees = stats.totalLateFees ?? 0;
+  const classSummary = (stats.classSummary ?? []).map((item) => ({ ...item, name: item.name.replace('Class ', 'C') }));
+  const monthlyCollectionData = (monthlyTrendData || []).slice(-6);
+  const loading = lp || lFee || lTrend || lStats;
 
   const monthChange = useMemo(() => {
     const prev = monthlyCollectionData[monthlyCollectionData.length - 2]?.collected ?? 0;
@@ -85,16 +41,8 @@ const SchoolDashboard = () => {
     return Math.round(((curr - prev) / prev) * 100);
   }, [monthlyCollectionData]);
 
-  const studentsWithoutCurrentMonthBill = useMemo(() => {
-    const studentsWithBill = new Set(
-      invoices
-        .filter((inv) => inv.month === currentMonthKey)
-        .flatMap((inv) => [inv.studentId, inv.consumerNumber].filter(Boolean))
-    );
-    return students.filter((s) => !studentsWithBill.has(s.id) && !studentsWithBill.has(s.consumerNumber)).length;
-  }, [students, invoices, currentMonthKey]);
-
-  const currentMonthBillsGenerated = studentsWithoutCurrentMonthBill === 0 && students.length > 0;
+  const studentsWithoutCurrentMonthBill = stats.studentsWithoutCurrentBill ?? 0;
+  const currentMonthBillsGenerated = studentsWithoutCurrentMonthBill === 0 && totalStudents > 0;
   const currentMonthLabel = new Date().toLocaleDateString('en-US', { month: 'long' });
 
   const recentPayments = paymentHistory.slice(0, 5);
@@ -109,7 +57,7 @@ const SchoolDashboard = () => {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-        <div className="cursor-pointer" onClick={() => navigate('/school/students')}><StatCard title="Total Students" value={students.length} icon={GraduationCap} trend="5 new this month" trendUp /></div>
+        <div className="cursor-pointer" onClick={() => navigate('/school/students')}><StatCard title="Total Students" value={totalStudents} icon={GraduationCap} trend="Live directory count" trendUp /></div>
         <StatCard title="Collected This Month" value={formatPKR(collectedThisMonth)} icon={Wallet} trend={collectedThisMonth > 0 ? 'from payment history' : 'No payments this month'} trendUp={collectedThisMonth > 0} />
         <div className="cursor-pointer" onClick={() => navigate('/school/defaulters')}><StatCard title="Outstanding" value={formatPKR(totalOutstanding)} icon={AlertTriangle} trend={`${defaultersCount} defaulters`} trendUp={false} /></div>
         <StatCard title="Defaulters" value={defaultersCount} icon={Users} />

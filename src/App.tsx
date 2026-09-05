@@ -2,49 +2,51 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
 import { Loader2 } from "lucide-react";
 import type { UserRole } from "@/types";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import LoginPage from "./pages/LoginPage";
 import DashboardLayout from "./components/DashboardLayout";
-import AdminDashboard from "./pages/admin/AdminDashboard";
-import BillerManagement from "./pages/admin/BillerManagement";
-import BundleManagement from "./pages/admin/BundleManagement";
-import UserManagement from "./pages/admin/UserManagement";
-import TransactionList from "./pages/admin/TransactionList";
-import CashFlow from "./pages/admin/CashFlow";
-import Reports from "./pages/admin/Reports";
-import SchoolDashboard from "./pages/school/SchoolDashboard";
-import StudentList from "./pages/school/StudentList";
-import FeePlans from "./pages/school/FeePlans";
-import FeeLedger from "./pages/school/FeeLedger";
-import Scholarships from "./pages/school/Scholarships";
-import InvoiceList from "./pages/school/InvoiceList";
-import SchoolPayments from "./pages/school/SchoolPayments";
-import RealTimePayments from "./pages/school/RealTimePayments";
-import SchoolReports from "./pages/school/SchoolReports";
-import PaymentPrograms from "./pages/school/PaymentPrograms";
-import Defaulters from "./pages/school/Defaulters";
-import SchoolSettings from "./pages/school/SchoolSettings";
-import LoginActivity from "./pages/school/LoginActivity";
-import OrgDashboard from "./pages/org/OrgDashboard";
-import OrgLoginActivity from "./pages/org/OrgLoginActivity";
-import OrgInvoices from "./pages/org/OrgInvoices";
-import OrgPayments from "./pages/org/OrgPayments";
-import OrgPaymentHistory from "./pages/org/OrgPaymentHistory";
-import OrgRealtimePayments from "./pages/org/OrgRealtimePayments";
-import OrgReports from "./pages/org/OrgReports";
-import OrgSettings from "./pages/org/OrgSettings";
-import OrgSandbox from "./pages/org/OrgSandbox";
-import OrgWebhookConfig from "./pages/org/OrgWebhookConfig";
-import AuditTrail from "./pages/admin/AuditTrail";
-import OneLinkSandbox from "./pages/admin/OneLinkSandbox";
-import FetchBundleSandbox from "./pages/admin/FetchBundleSandbox";
-import ApiReference from "./pages/admin/ApiReference";
-import DevTools from "./pages/admin/DevTools";
 import NotFound from "./pages/NotFound";
+
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const BillerManagement = lazy(() => import("./pages/admin/BillerManagement"));
+const BundleManagement = lazy(() => import("./pages/admin/BundleManagement"));
+const UserManagement = lazy(() => import("./pages/admin/UserManagement"));
+const TransactionList = lazy(() => import("./pages/admin/TransactionList"));
+const CashFlow = lazy(() => import("./pages/admin/CashFlow"));
+const Reports = lazy(() => import("./pages/admin/Reports"));
+const AuditTrail = lazy(() => import("./pages/admin/AuditTrail"));
+const OneLinkSandbox = lazy(() => import("./pages/admin/OneLinkSandbox"));
+const FetchBundleSandbox = lazy(() => import("./pages/admin/FetchBundleSandbox"));
+const ApiReference = lazy(() => import("./pages/admin/ApiReference"));
+const DevTools = lazy(() => import("./pages/admin/DevTools"));
+const SchoolDashboard = lazy(() => import("./pages/school/SchoolDashboard"));
+const StudentList = lazy(() => import("./pages/school/StudentList"));
+const FeePlans = lazy(() => import("./pages/school/FeePlans"));
+const FeeLedger = lazy(() => import("./pages/school/FeeLedger"));
+const Scholarships = lazy(() => import("./pages/school/Scholarships"));
+const InvoiceList = lazy(() => import("./pages/school/InvoiceList"));
+const SchoolPayments = lazy(() => import("./pages/school/SchoolPayments"));
+const RealTimePayments = lazy(() => import("./pages/school/RealTimePayments"));
+const SchoolReports = lazy(() => import("./pages/school/SchoolReports"));
+const PaymentPrograms = lazy(() => import("./pages/school/PaymentPrograms"));
+const Defaulters = lazy(() => import("./pages/school/Defaulters"));
+const SchoolSettings = lazy(() => import("./pages/school/SchoolSettings"));
+const LoginActivity = lazy(() => import("./pages/school/LoginActivity"));
+const OrgDashboard = lazy(() => import("./pages/org/OrgDashboard"));
+const OrgApiIntegration = lazy(() => import("./pages/org/OrgApiIntegration"));
+const OrgInvoices = lazy(() => import("./pages/org/OrgInvoices"));
+const OrgPayments = lazy(() => import("./pages/org/OrgPayments"));
+const OrgPaymentHistory = lazy(() => import("./pages/org/OrgPaymentHistory"));
+const OrgRealtimePayments = lazy(() => import("./pages/org/OrgRealtimePayments"));
+const OrgReports = lazy(() => import("./pages/org/OrgReports"));
+const OrgSandbox = lazy(() => import("./pages/org/OrgSandbox"));
+const OrgLoginActivity = lazy(() => import("./pages/org/OrgLoginActivity"));
+const OrgSettings = lazy(() => import("./pages/org/OrgSettings"));
+const OrgWebhookConfig = lazy(() => import("./pages/org/OrgWebhookConfig"));
 
 const queryClient = new QueryClient();
 
@@ -75,7 +77,8 @@ const AppRoutes = () => {
   }
 
   return (
-    <Routes>
+    <Suspense fallback={<div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>}>
+      <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<LoginPage />} />
           
@@ -113,19 +116,24 @@ const AppRoutes = () => {
 
           <Route path="/org" element={<ProtectedRoute requiredRole="org" />}>
             <Route index element={<OrgDashboard />} />
-            <Route path="invoices" element={<OrgInvoices />} />
             <Route path="payments" element={<OrgPayments />} />
             <Route path="history" element={<OrgPaymentHistory />} />
             <Route path="realtime-payments" element={<OrgRealtimePayments />} />
+            <Route path="invoices" element={<OrgInvoices />} />
             <Route path="reports" element={<OrgReports />} />
-            <Route path="login-activity" element={<OrgLoginActivity />} />
             <Route path="sandbox" element={<OrgSandbox />} />
+            <Route path="api-integration" element={<OrgApiIntegration />} />
+            <Route path="api-reference" element={<Navigate to="/org/api-integration" replace />} />
+            <Route path="reference" element={<Navigate to="/org/api-integration" replace />} />
+            <Route path="login-activity" element={<OrgLoginActivity />} />
             <Route path="settings" element={<OrgSettings />} />
             <Route path="webhook-config" element={<OrgWebhookConfig />} />
+            <Route path="*" element={<Navigate to="/org" replace />} />
           </Route>
 
           <Route path="*" element={<NotFound />} />
-        </Routes>
+      </Routes>
+    </Suspense>
   );
 };
 

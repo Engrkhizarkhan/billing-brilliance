@@ -5,7 +5,11 @@ import { FilterBar } from '@/components/FilterBar';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Ban, Upload, Download, FileText, Plus, RefreshCcw, LogIn } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Ban, Upload, Download, FileText, Plus, RefreshCcw, LogIn, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
@@ -33,6 +37,8 @@ const UserManagement = () => {
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const { data: billersData } = useApiQuery(() => api.fetchBillers({ pageSize: 100 }), []);
 
   const billers = (billersData || []) as Biller[];
@@ -74,6 +80,22 @@ const UserManagement = () => {
       toast.success('User reinstated');
     }
     setLoading(false);
+  };
+
+  const deleteUser = async () => {
+    if (!deleteTarget || deleteConfirmation !== deleteTarget.email) return;
+    setLoading(true);
+    try {
+      await api.deleteUser(deleteTarget.id);
+      setUsers((current) => current.filter((user) => user.id !== deleteTarget.id));
+      toast.success(`User ${deleteTarget.email} deleted`);
+      setDeleteTarget(null);
+      setDeleteConfirmation('');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to delete user');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCreateUser = async () => {
@@ -257,6 +279,27 @@ const UserManagement = () => {
         }}
       />
 
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open && !loading) { setDeleteTarget(null); setDeleteConfirmation(''); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete biller user?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes <strong>{deleteTarget?.name}</strong> from User Management and prevents future sign-in. Historical payment and audit records are retained.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="delete-user-confirmation">Type <strong>{deleteTarget?.email}</strong> to confirm</Label>
+            <Input id="delete-user-confirmation" value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={loading || deleteConfirmation !== deleteTarget?.email} onClick={(event) => { event.preventDefault(); void deleteUser(); }}>
+              {loading ? 'Deleting…' : 'Delete user'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <RefreshCcw className="w-3.5 h-3.5" /> Accounts are tenant-scoped; school and Org users must be linked to a tenant.
       </div>
@@ -279,7 +322,10 @@ const UserManagement = () => {
                 <TableCell className="font-medium text-sm">{u.name}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{u.email}</TableCell>
                 <TableCell className="capitalize text-sm">{u.role}</TableCell>
-                <TableCell className="font-mono text-xs text-muted-foreground">{u.schoolRef || '-'}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  <div className="font-medium text-foreground">{u.schoolRef || (u.billerCode ? `BILLER-${u.billerCode}` : '-')}</div>
+                  {u.tenantName && <div className="mt-0.5">{u.tenantName}</div>}
+                </TableCell>
                 <TableCell><StatusBadge status={u.status} /></TableCell>
                 <TableCell>
                   {u.isProtected ? (
@@ -313,6 +359,15 @@ const UserManagement = () => {
                           <RefreshCcw className="w-3 h-3 mr-1" /> Unban
                         </Button>
                       )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs text-destructive hover:text-destructive"
+                        onClick={() => { setDeleteTarget(u); setDeleteConfirmation(''); }}
+                        disabled={loading}
+                      >
+                        <Trash2 className="w-3 h-3 mr-1" /> Delete
+                      </Button>
                     </div>
                   )}
                 </TableCell>

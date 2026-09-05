@@ -8,13 +8,24 @@ const { createRequestNotification } = require('../services/notificationService')
 const FINTECH_PREFIX = config.fintechPrefix || '123456';
 
 const generateConsumerNumber = (billerCode, sequence) => {
-  return `${FINTECH_PREFIX}${billerCode}${String(sequence).padStart(14, '0')}`;
+  const prefix = String(FINTECH_PREFIX);
+  const code = String(billerCode);
+  const sequenceWidth = 20 - prefix.length - code.length;
+  if (sequenceWidth < 1 || String(sequence).length > sequenceWidth) {
+    throw new AppError('Unable to generate a 1BILL-compatible 20-digit consumer number', 500, 'CONSUMER_NUMBER_EXHAUSTED');
+  }
+  return `${prefix}${code}${String(sequence).padStart(sequenceWidth, '0')}`;
 };
 
 const fetchStudents = async (req, res, next) => {
   try {
-    const { page = 1, pageSize = 25, search, className, status } = req.query;
-    const offset = (page - 1) * pageSize;
+    const {
+      page = 1, pageSize = 25, search, className, section, status,
+      defaulter, risk, scholarship,
+    } = req.query;
+    const parsedPage = Number(page);
+    const parsedPageSize = Number(pageSize);
+    const offset = (parsedPage - 1) * parsedPageSize;
 
     let where = 'WHERE s.deleted_at IS NULL';
     const params = [];
@@ -29,17 +40,92 @@ const fetchStudents = async (req, res, next) => {
       params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
     if (className) { where += ' AND s.class = ?'; params.push(className); }
+    if (section) { where += ' AND s.section = ?'; params.push(section); }
     if (status) { where += ' AND s.status = ?'; params.push(status); }
 
-    const [countRows] = await pool.query(`SELECT COUNT(*) as total FROM students s ${where}`, params);
-    const [rows] = await pool.query(
-      `SELECT * FROM students s ${where} ORDER BY s.created_at DESC LIMIT ? OFFSET ?`,
-      [...params, parseInt(pageSize), offset]
+    if (defaulter === 'with_due') where += ' AND COALESCE(fin.total_due, 0) > 0';
+    if (defaulter === 'due_3plus') where += ' AND COALESCE(fin.overdue_months, 0) >= 3';
+    if (scholarship === 'with') where += ' AND COALESCE(sch.scholarship_count, 0) > 0';
+    if (scholarship === 'without') where += ' AND COALESCE(sch.scholarship_count, 0) = 0';
+    if (risk === 'current') where += ' AND COALESCE(fin.overdue_months, 0) = 0';
+    if (risk === 'watch') where += ' AND COALESCE(fin.overdue_months, 0) = 1';
+    if (risk === 'high-risk') where += ' AND COALESCE(fin.overdue_months, 0) = 2';
+    if (risk === 'critical') where += ' AND COALESCE(fin.overdue_months, 0) >= 3';
+
+    const joins = `
+      LEFT JOIN (
+        SELECT tenant_id, student_id,
+          SUM(CASE WHEN status != 'paid' THEN amount ELSE 0 END) AS total_due,
+          COUNT(DISTINCT CASE WHEN status != 'paid' AND due_date < CURDATE() THEN month END) AS overdue_months
+        FROM invoices
+        WHERE deleted_at IS NULL
+        GROUP BY tenant_id, student_id
+      ) fin ON fin.student_id = s.id AND fin.tenant_id = s.tenant_id
+      LEFT JOIN (
+        SELECT tenant_id, student_id, COUNT(*) AS scholarship_count
+        FROM student_scholarship_assignments
+        WHERE status = 'active'
+        GROUP BY tenant_id, student_id
+      ) sch ON sch.student_id = s.id AND sch.tenant_id = s.tenant_id
+      LEFT JOIN (
+        SELECT tenant_id, student_id, DATE_FORMAT(MAX(date), '%Y-%m-%d') AS last_payment_date
+        FROM payments
+        GROUP BY tenant_id, student_id
+      ) pay ON pay.student_id = s.id AND pay.tenant_id = s.tenant_id`;
+
+    const [countRows] = await pool.query(
+      `SELECT COUNT(*) AS total, COALESCE(SUM(fin.total_due), 0) AS filtered_total_due
+       FROM students s ${joins} ${where}`,
+      params
     );
+    const [rows] = await pool.query(
+      `SELECT s.*,
+          COALESCE(fin.total_due, 0) AS total_due,
+          COALESCE(fin.overdue_months, 0) AS overdue_months,
+          pay.last_payment_date,
+          COALESCE(sch.scholarship_count, 0) AS scholarship_count,
+          CASE
+            WHEN COALESCE(fin.overdue_months, 0) >= 3 THEN 'critical'
+            WHEN COALESCE(fin.overdue_months, 0) = 2 THEN 'high-risk'
+            WHEN COALESCE(fin.overdue_months, 0) = 1 THEN 'watch'
+            ELSE 'current'
+          END AS risk_tier
+       FROM students s ${joins} ${where}
+       ORDER BY s.created_at DESC, s.id DESC LIMIT ? OFFSET ?`,
+      [...params, parsedPageSize, offset]
+    );
+
+    const facetParams = req.tenantId ? [req.tenantId] : [];
+    const facetTenantWhere = req.tenantId ? 'AND tenant_id = ?' : '';
+    const [facetRows] = await pool.query(
+      `SELECT class AS class_name, section, COUNT(*) AS count
+       FROM students
+       WHERE deleted_at IS NULL ${facetTenantWhere}
+       GROUP BY class, section
+       ORDER BY class, section`,
+      facetParams
+    );
+    const classMap = new Map();
+    for (const row of facetRows) {
+      if (!classMap.has(row.class_name)) classMap.set(row.class_name, { name: row.class_name, count: 0, sections: [] });
+      const entry = classMap.get(row.class_name);
+      const count = Number(row.count);
+      entry.count += count;
+      entry.sections.push({ name: row.section || '-', count });
+    }
 
     res.json({
       data: rows,
-      meta: { page: parseInt(page), pageSize: parseInt(pageSize), total: countRows[0].total },
+      meta: {
+        page: parsedPage,
+        pageSize: parsedPageSize,
+        total: Number(countRows[0].total),
+        filteredTotalDue: Number(countRows[0].filtered_total_due),
+        facets: {
+          totalStudents: Array.from(classMap.values()).reduce((sum, item) => sum + item.count, 0),
+          classes: Array.from(classMap.values()),
+        },
+      },
     });
   } catch (err) {
     next(err);
@@ -87,6 +173,9 @@ const createStudent = async (req, res, next) => {
       );
       seq = seqRow.next_seq;
       consumerNumber = req.body.consumerNumber || generateConsumerNumber(billerCode, seq);
+      if (!/^\d{1,24}$/.test(consumerNumber) || !consumerNumber.startsWith(String(FINTECH_PREFIX))) {
+        throw new AppError(`Consumer number must be numeric, at most 24 digits, and start with ${FINTECH_PREFIX}`, 400, 'INVALID_CONSUMER_NUMBER');
+      }
       billId = req.body.billId || `SCH-${billerCode}-${String(seq).padStart(5, '0')}`;
 
       id = uuidv4();
@@ -299,7 +388,7 @@ const getStudentSnapshot = async (req, res, next) => {
       [studentId]
     );
 
-    const riskTier = overdueMonths >= 5 ? 'critical' : overdueMonths >= 3 ? 'high-risk' : overdueMonths >= 1 ? 'watch' : 'current';
+    const riskTier = overdueMonths >= 3 ? 'critical' : overdueMonths >= 2 ? 'high-risk' : overdueMonths >= 1 ? 'watch' : 'current';
 
     res.json({
       data: {

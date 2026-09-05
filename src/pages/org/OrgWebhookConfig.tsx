@@ -96,7 +96,7 @@ const OrgWebhookConfig = () => {
             <CardTitle>Configuration</CardTitle>
           </div>
           <CardDescription>
-            Set the endpoint ETEA's 1BILL platform will call when an applicant's payment is confirmed.
+            Set the HTTPS endpoint this platform will call when a payment is confirmed.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -104,7 +104,7 @@ const OrgWebhookConfig = () => {
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                Webhook is not configured. ETEA will not receive payment confirmations until a URL and secret are saved.
+                Webhook is not configured. Your system will not receive payment confirmations until a URL and secret are saved.
               </AlertDescription>
             </Alert>
           )}
@@ -196,7 +196,7 @@ const OrgWebhookConfig = () => {
                 <>
                   <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
                   <span className="text-green-700 dark:text-green-400">
-                    ✓ ETEA responded with {testResult.status}
+                    ✓ Your endpoint responded with {testResult.status}
                   </span>
                   <Badge variant="outline" className="ml-auto text-xs text-green-700 border-green-300">
                     {testResult.status}

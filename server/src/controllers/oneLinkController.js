@@ -137,6 +137,9 @@ const paymentError = (code) => ({
   reserved: '',
 });
 
+const validConsumerNumber = (value) => /^\d{1,24}$/.test(value);
+const validBankMnemonic = (value) => /^[A-Za-z0-9]{1,8}$/.test(value);
+
 // ── BillInquiry ───────────────────────────────────────────────────────────────
 
 /**
@@ -153,9 +156,11 @@ const paymentError = (code) => ({
 const billInquiry1Link = async (req, res) => {
   try {
     const consumerNumber = (req.body.consumer_number || '').trim();
+    const bankMnemonic = (req.body.bank_mnemonic || '').trim();
+    const reserved = String(req.body.reserved || '');
     const { bundleId } = parseInquiryReserved(req.body.reserved);
 
-    if (!consumerNumber) {
+    if (!validConsumerNumber(consumerNumber) || !validBankMnemonic(bankMnemonic) || reserved.length > 400) {
       return res.json(inquiryError('04'));
     }
 
@@ -240,6 +245,9 @@ const billInquiry1Link = async (req, res) => {
     }
 
     const student = studentRows[0];
+    if (student.status !== 'active') {
+      return res.json(inquiryError('02'));
+    }
 
     // Fetch all unpaid invoices (oldest first)
     const [unpaid] = await pool.query(
@@ -282,10 +290,11 @@ const billInquiry1Link = async (req, res) => {
       if (neverInvoiced && bundleId) {
         const bankMnemonic = (req.body.bank_mnemonic || '').trim();
         const [bundleRows] = await pool.query(
-          `SELECT * FROM bundles
-           WHERE bundle_id = ? AND status = 'active' AND deleted_at IS NULL
+          `SELECT b.* FROM bundles b
+           JOIN bundle_pcids bp ON bp.pcid = b.pcid AND bp.biller_id = ?
+           WHERE b.bundle_id = ? AND b.status = 'active' AND b.deleted_at IS NULL
            LIMIT 1`,
-          [bundleId]
+          [student.tenant_id, bundleId]
         );
 
         if (bundleRows.length > 0) {
@@ -383,8 +392,11 @@ const billInquiry1Link = async (req, res) => {
 
     // --- Unpaid / overdue ---
     const baseAmount = totalDue;  // includes ledger-only charges (no invoice)
-    const lateFeeTotal = unpaid.reduce((s, inv) => s + parseFloat(inv.late_fee || 0), 0);
     const isOverdue = unpaid.some((inv) => inv.due_date && new Date(inv.due_date) < now);
+    const lateFeeTotal = unpaid.reduce(
+      (sum, inv) => sum + (inv.due_date && new Date(inv.due_date) < now ? parseFloat(inv.late_fee || 0) : 0),
+      0
+    );
     const dueDate = oldest?.due_date ? fmtDate(oldest.due_date) : '';
     const billingMo = oldest?.due_date ? fmtBillingMonth(oldest.due_date) : fmtBillingMonth(null);
 
@@ -427,6 +439,7 @@ const billInquiry1Link = async (req, res) => {
  *   response_Code, Identification_parameter, reserved
  */
 const billPayment1Link = async (req, res) => {
+  let connection;
   try {
     const {
       consumer_number,
@@ -441,11 +454,20 @@ const billPayment1Link = async (req, res) => {
     const tranAuthId = (tran_auth_id || '').trim();
     const tranDate = (tran_date || '').trim();
     const tranTime = (tran_time || '').trim();
-    const bankMnemonic = (bank_mnemonic || '1LINK').trim();
+    const bankMnemonic = (bank_mnemonic || '').trim();
+    const reserved = String(req.body.reserved || '');
     const { bundleId } = parsePaymentReserved(req.body.reserved);
 
     // Required field validation
-    if (!consumerNumber || !tranAuthId || !transaction_amount || !tranDate || !tranTime) {
+    if (
+      !validConsumerNumber(consumerNumber) ||
+      !/^\d{6}$/.test(tranAuthId) ||
+      !/^\d{12}$/.test(String(transaction_amount)) ||
+      !/^\d{8}$/.test(tranDate) ||
+      !/^\d{6}$/.test(tranTime) ||
+      !validBankMnemonic(bankMnemonic) ||
+      reserved.length > 515
+    ) {
       return res.json(paymentError('04'));
     }
 
@@ -455,49 +477,72 @@ const billPayment1Link = async (req, res) => {
       return res.json(paymentError('04'));
     }
 
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const rejectPayment = async (code) => {
+      await connection.rollback();
+      connection.release();
+      connection = null;
+      return res.json(paymentError(code));
+    };
+
     // Look up student + tenant
-    const [studentRows] = await pool.query(
+    const [studentRows] = await connection.query(
       `SELECT s.*, t.id AS tenant_id, t.name AS biller_name
        FROM students s
        JOIN tenants t ON s.tenant_id = t.id
-       WHERE s.consumer_number = ? AND s.deleted_at IS NULL`,
+       WHERE s.consumer_number = ? AND s.deleted_at IS NULL
+       FOR UPDATE`,
       [consumerNumber]
     );
 
     if (studentRows.length === 0) {
       // Fallback: check org payment records
-      const [orgRows] = await pool.query(
+      const [orgRows] = await connection.query(
         `SELECT epr.*, t.id AS tenant_id, t.name AS biller_name
          FROM org_payment_records epr
          JOIN tenants t ON epr.tenant_id = t.id
-         WHERE epr.consumer_number = ?`,
+         WHERE epr.consumer_number = ?
+         FOR UPDATE`,
         [consumerNumber]
       );
 
       if (orgRows.length === 0) {
-        return res.json(paymentError('01'));
+        return rejectPayment('01');
       }
 
       const orgRec = orgRows[0];
 
+      if (orgRec.status === 'pending' && orgRec.expiry_date && parseDbDate(orgRec.expiry_date) <= new Date()) {
+        await connection.query("UPDATE org_payment_records SET status = 'expired' WHERE id = ?", [orgRec.id]);
+        await connection.commit();
+        connection.release();
+        connection = null;
+        return res.json(paymentError('01'));
+      }
+
       // Check org duplicate
       const orgDupKey = `${consumerNumber}:${tranAuthId}:${tranDate}:${tranTime}`;
-      const [orgDupRows] = await pool.query(
+      const [orgDupRows] = await connection.query(
         `SELECT id FROM payments WHERE reference = ? LIMIT 1`,
         [orgDupKey]
       );
       if (orgDupRows.length > 0) {
-        return res.json(paymentError('03'));
+        return rejectPayment('03');
       }
 
       // Check already paid
       if (orgRec.status === 'paid') {
-        return res.json(paymentError('06'));
+        return rejectPayment('06');
       }
 
       // Check expired / failed
       if (orgRec.status === 'expired' || orgRec.status === 'failed') {
-        return res.json(paymentError('01'));
+        return rejectPayment('01');
+      }
+
+      if (Math.abs(amount - parseFloat(orgRec.amount)) > 0.005) {
+        return rejectPayment('04');
       }
 
       const paidAt = parseTranDateTime(tranDate, tranTime);
@@ -506,7 +551,7 @@ const billPayment1Link = async (req, res) => {
         : paidAt.toISOString().slice(0, 19).replace('T', ' ');
 
       // Mark org payment as paid
-      await pool.query(
+      await connection.query(
         `UPDATE org_payment_records SET status = 'paid', transaction_id = ?, paid_at = ? WHERE id = ?`,
         [tranAuthId, paidAtStr, orgRec.id]
       );
@@ -514,7 +559,7 @@ const billPayment1Link = async (req, res) => {
       // Record payment row for duplicate detection
       const paymentId = uuidv4();
       const receiptNumber = `RCPT-${Date.now()}`;
-      await pool.query(
+      await connection.query(
         `INSERT INTO payments
            (id, tenant_id, student_id, consumer_number, amount, date, reference, voucher_number, channel, receipt_number, note)
          VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -524,7 +569,7 @@ const billPayment1Link = async (req, res) => {
 
       // Record transaction
       try {
-        await pool.query(
+        await connection.query(
           `INSERT INTO transactions
              (id, tenant_id, transaction_id, consumer_number, amount, status, date, biller_name, channel, reference, notes)
            VALUES (?, ?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?)`,
@@ -532,15 +577,19 @@ const billPayment1Link = async (req, res) => {
             amount, paidAtStr, orgRec.biller_name, bankMnemonic, orgDupKey, `Org app ${orgRec.application_id}`]
         );
       } catch (e) {
-        // Duplicate — ignore
+        if (e.code !== 'ER_DUP_ENTRY') throw e;
       }
 
       // Record org notification
-      await pool.query(
+      await connection.query(
         `INSERT INTO org_payment_notifications (id, tenant_id, application_id, payment_id, bill_id, status)
          VALUES (?, ?, ?, ?, ?, 'paid')`,
         [uuidv4(), orgRec.tenant_id, orgRec.application_id, orgRec.id, orgRec.bill_id]
       );
+
+      await connection.commit();
+      connection.release();
+      connection = null;
 
       await auditLog(
         req, 'payment', 'org_bill_payment', paymentId,
@@ -556,26 +605,29 @@ const billPayment1Link = async (req, res) => {
 
     const student = studentRows[0];
     const tenantId = student.tenant_id;
+    if (student.status !== 'active') {
+      return rejectPayment('01');
+    }
 
     // Duplicate detection: unique key = consumerNumber:tranAuthId:tranDate:tranTime
     const dupKey = `${consumerNumber}:${tranAuthId}:${tranDate}:${tranTime}`;
-    const [dupRows] = await pool.query(
+    const [dupRows] = await connection.query(
       `SELECT id FROM payments WHERE reference = ? LIMIT 1`,
       [dupKey]
     );
     if (dupRows.length > 0) {
-      return res.json(paymentError('03'));
+      return rejectPayment('03');
     }
 
     // Check if already fully paid
-    const [unpaid] = await pool.query(
+    const [unpaid] = await connection.query(
       `SELECT id, amount, late_fee, due_date, late_fee_applied, month, invoice_number FROM invoices
        WHERE consumer_number = ? AND status != 'paid' AND deleted_at IS NULL
        ORDER BY due_date ASC`,
       [consumerNumber]
     );
     if (unpaid.length === 0) {
-      return res.json(paymentError('06'));
+      return rejectPayment('06');
     }
 
     // Build paidAt timestamp
@@ -584,8 +636,24 @@ const billPayment1Link = async (req, res) => {
       ? new Date().toISOString().slice(0, 19).replace('T', ' ')
       : paidAt.toISOString().slice(0, 19).replace('T', ' ');
 
+    const invoiceDue = unpaid.reduce((sum, inv) => sum + parseFloat(inv.amount), 0);
+    const applicableLateFees = unpaid.reduce(
+      (sum, inv) => sum + (new Date(inv.due_date) < paidAt && !inv.late_fee_applied ? parseFloat(inv.late_fee || 0) : 0),
+      0
+    );
+    const [ledgerTotals] = await connection.query(
+      `SELECT COALESCE(SUM(debit), 0) AS total_debit, COALESCE(SUM(credit), 0) AS total_credit
+       FROM ledger_entries WHERE student_id = ? AND tenant_id = ?`,
+      [student.id, tenantId]
+    );
+    const ledgerOutstanding = Math.max(0, parseFloat(ledgerTotals[0].total_debit) - parseFloat(ledgerTotals[0].total_credit));
+    const expectedAmount = Math.max(invoiceDue, ledgerOutstanding) + applicableLateFees;
+    if (Math.abs(amount - expectedAmount) > 0.005) {
+      return rejectPayment('04');
+    }
+
     // First unpaid invoice number for receipt reference
-    const [firstUnpaid] = await pool.query(
+    const [firstUnpaid] = await connection.query(
       `SELECT invoice_number FROM invoices
        WHERE consumer_number = ? AND status != 'paid' AND deleted_at IS NULL
        ORDER BY due_date ASC LIMIT 1`,
@@ -596,7 +664,7 @@ const billPayment1Link = async (req, res) => {
     // Record payment (reference = dupKey ensures idempotency)
     const paymentId = uuidv4();
     const receiptNumber = `RCPT-${Date.now()}`;
-    await pool.query(
+    await connection.query(
       `INSERT INTO payments
          (id, tenant_id, student_id, consumer_number, amount, date, reference, voucher_number, channel, receipt_number, note)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -609,7 +677,7 @@ const billPayment1Link = async (req, res) => {
     );
 
     // Record transaction
-    await pool.query(
+    await connection.query(
       `INSERT INTO transactions
          (id, tenant_id, transaction_id, consumer_number, amount, status, date, biller_name, channel, reference, notes)
        VALUES (?, ?, ?, ?, ?, 'completed', ?, ?, ?, ?, ?)`,
@@ -625,7 +693,7 @@ const billPayment1Link = async (req, res) => {
     for (const inv of unpaid) {
       const invAmt = parseFloat(inv.amount);
       if (remaining >= invAmt) {
-        await pool.query(
+        await connection.query(
           `UPDATE invoices SET status = 'paid', paid_at = ? WHERE id = ?`,
           [paidAtStr, inv.id]
         );
@@ -643,28 +711,32 @@ const billPayment1Link = async (req, res) => {
       const invDueDate = new Date(inv.due_date);
       if (lateFeeAmt > 0 && paidDate > invDueDate && !inv.late_fee_applied) {
         const monthLabel = inv.month || String(inv.due_date).slice(0, 7);
-        await pool.query(
+        await connection.query(
           `INSERT INTO ledger_entries
              (id, tenant_id, student_id, date, description, debit, credit, balance, bill_id, reference, entry_type)
            VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, 'late_fee')`,
           [uuidv4(), tenantId, student.id, paidAtStr.slice(0, 10),
             `Late Fee — ${monthLabel}`, lateFeeAmt, inv.invoice_number, dupKey]
         );
-        await pool.query('UPDATE invoices SET late_fee_applied = 1 WHERE id = ?', [inv.id]);
+        await connection.query('UPDATE invoices SET late_fee_applied = 1 WHERE id = ?', [inv.id]);
       }
     }
 
     // Ledger entry
-    await pool.query(
+    await connection.query(
       `INSERT INTO ledger_entries
          (id, tenant_id, student_id, date, description, debit, credit, balance, bill_id, reference, entry_type)
        VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'payment')`,
       [
         uuidv4(), tenantId, student.id, paidAtStr,
         `Payment via 1LINK (${bankMnemonic})`,
-        amount, amount, invoiceNumber, dupKey,
+        amount, 0, invoiceNumber, dupKey,
       ]
     );
+
+    await connection.commit();
+    connection.release();
+    connection = null;
 
     await auditLog(
       req, 'payment', 'bill_payment', paymentId,
@@ -677,6 +749,13 @@ const billPayment1Link = async (req, res) => {
       reserved: '',
     });
   } catch (err) {
+    if (connection) {
+      try {
+        await connection.rollback();
+      } finally {
+        connection.release();
+      }
+    }
     logger.error('1LINK BillPayment error:', err);
     return res.json(paymentError('02'));
   }

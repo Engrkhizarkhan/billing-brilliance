@@ -1,123 +1,111 @@
-import { StatCard } from '@/components/StatCard';
-import { Receipt, Wallet, Activity, CheckCircle2, Loader2 } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { formatPKR } from '@/lib/formatters';
 import { useNavigate } from 'react-router-dom';
-import { useMemo } from 'react';
-import { usePaymentStore } from '@/store/paymentStore';
+import { Activity, CheckCircle2, Code2, Receipt, Wallet } from 'lucide-react';
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { StatCard } from '@/components/StatCard';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { api } from '@/lib/api';
+import { formatPKR } from '@/lib/formatters';
 import { useApiQuery } from '@/hooks/useApiQuery';
-import { OrgPaymentRecord } from '@/types';
+
+const emptyStats = {
+  totalRequests: 0,
+  pending: 0,
+  paid: 0,
+  expired: 0,
+  failed: 0,
+  feeCollected: 0,
+  verifiedTransactions: 0,
+  collectionTrend: [] as { month: string; revenue: number }[],
+};
 
 const OrgDashboard = () => {
   const navigate = useNavigate();
-  const paymentVersion = usePaymentStore((state) => state.version);
-
-  const { data: paymentsData, loading: loadingPayments } = useApiQuery(() => api.listOrgPayments(), [paymentVersion]);
-  const paymentRecords = useMemo(() => (paymentsData || []) as OrgPaymentRecord[], [paymentsData]);
-
-  const pipelineData = useMemo(
-    () => [
-      { stage: 'Pending', count: paymentRecords.filter((p) => p.status === 'pending').length },
-      { stage: 'Paid', count: paymentRecords.filter((p) => p.status === 'paid').length },
-      {
-        stage: 'Failed/Expired',
-        count: paymentRecords.filter((p) => p.status === 'failed' || p.status === 'expired').length,
-      },
-    ],
-    [paymentRecords]
-  );
-
-  const collectionTrend = useMemo(() => {
-    const byMonth = new Map<string, number>();
-    paymentRecords
-      .filter((p) => p.status === 'paid')
-      .forEach((p) => {
-        const sourceDate = (p.paidAt || p.createdAt).slice(0, 7);
-        byMonth.set(sourceDate, (byMonth.get(sourceDate) || 0) + Number(p.amount));
-      });
-    return Array.from(byMonth.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, revenue]) => {
-        const [year, monthNum] = month.split('-').map(Number);
-        const label = new Date(year, monthNum - 1, 1).toLocaleDateString('en-US', { month: 'short' });
-        return { month: label, revenue };
-      });
-  }, [paymentRecords]);
-
-  const feeCollected = paymentRecords
-    .filter((p) => p.status === 'paid')
-    .reduce((sum, p) => sum + Number(p.amount), 0);
-
-  const pendingPayments = paymentRecords.filter((p) => p.status === 'pending').length;
-  const verifiedTransactions = paymentRecords.filter((p) => p.status === 'paid' && p.transactionId).length;
-
-  if (loadingPayments) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+  const { data, loading, error, refetch } = useApiQuery(() => api.getOrgStats(), []);
+  const stats = data || emptyStats;
+  const pipeline = [
+    { label: 'Pending', value: stats.pending, color: 'bg-warning' },
+    { label: 'Paid', value: stats.paid, color: 'bg-success' },
+    { label: 'Failed', value: stats.failed, color: 'bg-destructive' },
+    { label: 'Expired', value: stats.expired, color: 'bg-muted-foreground' },
+  ];
+  const maxPipelineValue = Math.max(...pipeline.map((item) => item.value), 1);
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="page-header">Dashboard</h1>
-          <p className="page-description">Overview of payment processing. Applicant data is managed by your organization's core system.</p>
+          <h1 className="page-header">Organization Dashboard</h1>
+          <p className="page-description">Monitor invoice-based payment requests, collections, and callback verification.</p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Activity className="w-3.5 h-3.5 text-success" />
-          <span>System online</span>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Activity className={`h-3.5 w-3.5 ${error ? 'text-destructive' : 'text-success'}`} />
+            {loading ? 'Loading metrics' : error ? 'Metrics unavailable' : 'System online'}
+          </div>
+          {error && <Button size="sm" variant="outline" onClick={() => void refetch()}>Retry</Button>}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="cursor-pointer" onClick={() => navigate('/org/payments')}>
-          <StatCard title="Payment Requests" value={paymentRecords.length} icon={Receipt} />
-        </div>
-        <StatCard title="Fees Collected" value={formatPKR(feeCollected)} icon={Wallet} trend="Paid payment records" trendUp={feeCollected > 0} />
-        <StatCard title="Pending Payments" value={pendingPayments} icon={Receipt} trend="Requests awaiting callback" trendUp={false} />
-        <StatCard title="Verified Transactions" value={verifiedTransactions} icon={CheckCircle2} trend="Callback confirmed" trendUp />
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <button className="text-left" onClick={() => navigate('/org/payments')}>
+          <StatCard title="Payment Requests" value={stats.totalRequests} icon={Receipt} />
+        </button>
+        <StatCard title="Fees Collected" value={formatPKR(stats.feeCollected)} icon={Wallet} trend="Settled payment records" trendUp={stats.feeCollected > 0} />
+        <button className="text-left" onClick={() => navigate('/org/history')}>
+          <StatCard title="Pending Payments" value={stats.pending} icon={Receipt} trend="Awaiting payment confirmation" trendUp={false} />
+        </button>
+        <StatCard title="Verified Transactions" value={stats.verifiedTransactions} icon={CheckCircle2} trend="Transaction ID confirmed" trendUp />
       </div>
 
-      <div className="dashboard-card">
-        <h3 className="section-title mb-4">Payment Status Pipeline</h3>
-        <div className="space-y-3 mt-2">
-          {pipelineData.map((stage, i) => {
-            const maxCount = Math.max(...pipelineData.map((item) => item.count), 1);
-            const pct = (stage.count / maxCount) * 100;
-            const colors = ['bg-warning', 'bg-success', 'bg-destructive'];
-            return (
-              <div key={stage.stage} className="flex items-center gap-3">
-                <span className="text-xs font-medium w-24 text-right text-muted-foreground">{stage.stage}</span>
-                <div className="flex-1 h-8 bg-muted/50 rounded-lg overflow-hidden">
-                  <div className={`${colors[i]} h-full rounded-lg flex items-center px-3 transition-all`} style={{ width: `${Math.max(pct, 10)}%` }}>
-                    <span className="text-xs font-bold text-white">{stage.count}</span>
-                  </div>
+      <div className="grid gap-5 xl:grid-cols-[1fr_1.45fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Payment status pipeline</CardTitle>
+            <CardDescription>Current state of all organization payment requests.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {pipeline.map((stage) => (
+              <div key={stage.label} className="space-y-1.5">
+                <div className="flex justify-between text-xs"><span className="font-medium">{stage.label}</span><span className="text-muted-foreground">{stage.value}</span></div>
+                <div className="h-2.5 overflow-hidden rounded-full bg-muted">
+                  <div className={`h-full rounded-full ${stage.color}`} style={{ width: `${stage.value === 0 ? 0 : Math.max((stage.value / maxPipelineValue) * 100, 8)}%` }} />
                 </div>
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex-row items-start justify-between gap-4">
+            <div><CardTitle className="text-base">Collection trend</CardTitle><CardDescription>Paid payment value for the last 12 months.</CardDescription></div>
+            <Button size="sm" variant="outline" onClick={() => navigate('/org/reports')}>Open reports</Button>
+          </CardHeader>
+          <CardContent>
+            {stats.collectionTrend.length === 0 ? (
+              <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">Collection activity will appear after payments are settled.</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={240}>
+                <AreaChart data={stats.collectionTrend}>
+                  <defs><linearGradient id="orgCollectionGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.2} /><stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} /></linearGradient></defs>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="month" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis fontSize={11} tickLine={false} axisLine={false} tickFormatter={(value) => `${Number(value) / 1000}K`} />
+                  <Tooltip formatter={(value: number) => [formatPKR(value), 'Collected']} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
+                  <Area type="monotone" dataKey="revenue" stroke="hsl(var(--primary))" fill="url(#orgCollectionGradient)" strokeWidth={2.5} />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="dashboard-card">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="section-title">Fee Collection Trend</h3>
-          <span className="metric-change-up">Based on paid payment records</span>
-        </div>
-        <ResponsiveContainer width="100%" height={250}>
-          <AreaChart data={collectionTrend}>
-            <defs>
-              <linearGradient id="orgRevGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(221, 83%, 53%)" stopOpacity={0.15} />
-                <stop offset="95%" stopColor="hsl(221, 83%, 53%)" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 13%, 91%)" />
-            <XAxis dataKey="month" fontSize={11} tick={{ fill: 'hsl(220, 9%, 46%)' }} />
-            <YAxis fontSize={11} tickFormatter={(value) => `${value / 1000}K`} tick={{ fill: 'hsl(220, 9%, 46%)' }} />
-            <Tooltip formatter={(value: number) => [formatPKR(value), 'Collected']} contentStyle={{ borderRadius: '10px', fontSize: '12px', border: '1px solid hsl(220, 13%, 91%)' }} />
-            <Area type="monotone" dataKey="revenue" stroke="hsl(221, 83%, 53%)" fill="url(#orgRevGrad)" strokeWidth={2.5} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
+      <Card className="border-primary/20 bg-primary/[0.03]">
+        <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-3"><Code2 className="mt-0.5 h-5 w-5 shrink-0 text-primary" /><div><p className="font-semibold">Integrating from your own system?</p><p className="text-sm text-muted-foreground">Use the API Integration guide for authentication, payloads, responses, webhooks, and error handling.</p></div></div>
+          <Button className="shrink-0" onClick={() => navigate('/org/api-integration')}>View API Integration</Button>
+        </CardContent>
+      </Card>
     </div>
   );
 };

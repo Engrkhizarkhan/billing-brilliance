@@ -82,7 +82,8 @@ const ApiReference = () => {
   const toggleVisible = (pcid: string) => {
     setVisibleKeys((prev) => {
       const next = new Set(prev);
-      next.has(pcid) ? next.delete(pcid) : next.add(pcid);
+      if (next.has(pcid)) next.delete(pcid);
+      else next.add(pcid);
       return next;
     });
   };

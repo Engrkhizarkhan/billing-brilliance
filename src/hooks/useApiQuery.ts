@@ -1,17 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-type ApiState<T> = {
+type ApiState<T, TMeta> = {
   data: T | null;
+  meta: TMeta | null;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
 };
 
-export function useApiQuery<T>(
-  fetcher: () => Promise<{ data: T }>,
+export function useApiQuery<T, TMeta = unknown>(
+  fetcher: () => Promise<{ data: T; meta?: TMeta }>,
   deps: unknown[] = []
-): ApiState<T> {
+): ApiState<T, TMeta> {
   const [data, setData] = useState<T | null>(null);
+  const [meta, setMeta] = useState<TMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
@@ -23,6 +25,7 @@ export function useApiQuery<T>(
       const res = await fetcher();
       if (mountedRef.current) {
         setData(res.data);
+        setMeta(res.meta ?? null);
       }
     } catch (e) {
       if (mountedRef.current) {
@@ -44,7 +47,7 @@ export function useApiQuery<T>(
     };
   }, [refetch]);
 
-  return { data, loading, error, refetch };
+  return { data, meta, loading, error, refetch };
 }
 
 export function useApiMutation<TInput, TOutput>(

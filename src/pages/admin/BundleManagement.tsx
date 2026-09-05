@@ -5,6 +5,10 @@ import { FilterBar } from '@/components/FilterBar';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -62,6 +66,8 @@ const BundleManagement = () => {
 
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [regeneratePcid, setRegeneratePcid] = useState<string | null>(null);
+  const [regenerateConfirmation, setRegenerateConfirmation] = useState('');
 
   const [linkTarget, setLinkTarget] = useState<PcidKey | null>(null);
   const [linkBillerId, setLinkBillerId] = useState('');
@@ -104,13 +110,23 @@ const BundleManagement = () => {
   }, [allBundles, pcidKeys, search, statusFilter]);
 
   const toggleExpand = (pcid: string) =>
-    setExpanded((prev) => { const n = new Set(prev); n.has(pcid) ? n.delete(pcid) : n.add(pcid); return n; });
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(pcid)) next.delete(pcid);
+      else next.add(pcid);
+      return next;
+    });
 
   const expandAll = () => setExpanded(new Set(pcidGroups.map((g) => g.pcid)));
   const collapseAll = () => setExpanded(new Set());
 
   const toggleKeyVisible = (pcid: string) =>
-    setVisibleKeys((prev) => { const n = new Set(prev); n.has(pcid) ? n.delete(pcid) : n.add(pcid); return n; });
+    setVisibleKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(pcid)) next.delete(pcid);
+      else next.add(pcid);
+      return next;
+    });
 
   const copyKey = (key: string, pcid: string) => {
     void navigator.clipboard.writeText(key);
@@ -119,15 +135,24 @@ const BundleManagement = () => {
     setTimeout(() => setCopiedKey(null), 1500);
   };
 
-  const handleRegenerateKey = async (pcid: string) => {
-    if (!window.confirm(`Regenerate API key for PCID "${pcid}"? The old key will stop working immediately.`)) return;
+  const handleRegenerateKey = async () => {
+    if (!regeneratePcid || regenerateConfirmation !== regeneratePcid) return;
+    const pcid = regeneratePcid;
     setLoading(true);
-    const res = await api.regeneratePcidKey(pcid);
-    if (res.data) {
-      setPcidKeys((prev) => prev.map((k) => (k.pcid === pcid ? res.data! : k)));
-      toast.success('API key regenerated');
+    try {
+      const res = await api.regeneratePcidKey(pcid, `REGENERATE ${pcid}`);
+      if (res.data) {
+        setPcidKeys((prev) => prev.map((k) => (k.pcid === pcid ? res.data! : k)));
+        setVisibleKeys((prev) => new Set(prev).add(pcid));
+        toast.success('API key regenerated. Copy and distribute the new key now.');
+      }
+      setRegeneratePcid(null);
+      setRegenerateConfirmation('');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to regenerate API key');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const openLinkBiller = (pk: PcidKey) => {
@@ -399,6 +424,27 @@ const BundleManagement = () => {
         </DialogContent>
       </Dialog>
 
+      <AlertDialog open={Boolean(regeneratePcid)} onOpenChange={(open) => { if (!open && !loading) { setRegeneratePcid(null); setRegenerateConfirmation(''); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Regenerate PCID API key?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The current key for PCID <strong>{regeneratePcid}</strong> will be revoked immediately. Requests using the old key will fail until every integration is updated.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="pcid-key-confirmation">Type the PCID to continue</Label>
+            <Input id="pcid-key-confirmation" value={regenerateConfirmation} onChange={(event) => setRegenerateConfirmation(event.target.value.toUpperCase())} autoComplete="off" />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={loading || regenerateConfirmation !== regeneratePcid} onClick={(event) => { event.preventDefault(); void handleRegenerateKey(); }}>
+              {loading ? 'Regenerating…' : 'Regenerate and revoke old key'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Filters */}
       <FilterBar
         searchPlaceholder="Search bundles…"
@@ -477,7 +523,7 @@ const BundleManagement = () => {
                         <Button
                           variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
                           title="Regenerate API key"
-                          onClick={() => void handleRegenerateKey(group.pcid)}
+                          onClick={() => { setRegeneratePcid(group.pcid); setRegenerateConfirmation(''); }}
                         >
                           <KeyRound className="w-3.5 h-3.5" />
                         </Button>

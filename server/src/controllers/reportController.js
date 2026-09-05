@@ -3,31 +3,94 @@ const { pool } = require('../config/database');
 // ---- Dashboard stats ----
 const getDashboardStats = async (req, res, next) => {
   try {
-    const tenantWhere = req.tenantId ? 'WHERE tenant_id = ?' : 'WHERE 1=1';
-    const params = req.tenantId ? [req.tenantId] : [];
+    const tenantClause = req.tenantId ? 'tenant_id = ?' : '1=1';
+    const aliasedTenantClause = (alias) => req.tenantId ? `${alias}.tenant_id = ?` : '1=1';
+    const params = () => req.tenantId ? [req.tenantId] : [];
 
-    const [[studentCount]] = await pool.query(`SELECT COUNT(*) as count FROM students ${tenantWhere} AND deleted_at IS NULL`, params);
-    const [[invoiceCount]] = await pool.query(`SELECT COUNT(*) as count FROM invoices ${tenantWhere} AND deleted_at IS NULL`, params);
-    const [[paidRevenue]] = await pool.query(`SELECT COALESCE(SUM(amount), 0) as total FROM invoices ${tenantWhere} AND status = 'paid' AND deleted_at IS NULL`, params);
-    const [[pendingAmount]] = await pool.query(`SELECT COALESCE(SUM(amount), 0) as total FROM invoices ${tenantWhere} AND status != 'paid' AND deleted_at IS NULL`, params);
-    const [[overdueCount]] = await pool.query(`SELECT COUNT(*) as count FROM invoices ${tenantWhere} AND status = 'overdue' AND deleted_at IS NULL`, params);
-    const [[overdueRow]] = await pool.query(`SELECT COALESCE(SUM(amount), 0) as total FROM invoices ${tenantWhere} AND status != 'paid' AND due_date < CURDATE() AND deleted_at IS NULL`, params);
-    const [[txnCount]] = await pool.query(`SELECT COUNT(*) as count FROM transactions ${tenantWhere}`, params);
-    const [[lateFeeRow]] = await pool.query(
-      `SELECT COALESCE(SUM(debit), 0) as total FROM ledger_entries ${tenantWhere} AND entry_type = 'late_fee'`,
-      params
-    );
+    const [
+      [studentRows], [invoiceRows], [txnRows], [lateFeeRows],
+      [classRows], [defaulterClassRows], [paymentRows],
+    ] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(*) AS total_students,
+                SUM(CASE WHEN NOT EXISTS (
+                  SELECT 1 FROM invoices i
+                  WHERE i.student_id = s.id AND i.month = DATE_FORMAT(CURDATE(), '%Y-%m')
+                    AND i.deleted_at IS NULL
+                ) THEN 1 ELSE 0 END) AS students_without_current_bill
+         FROM students s
+         WHERE ${aliasedTenantClause('s')} AND s.deleted_at IS NULL`,
+        params()
+      ),
+      pool.query(
+        `SELECT COUNT(*) AS total_invoices,
+                SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) AS paid_invoices,
+                SUM(CASE WHEN status != 'paid' AND due_date >= CURDATE() THEN 1 ELSE 0 END) AS pending_invoices,
+                SUM(CASE WHEN status != 'paid' AND due_date < CURDATE() THEN 1 ELSE 0 END) AS overdue_invoices,
+                COALESCE(SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END), 0) AS paid_revenue,
+                COALESCE(SUM(CASE WHEN status != 'paid' THEN amount ELSE 0 END), 0) AS pending_amount,
+                COALESCE(SUM(CASE WHEN status != 'paid' AND due_date < CURDATE() THEN amount ELSE 0 END), 0) AS overdue_amount,
+                COUNT(DISTINCT CASE WHEN status != 'paid' THEN student_id END) AS defaulters_count
+         FROM invoices WHERE ${tenantClause} AND deleted_at IS NULL`,
+        params()
+      ),
+      pool.query(`SELECT COUNT(*) AS total_transactions FROM transactions WHERE ${tenantClause}`, params()),
+      pool.query(
+        `SELECT COALESCE(SUM(debit), 0) AS total_late_fees
+         FROM ledger_entries WHERE ${tenantClause} AND entry_type = 'late_fee'`,
+        params()
+      ),
+      pool.query(
+        `SELECT s.class AS name, COUNT(*) AS count
+         FROM students s WHERE ${aliasedTenantClause('s')} AND s.deleted_at IS NULL
+         GROUP BY s.class ORDER BY s.class`,
+        params()
+      ),
+      pool.query(
+        `SELECT s.class AS class_name, COUNT(DISTINCT s.id) AS count
+         FROM students s
+         JOIN invoices i ON i.student_id = s.id AND i.status != 'paid' AND i.deleted_at IS NULL
+         WHERE ${aliasedTenantClause('s')} AND s.deleted_at IS NULL
+         GROUP BY s.class ORDER BY s.class`,
+        params()
+      ),
+      pool.query(
+        `WITH scoped_payments AS (
+           SELECT amount, date FROM payments WHERE ${tenantClause}
+         ), latest AS (SELECT DATE(MAX(date)) AS payment_date FROM scoped_payments)
+         SELECT COALESCE(SUM(CASE WHEN DATE_FORMAT(sp.date, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m') THEN sp.amount ELSE 0 END), 0) AS collected_this_month,
+                latest.payment_date AS latest_payment_date,
+                COALESCE(SUM(CASE WHEN DATE(sp.date) = latest.payment_date THEN 1 ELSE 0 END), 0) AS latest_day_payments,
+                COALESCE(SUM(CASE WHEN DATE(sp.date) = latest.payment_date THEN sp.amount ELSE 0 END), 0) AS latest_day_amount
+         FROM scoped_payments sp CROSS JOIN latest`,
+        params()
+      ),
+    ]);
+
+    const students = studentRows[0] || {};
+    const invoices = invoiceRows[0] || {};
+    const payments = paymentRows[0] || {};
 
     res.json({
       data: {
-        totalStudents: studentCount.count,
-        totalInvoices: invoiceCount.count,
-        paidRevenue: parseFloat(paidRevenue.total),
-        pendingAmount: parseFloat(pendingAmount.total),
-        overdueAmount: parseFloat(overdueRow.total),
-        overdueInvoices: overdueCount.count,
-        totalTransactions: txnCount.count,
-        totalLateFees: parseFloat(lateFeeRow.total),
+        totalStudents: Number(students.total_students || 0),
+        studentsWithoutCurrentBill: Number(students.students_without_current_bill || 0),
+        totalInvoices: Number(invoices.total_invoices || 0),
+        paidInvoices: Number(invoices.paid_invoices || 0),
+        pendingInvoices: Number(invoices.pending_invoices || 0),
+        overdueInvoices: Number(invoices.overdue_invoices || 0),
+        paidRevenue: Number(invoices.paid_revenue || 0),
+        pendingAmount: Number(invoices.pending_amount || 0),
+        overdueAmount: Number(invoices.overdue_amount || 0),
+        defaultersCount: Number(invoices.defaulters_count || 0),
+        totalTransactions: Number(txnRows[0]?.total_transactions || 0),
+        totalLateFees: Number(lateFeeRows[0]?.total_late_fees || 0),
+        collectedThisMonth: Number(payments.collected_this_month || 0),
+        latestPaymentDate: payments.latest_payment_date || null,
+        latestDayPayments: Number(payments.latest_day_payments || 0),
+        latestDayAmount: Number(payments.latest_day_amount || 0),
+        classSummary: classRows.map((row) => ({ name: row.name, count: Number(row.count) })),
+        defaultersByClass: defaulterClassRows.map((row) => ({ className: row.class_name, count: Number(row.count) })),
       },
     });
   } catch (err) {
@@ -83,20 +146,17 @@ const getCollectionByFeePlan = async (req, res, next) => {
     const tenantId = req.tenantId;
     if (!tenantId) return res.status(400).json({ error: 'Tenant required' });
 
-    // Sum actual collected payments per fee plan via student assignments.
-    // Falls back to the plan's configured amount when no payments exist yet.
+    // Attribute settled invoice value directly to its fee plan. Joining payments
+    // through student assignments over-counts students with more than one plan.
     const [rows] = await pool.query(
       `SELECT fp.name,
-              COALESCE(SUM(p.amount), fp.amount) AS value
+              COALESCE(SUM(CASE WHEN i.status = 'paid' THEN i.amount ELSE 0 END), 0) AS value
        FROM fee_plans fp
-       LEFT JOIN payment_plan_assignments ppa
-             ON ppa.fee_plan_id = fp.id AND ppa.tenant_id = ?
-       LEFT JOIN payments p
-             ON p.student_id = ppa.student_id AND p.tenant_id = ?
+       LEFT JOIN invoices i ON i.fee_plan_id = fp.id AND i.tenant_id = ? AND i.deleted_at IS NULL
        WHERE fp.tenant_id = ? AND fp.deleted_at IS NULL
        GROUP BY fp.id, fp.name, fp.amount
        ORDER BY value DESC`,
-      [tenantId, tenantId, tenantId]
+      [tenantId, tenantId]
     );
 
     res.json({ data: rows.map((r) => ({ name: r.name, value: parseFloat(r.value) })) });

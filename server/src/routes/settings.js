@@ -18,9 +18,11 @@ router.patch('/scholarships/:id/status', settingsController.updateScholarshipSta
 router.get('/students/:studentId/scholarships', settingsController.fetchStudentScholarships);
 router.get('/scholarship-assignments', settingsController.fetchAllScholarshipAssignments);
 router.post('/scholarship-assignments', settingsController.createScholarshipAssignment);
+router.post('/scholarship-assignments/bulk', settingsController.bulkCreateScholarshipAssignments);
 router.patch('/scholarship-assignments/:id/status', settingsController.updateScholarshipAssignment);
 router.get('/payment-plan-assignments', settingsController.fetchPaymentPlanAssignments);
 router.post('/payment-plan-assignments', settingsController.createPaymentPlanAssignment);
+router.post('/payment-plan-assignments/bulk', settingsController.bulkCreatePaymentPlanAssignments);
 router.put('/payment-plan-assignments/:id', settingsController.updatePaymentPlanAssignment);
 router.delete('/payment-plan-assignments/:id', settingsController.deletePaymentPlanAssignment);
 router.get('/settings/:key', settingsController.getSetting);

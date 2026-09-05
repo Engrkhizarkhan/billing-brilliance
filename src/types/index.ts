@@ -4,6 +4,8 @@ export type SchoolAccessRole = 'admin' | 'finance' | 'staff' | 'viewer';
 export interface User {
   id: string;
   tenantId?: string | null;
+  tenantName?: string | null;
+  billerCode?: string | null;
   email: string;
   name: string;
   role: UserRole;
@@ -52,6 +54,23 @@ export interface Student {
   busMonthlyFee: number;
 }
 
+export interface StudentDirectoryRecord extends Student {
+  totalDue: number;
+  overdueMonths: number;
+  lastPaymentDate: string | null;
+  scholarshipCount: number;
+  riskTier: StudentRiskTier;
+}
+
+export interface StudentDirectoryFacets {
+  totalStudents: number;
+  classes: Array<{
+    name: string;
+    count: number;
+    sections: Array<{ name: string; count: number }>;
+  }>;
+}
+
 export interface Invoice {
   id: string;
   invoiceNumber: string;
@@ -65,6 +84,8 @@ export interface Invoice {
   status: 'pending' | 'paid' | 'overdue';
   dueDate: string;
   billerId: string;
+  className?: string;
+  section?: string;
 }
 
 export interface Transaction {
@@ -95,6 +116,14 @@ export interface StudentScholarshipAssignment {
   effectiveFrom: string;
   assignedAt: string;
   status: 'active' | 'inactive';
+  studentName?: string;
+  className?: string;
+  section?: string;
+  rollNumber?: string;
+  consumerNumber?: string;
+  scholarshipName?: string;
+  scholarshipType?: Scholarship['type'];
+  scholarshipValue?: number;
 }
 
 export interface PaymentPlanAssignment {

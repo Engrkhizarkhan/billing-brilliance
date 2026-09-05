@@ -7,7 +7,7 @@ const hpp = require('hpp');
 
 const config = require('./config');
 const logger = require('./config/logger');
-const { testConnection } = require('./config/database');
+const { pool, testConnection } = require('./config/database');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
 const { ensureProtectedAdmin } = require('./services/protectedAdmin');
 
@@ -35,6 +35,10 @@ const adminToolsRoutes = require('./routes/adminTools');
 // ---- Startup security guards ----
 const INSECURE_DEFAULTS = ['change-me-in-production', 'change-refresh-in-production', 'your_jwt_secret_here_change_in_production', 'your_refresh_secret_here_change_in_production'];
 if (config.nodeEnv === 'production') {
+  if (!config.requireHttps) {
+    console.error('FATAL: REQUIRE_HTTPS must be enabled in production. Terminate TLS at the trusted reverse proxy and forward X-Forwarded-Proto.');
+    process.exit(1);
+  }
   if (INSECURE_DEFAULTS.includes(config.jwt.secret)) {
     console.error('FATAL: JWT_SECRET is set to an insecure default value. Set a strong random secret before deploying.');
     process.exit(1);
@@ -45,6 +49,22 @@ if (config.nodeEnv === 'production') {
   }
   if (!config.db.user || !config.db.password) {
     console.error('FATAL: DB_USER or DB_PASSWORD is not set. Configure real database credentials before deploying.');
+    process.exit(1);
+  }
+  if (!config.onebill.username || !config.onebill.password || ['demo-user', 'demo-pass'].includes(config.onebill.username) || ['demo-user', 'demo-pass'].includes(config.onebill.password)) {
+    console.error('FATAL: Configure non-default ONELINK_USERNAME and ONELINK_PASSWORD values before deploying.');
+    process.exit(1);
+  }
+  if (config.onebill.allowedIps.length === 0) {
+    console.error('FATAL: Configure ONELINK_ALLOWED_IPS before deploying 1BILL endpoints.');
+    process.exit(1);
+  }
+  if (!/^\d{6}$/.test(config.fintechPrefix)) {
+    console.error('FATAL: FINTECH_PREFIX must be the six-digit prefix assigned by 1LINK.');
+    process.exit(1);
+  }
+  if (config.org.requireWebhookSignature && (!config.org.webhookSecret || config.org.webhookSecret === 'change-me')) {
+    console.error('FATAL: Configure a strong ORG_WEBHOOK_SECRET when webhook signatures are enabled.');
     process.exit(1);
   }
 }
@@ -58,6 +78,13 @@ const app = express();
 // by injecting a fake X-Forwarded-For header directly.
 if (config.nodeEnv === 'production') {
   app.set('trust proxy', 1);
+}
+
+if (config.nodeEnv === 'production' && config.requireHttps) {
+  app.use((req, res, next) => {
+    if (req.secure) return next();
+    return res.status(426).json({ error: 'HTTPS is required', code: 'HTTPS_REQUIRED' });
+  });
 }
 
 // ---- Security middleware ----
@@ -138,11 +165,17 @@ app.use('/api/bundles', bundleRoutes);
 // Admin dev / maintenance tools (authenticate + authorize inside the router)
 app.use('/api/admin', adminToolsRoutes);
 
-// Broad /api mounts (have global authenticate middleware inside)
-app.use('/api', orgPaymentRoutes);
-app.use('/api', transactionRoutes);
-app.use('/api', settingsRoutes);
-// ---- Health check ----
+// Orchestrator readiness probe. Liveness remains available at /api/health.
+app.get('/api/ready', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'ready', service: 'payniva-api', timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ status: 'not_ready', service: 'payniva-api', timestamp: new Date().toISOString() });
+  }
+});
+
+// Liveness must stay unauthenticated so infrastructure can detect a running process.
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -150,6 +183,11 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// Broad /api mounts (have global authenticate middleware inside)
+app.use('/api', orgPaymentRoutes);
+app.use('/api', transactionRoutes);
+app.use('/api', settingsRoutes);
 
 // ---- Error handling ----
 app.use(notFound);
@@ -206,6 +244,8 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
 
 module.exports = app;

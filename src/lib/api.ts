@@ -16,6 +16,8 @@ import type {
   Service,
   SchoolAccessRole,
   Student,
+  StudentDirectoryFacets,
+  StudentDirectoryRecord,
   User,
   Biller,
   StudentFinancialSnapshot,
@@ -26,8 +28,10 @@ import type {
   AuditLog,
 } from '@/types';
 
-export type ApiResponse<T> = { data: T; meta?: PaginationMeta; message?: string };
 export type PaginationMeta = { page: number; pageSize: number; total: number };
+export type StudentDirectoryMeta = PaginationMeta & { facets: StudentDirectoryFacets; filteredTotalDue: number };
+export type InvoiceListMeta = PaginationMeta & { classes: Array<{ name: string; count: number }> };
+export type ApiResponse<T, TMeta = PaginationMeta> = { data: T; meta?: TMeta; message?: string };
 
 // ---- Auth ----
 export const api = {
@@ -86,6 +90,10 @@ export const api = {
     return { data: true, message: 'Password reset' };
   },
 
+  async deleteUser(id: string): Promise<ApiResponse<boolean>> {
+    return del<ApiResponse<boolean>>(`/users/${id}`);
+  },
+
   async fetchSchoolUsers(schoolRef: string): Promise<ApiResponse<User[]>> {
     return get<ApiResponse<User[]>>(`/users/school/${encodeURIComponent(schoolRef)}`);
   },
@@ -119,14 +127,21 @@ export const api = {
     return patch<ApiResponse<Biller | null>>(`/tenants/${id}/status`, { status });
   },
 
-  async regenerateBillerApiKey(id: string): Promise<ApiResponse<Biller>> {
-    return post<ApiResponse<Biller>>(`/tenants/${id}/regenerate-api-key`, {});
+  async regenerateBillerApiKey(id: string, confirmation: string): Promise<ApiResponse<Biller>> {
+    return post<ApiResponse<Biller>>(`/tenants/${id}/regenerate-api-key`, { confirmation });
   },
 
   // ---- Students ----
-  async fetchStudents(params: { page?: number; pageSize?: number; search?: string; className?: string; status?: string } = {}): Promise<ApiResponse<Student[]>> {
-    const q = buildQuery({ page: params.page, pageSize: params.pageSize, search: params.search, className: params.className, status: params.status });
-    return get<ApiResponse<Student[]>>(`/students${q}`);
+  async fetchStudents(params: {
+    page?: number; pageSize?: number; search?: string; className?: string; section?: string;
+    status?: string; defaulter?: string; risk?: string; scholarship?: string;
+  } = {}): Promise<ApiResponse<StudentDirectoryRecord[], StudentDirectoryMeta>> {
+    const q = buildQuery({
+      page: params.page, pageSize: params.pageSize, search: params.search,
+      className: params.className, section: params.section, status: params.status,
+      defaulter: params.defaulter, risk: params.risk, scholarship: params.scholarship,
+    });
+    return get<ApiResponse<StudentDirectoryRecord[], StudentDirectoryMeta>>(`/students${q}`);
   },
 
   async getStudent(id: string): Promise<ApiResponse<Student | null>> {
@@ -167,9 +182,9 @@ export const api = {
   },
 
   // ---- Invoices ----
-  async fetchInvoices(params: { page?: number; pageSize?: number; status?: string; search?: string; billerId?: string } = {}): Promise<ApiResponse<Invoice[]>> {
-    const q = buildQuery({ page: params.page, pageSize: params.pageSize, status: params.status, search: params.search, billerId: params.billerId });
-    return get<ApiResponse<Invoice[]>>(`/invoices${q}`);
+  async fetchInvoices(params: { page?: number; pageSize?: number; status?: string; search?: string; billerId?: string; className?: string } = {}): Promise<ApiResponse<Invoice[], InvoiceListMeta>> {
+    const q = buildQuery({ page: params.page, pageSize: params.pageSize, status: params.status, search: params.search, billerId: params.billerId, className: params.className });
+    return get<ApiResponse<Invoice[], InvoiceListMeta>>(`/invoices${q}`);
   },
 
   async getInvoice(id: string): Promise<ApiResponse<Invoice>> {
@@ -224,8 +239,8 @@ export const api = {
     return get<ApiResponse<PcidKey[]>>('/bundles/pcid-keys');
   },
 
-  async regeneratePcidKey(pcid: string): Promise<ApiResponse<PcidKey>> {
-    return post<ApiResponse<PcidKey>>(`/bundles/pcid-keys/${pcid}/regenerate`, {});
+  async regeneratePcidKey(pcid: string, confirmation: string): Promise<ApiResponse<PcidKey>> {
+    return post<ApiResponse<PcidKey>>(`/bundles/pcid-keys/${pcid}/regenerate`, { confirmation });
   },
 
   async linkPcidBiller(pcid: string, billerId: string | null): Promise<ApiResponse<PcidKey>> {
@@ -312,7 +327,7 @@ export const api = {
   },
 
   async processOrgPaymentCallback(payload: unknown): Promise<ApiResponse<unknown>> {
-    return post<ApiResponse<unknown>>('/payments/callback', payload);
+    return post<ApiResponse<unknown>>('/payment/callback', payload);
   },
 
   async expireOverduePayments(): Promise<ApiResponse<{ expired: number }>> {
@@ -378,6 +393,16 @@ export const api = {
     return post<ApiResponse<unknown>>('/scholarship-assignments', payload);
   },
 
+  async bulkCreateScholarshipAssignments(payload: {
+    scholarshipId: string;
+    effectiveFrom: string;
+    studentIds?: string[];
+    className?: string;
+    section?: string;
+  }): Promise<ApiResponse<{ assigned: number }>> {
+    return post<ApiResponse<{ assigned: number }>>('/scholarship-assignments/bulk', payload);
+  },
+
   async updateScholarshipAssignment(id: string, status: string): Promise<ApiResponse<unknown>> {
     return patch<ApiResponse<unknown>>(`/scholarship-assignments/${id}/status`, { status });
   },
@@ -395,6 +420,16 @@ export const api = {
     assignedVia?: PaymentPlanAssignment['assignedVia'];
   }): Promise<ApiResponse<PaymentPlanAssignment>> {
     return post<ApiResponse<PaymentPlanAssignment>>('/payment-plan-assignments', payload);
+  },
+
+  async bulkCreatePaymentPlanAssignments(payload: {
+    feePlanId: string;
+    studentIds?: string[];
+    classNames?: string[];
+    assignedDate?: string;
+    assignedVia?: PaymentPlanAssignment['assignedVia'];
+  }): Promise<ApiResponse<{ created: number; skipped: number; matched: number }>> {
+    return post<ApiResponse<{ created: number; skipped: number; matched: number }>>('/payment-plan-assignments/bulk', payload);
   },
 
   async updatePaymentPlanAssignment(id: string, payload: Partial<Pick<PaymentPlanAssignment, 'feePlanId' | 'status' | 'assignedVia' | 'assignedDate' | 'nextDueDate'>>): Promise<ApiResponse<PaymentPlanAssignment>> {
@@ -464,7 +499,12 @@ export const api = {
   async getDashboardStats(): Promise<ApiResponse<{
     totalStudents: number; totalInvoices: number; paidRevenue: number;
     pendingAmount: number; overdueAmount: number; overdueInvoices: number;
-    totalTransactions: number; totalLateFees: number;
+    paidInvoices: number; pendingInvoices: number; defaultersCount: number;
+    totalTransactions: number; totalLateFees: number; collectedThisMonth: number;
+    studentsWithoutCurrentBill: number; latestPaymentDate: string | null;
+    latestDayPayments: number; latestDayAmount: number;
+    classSummary: { name: string; count: number }[];
+    defaultersByClass: { className: string; count: number }[];
   }>> {
     return get('/reports/dashboard');
   },

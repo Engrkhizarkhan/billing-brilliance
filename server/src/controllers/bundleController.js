@@ -10,6 +10,7 @@ const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
+const { auditLog } = require('../middleware/auditLog');
 const logger = require('../config/logger');
 
 // ── Admin CRUD ───────────────────────────────────────────────────────────────
@@ -72,6 +73,15 @@ const createBundle = async (req, res, next) => {
 
     if (!pcid || !billerName || !bundleId || !bundleName || amount === undefined || amount === '') {
       throw new AppError('pcid, billerName, bundleId, bundleName, and amount are required', 400);
+    }
+    if (!/^[A-Za-z0-9]{1,8}$/.test(pcid.trim())) {
+      throw new AppError('pcid must contain 1 to 8 letters or digits', 400);
+    }
+    if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) {
+      throw new AppError('amount must be a positive number', 400);
+    }
+    if (!['active', 'inactive'].includes(status)) {
+      throw new AppError('status must be active or inactive', 400);
     }
     if (tag && tag.length > 2000) {
       throw new AppError('tag exceeds max length of 2000 characters', 400);
@@ -146,7 +156,7 @@ const createBundle = async (req, res, next) => {
       );
     }
 
-    const pcidKey = uuidv4().replace(/-/g, '') + uuidv4().replace(/-/g, '').slice(0, 32);
+    const pcidKey = crypto.randomBytes(32).toString('hex');
     await pool.query(
       `INSERT INTO bundle_pcids (pcid, api_key) VALUES (?, ?)
        ON DUPLICATE KEY UPDATE pcid = pcid`,
@@ -170,6 +180,12 @@ const updateBundle = async (req, res, next) => {
 
     if (tag !== undefined && tag !== null && tag.length > 2000) {
       throw new AppError('tag exceeds max length of 2000 characters', 400);
+    }
+    if (amount !== undefined && (!Number.isFinite(Number(amount)) || Number(amount) <= 0)) {
+      throw new AppError('amount must be a positive number', 400);
+    }
+    if (status !== undefined && !['active', 'inactive'].includes(status)) {
+      throw new AppError('status must be active or inactive', 400);
     }
 
     const updates = [];
@@ -225,14 +241,14 @@ const deleteBundle = async (req, res, next) => {
  * Response codes:
  *   00 — Success
  *   01 — No bundles found for PCID
- *   03 — Internal error
+ *   05 — Service failure
  *   04 — Invalid / missing PCID
  */
 const fetchBundle1Link = async (req, res, next) => {
   try {
     const { PCID } = req.body;
 
-    if (!PCID || typeof PCID !== 'string' || PCID.trim().length === 0) {
+    if (!PCID || typeof PCID !== 'string' || !/^[A-Za-z0-9]{1,8}$/.test(PCID.trim())) {
       return res.status(400).json({
         companyId: '',
         responseCode: '04',
@@ -245,7 +261,10 @@ const fetchBundle1Link = async (req, res, next) => {
 
     // Verify PCID is registered before querying bundles
     const [pcidRows] = await pool.query(
-      'SELECT pcid FROM bundle_pcids WHERE pcid = ?',
+      `SELECT bp.pcid, t.name AS biller_name
+       FROM bundle_pcids bp
+       LEFT JOIN tenants t ON t.id = bp.biller_id AND t.deleted_at IS NULL
+       WHERE bp.pcid = ?`,
       [pcid]
     );
     if (pcidRows.length === 0) {
@@ -269,12 +288,12 @@ const fetchBundle1Link = async (req, res, next) => {
       return res.json({
         companyId: pcid,
         responseCode: '00',
-        billerName: '',
+        billerName: String(pcidRows[0].biller_name || '').slice(0, 30),
         bundleDetails: [],
       });
     }
 
-    const billerName = rows[0].biller_name;
+    const billerName = String(rows[0].biller_name || pcidRows[0].biller_name || '').slice(0, 30);
 
     const bundleDetails = rows.map((row) => ({
       bundleId: row.bundle_id,
@@ -295,7 +314,7 @@ const fetchBundle1Link = async (req, res, next) => {
     logger.error('FetchBundle 1LINK error:', err);
     return res.status(500).json({
       companyId: '',
-      responseCode: '03',
+      responseCode: '05',
       billerName: '',
       bundleDetails: [],
     });
@@ -324,6 +343,9 @@ const getPcidKeys = async (req, res, next) => {
 const regeneratePcidKey = async (req, res, next) => {
   try {
     const pcid = req.params.pcid.toUpperCase();
+    if (req.body.confirmation !== `REGENERATE ${pcid}`) {
+      throw new AppError('Explicit API key regeneration confirmation is required', 400, 'CONFIRMATION_REQUIRED');
+    }
     const newKey = crypto.randomBytes(32).toString('hex');
     const [result] = await pool.query(
       'UPDATE bundle_pcids SET api_key = ? WHERE pcid = ?',
@@ -332,6 +354,7 @@ const regeneratePcidKey = async (req, res, next) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'PCID not found', code: 'NOT_FOUND' });
     }
+    await auditLog(req, 'update', 'pcid_api_key', pcid, `API key regenerated for PCID ${pcid}`);
     const [rows] = await pool.query('SELECT pcid, api_key, biller_id FROM bundle_pcids WHERE pcid = ?', [pcid]);
     res.json({ data: rows[0] });
   } catch (err) {

@@ -1,0 +1,415 @@
+                                                                         DECISION MEMO | FINTAP PRODUCTION READINESS
+
+
+
+
+Fintap Production Readiness Audit and
+Remediation Record
+Zynotch PVT Lim ited | Application: Billing Brilliance / Fintap | Review date: 5 Septem ber
+2026 | Repository a ssessment only
+
+
+Executive decision
+Status: CONDITIONALLY READY FOR CONTROLLED UAT; NOT YET APPROVED FOR PRODUCTION CUTOVER.
+The reviewed code now clears its available static quality gates and the major application defects
+identified in the audit have been remediated. The school-facing data views and bulk workflows no longer
+depend on downloading or processing the complete student population in the browser. The organization
+experience has been reduced to an API integration portal. API-key rotation now has an explicit typed
+confirmation at both the interface and server. The 1BILL inquiry and payment path has stricter validation,
+tenant isolation, duplicate protection, transaction boundaries, and production network controls.
+This statement does not mean app.fintap.com was deployed or changed. No production credentials, host
+access, database, reverse proxy, certificate, firewall, SFTP account, or 1LINK UAT environment was
+available in this workspace. Production cutover remains blocked until the external gates in this report are
+completed and evidenced.
+
+
+Scope and evidence
+Reviewed areas included the React/Vite application, Express API, MySQL data access and migrations,
+authentication and authorization, school workflows, organization API portal, API-key lifecycle, webhook
+behavior, 1BILL REST endpoints, configuration, dependencies, tests, and the supplied 1LINK documents.
+Authoritative integration references used:
+    •   1LINK Generic REST Based Specification v1.5 supplied in docs/1Link.
+    •   1LINK Data Network Guidelines and Standards supplied in docs/1Link.
+    •   1BILL Aggregator Overview supplied in docs/1Link.
+    •   Kickoff Minutes of Meeting dated 4 September 2026 supplied by Zynotch.
+
+
+
+
+                                    Zynotch PVT Limited | Confidential | Page 1
+                                                                                DECISION MEMO | FINTAP PRODUCTION READINESS
+
+
+
+
+Remediation summary
+Scalability and product fit
+ Area                        Change made                         Decision reason                    Result
+
+ Student directory           Added server-side pagination,       A browser must not load the        Page work is bounded as
+                             search, class, section, status,     entire population to render a      enrolment grows beyond
+                             defaulter, scholarship, and risk    page.                              2,000.
+                             filtering with facets and
+                             aggregate dues.
+
+ Defaulters and invoices     Replaced full-population joins      Large client-side joins increase   Views return only the
+                             in the browser with paginated       memory, latency, and failure       requested page and metadata.
+                             server queries and financial        risk.
+                             aggregates.
+
+ Dashboards and reports      Replaced full student, invoice,     Reporting should be computed       Lower payloads and more
+                             and history downloads with          once near the data and must        reliable totals.
+                             database aggregates;                not multiply payments
+                             corrected collection-by-plan        through assignments.
+                             over-counting.
+
+ Monthly generation          Preloads existing invoices,         The old flow issued several        Database round-trips are
+                             balances, scholarships, and         queries per student and could      approximately constant and
+                             transport charges; builds rows      partially complete a large run.    invoices/ledger rows commit
+                             in memory; performs bulk                                               atomically.
+                             inserts in one tenant-serialized
+                             transaction.
+
+ Bulk plan and scholarship   Added bounded server search         Thousands of browser               A 2,000-student class is
+ assignment                  and single transactional bulk       requests would hit rate limits     handled as one controlled
+                             APIs for class or selected-         and leave partial assignments.     request and transaction.
+                             student operations.
+
+ Invoice numbering           Uses a tenant row lock and the      COUNT-based numbering can          Concurrency-safe tenant
+                             current maximum sequence            collide after deletion or          invoice sequences.
+                             for manual and batch creation.      concurrent requests.
+
+ Frontend delivery           Lazy-loaded application routes      The previous single bundle         Production build emits small
+                             and retained page-level             delayed every role and page.       route chunks; current main
+                             loading fallback.                                                      application chunk is about 222
+                                                                                                    KB before gzip.
+
+ Organization portal         Removed invoice, payment,           The organization tenant is an      Smaller, clearer API-only
+                             history, real-time, report, and     API consumer, not an               experience with unused pages
+                             sandbox routes/navigation           operational payment                excluded from the bundle.
+                             from the organization role.         dashboard.
+                             Reframed the dashboard
+                             around API status, endpoints,
+                             credentials, webhook, IP
+                             allowlist, and security activity.
+
+
+
+
+                                        Zynotch PVT Limited | Confidential | Page 2
+                                                                         DECISION MEMO | FINTAP PRODUCTION READINESS
+
+
+
+Access and 1BILL contract
+Area                  Change made                        Decision reason                      Result
+
+API-key rotation      Added destructive                  Rotation invalidates the old         Two-layer confirmation and
+                      confirmation dialogs requiring     key immediately and must             auditable rotation.
+                      REGENERATE plus the exact          resist accidental clicks or direct
+                      biller ID or PCID; repeated the    API calls.
+                      check on the server; used
+                      cryptographic random keys;
+                      wrote an audit event.
+
+Authentication        Restored sessions from the         The previous refresh behavior        More consistent session and
+                      server profile, prevented false    and API-key role path could          API authentication.
+                      initial authentication, allowed    produce incorrect access
+                      authenticated tenant API keys      results.
+                      through school-role
+                      authorization, and disabled
+                      profile caching.
+
+1BILL identifiers     Generates standard 20-digit        Align normal issuance with the       Predictable unique numbers
+                      numeric consumer numbers           1LINK note while supporting          without random collisions.
+                      from the assigned prefix, biller   the requested 24-digit test
+                      code, and locked sequence;         case.
+                      accepts controlled custom
+                      numeric values up to 24 digits
+                      for required UAT cases.
+
+Bill inquiry          Validates consumer number,         Gateway contracts require            More specification-aligned
+                      bank mnemonic, and reserved        deterministic field lengths and      inquiry responses.
+                      length; handles                    status semantics.
+                      inactive/blocked accounts;
+                      applies late fee only when
+                      overdue; pads fixed fields.
+
+Bill payment          Validates fixed fields and exact   Financial state cannot be            Atomic posting and safer
+                      payable amount; locks the          partially written or double-         retries.
+                      payer/invoice; writes payment,     posted.
+                      transaction, invoice, ledger,
+                      and organization records in a
+                      database transaction; commits
+                      before audit; protects
+                      duplicate references.
+
+Tenant isolation      Tied bundle/PCID lookup to         A bundle from another biller         Reduced cross-tenant
+                      the student's tenant and           must never price a consumer.         exposure risk.
+                      applied tenant filters to
+                      relevant data paths.
+
+
+
+
+                                 Zynotch PVT Limited | Confidential | Page 3
+                                                                             DECISION MEMO | FINTAP PRODUCTION READINESS
+
+
+
+Perimeter and operations
+Area                      Change made                        Decision reason                  Result
+
+1LINK edge security       Production source-IP allowlist,    Internet-facing payment          Requests can be restricted to
+                          constant-time credential           endpoints require layered        approved 1LINK addresses.
+                          comparisons, dedicated rate        authentication and predictable
+                          limit, correct payment-shaped      responses.
+                          authentication errors, and fail-
+                          closed startup configuration.
+
+HTTPS and configuration   Production refuses to start        A deployment should fail         Misconfiguration becomes a
+                          with default JWT secrets,          visibly instead of silently      startup failure.
+                          missing database credentials,      running insecurely.
+                          demo 1LINK credentials,
+                          empty 1LINK allowlist, invalid
+                          six-digit prefix, unsafe
+                          webhook secret, or disabled
+                          HTTPS enforcement.
+
+Webhooks                  Enforced public HTTPS port         Prevent server-side request      Safer outbound notifications
+                          443 URLs, rejected                 forgery, secret leakage, and     and inbound verification.
+                          credentials/local/private          spoofed callbacks.
+                          destinations after DNS
+                          resolution, revalidated before
+                          delivery, used HMAC
+                          signatures and constant-time
+                          callback verification, and
+                          stopped logging full callback
+                          URLs.
+
+Operations                Added unauthenticated              Orchestrators need distinct      Better deployment health
+                          liveness and database-backed       liveness/readiness and tests     behavior and testability.
+                          readiness endpoints; placed        need isolated imports.
+                          gateway routes before broad
+                          authenticated routers;
+                          prevented tests from starting a
+                          listener.
+
+Dependencies and tests    Updated supported packages,        Known package vulnerabilities    Root and server audits report
+                          separated database                 and untestable startup paths     zero known vulnerabilities.
+                          integration tests, and added       are production risks.
+                          unit/smoke tests for URL
+                          safety, health, and 1BILL
+                          authentication response
+                          shape.
+
+
+
+
+                                     Zynotch PVT Limited | Confidential | Page 4
+                                                                         DECISION MEMO | FINTAP PRODUCTION READINESS
+
+
+
+
+Verification record
+ Check                               Result on 5 September 2026                   Notes
+
+ TypeScript                          PASS                                         npx tsc --noEmit completed successfully.
+
+ Frontend production build           PASS                                         Vite 8.2.2 transformed 2,356 modules and
+                                                                                  emitted route-level chunks.
+
+ Frontend tests                      PASS                                         1 of 1 Vitest test passed.
+
+ Server tests                        PASS                                         13 of 13 Jest unit/smoke tests passed
+                                                                                  across 2 suites.
+
+ JavaScript syntax                   PASS                                         node --check completed for server source
+                                                                                  and unit tests.
+
+ ESLint                              PASS WITH WARNINGS                           0 errors; 7 Fast Refresh warnings in shared
+                                                                                  UI component modules.
+
+ Dependency audit                    PASS                                         npm audit and npm audit --omit=dev
+                                                                                  reported 0 vulnerabilities in root and
+                                                                                  server packages.
+
+ Patch hygiene                       PASS                                         git diff --check reported no whitespace
+                                                                                  errors.
+
+ Live database integration           NOT EXECUTED                                 Requires a disposable MySQL instance
+                                                                                  and representative data.
+
+ 2,000+ load test                    NOT EXECUTED                                 Architecture was remediated; measured
+                                                                                  latency and capacity still require staging
+                                                                                  data.
+
+ 1LINK UAT/certification             NOT EXECUTED                                 Requires 1LINK network access,
+                                                                                  credentials, test consumers, and sign-off.
+
+
+
+
+Key decisions and trade-offs
+Server pagination instead of a larger browser limit
+Increasing a client limit from 2,000 to a larger number only postpones failure. Search, filtering, counts,
+financial totals, and facets are now server responsibilities; the browser receives a bounded page. Export
+actions intentionally export the visible page unless a controlled asynchronous export service is added
+later.
+
+Transactional bulk operations instead of request fan-out
+Class assignment and monthly generation are business operations, not UI loops. They now run as tenant-
+serialized transactions with bulk database writes. This prevents rate-limit failures and makes a run all-or-
+nothing. Very large future tenants should move these operations to a queued job with progress and
+idempotency keys.
+
+
+                                    Zynotch PVT Limited | Confidential | Page 5
+                                                                         DECISION MEMO | FINTAP PRODUCTION READINESS
+
+
+
+Typed key-rotation confirmation
+A generic Yes button is inadequate for an irreversible secret rotation. The user must type a target-specific
+phrase, and the server independently verifies it. Existing plaintext API-key display is preserved for
+compatibility, but one-time secret display plus hashing/encryption at rest is recommended as a
+subsequent security change.
+
+API-only organization experience
+Operational finance screens were removed from organization routing and navigation because the agreed
+consumer is an API client. Webhook configuration, API security, source-IP restrictions, login activity, and
+reference endpoints remain because they directly support integration and audit needs.
+
+Specification conflicts are not guessed
+The supplied materials contain issues that require 1LINK confirmation: the Payment reserved field is
+shown as 400 characters in one table but its detailed layout totals 515; the network guideline says
+private segments only while the kickoff asks for public and private host IPs; and the exact required cipher
+was supplied only as an unavailable highlighted image. The implementation currently accepts the
+detailed 515-character Payment layout and a 400-character Inquiry reserved field. These choices must
+be confirmed in UAT.
+
+
+Production cutover gates
+Gate A - deployment and data safety
+☐ Take and restore-test a production database backup.
+☐ Review the change set and deploy it through a controlled release pipeline; this audit did not deploy
+app.fintap.com.
+☐ Run the idempotent migration on a production-like clone first, then on production in the approved
+window.
+☐ Confirm unique consumer-number and student-sequence migration results.
+☐ Run database integration tests and an end-to-end invoice, inquiry, payment, duplicate, and
+reversal/reconciliation scenario.
+☐ Define an application rollback and a database rollback/forward-fix owner.
+
+Gate B - secrets and runtime configuration
+☐ Set NODE_ENV=production and REQUIRE_HTTPS=true.
+☐ Set unique high-entropy JWT and refresh secrets, database credentials, organization webhook secret,
+and 1LINK credentials through a secret manager.
+☐ Set FINTECH_PREFIX=105172 for the agreed environment after 1LINK confirms it.
+☐ Set CORS_ORIGIN to the exact production portal origin.
+
+
+
+
+                                    Zynotch PVT Limited | Confidential | Page 6
+                                                                              DECISION MEMO | FINTAP PRODUCTION READINESS
+
+
+
+☐ Set ONELINK_ALLOWED_IPS to the confirmed source/NAT addresses, initially including 10.95.8.92 and
+10.95.8.94 only if those are the addresses observed by the application.
+☐ Rotate any credentials that have previously appeared in logs, email, source control, screenshots, or
+test data.
+
+Gate C - network, certificate, and resilience
+☐ Provide and confirm Zynotch public/private IPs and separate UAT/Production routes.
+☐ Terminate TLS 1.2 or stronger on port 443 with a CA-authorized certificate and full chain; disable
+obsolete protocols.
+☐ Obtain the exact 1LINK cipher-suite name from the referenced screenshot and verify it with an
+external TLS scan.
+☐ Apply network and application allowlists, least-privilege ACLs, static routes, dual connectivity/DR,
+automatic failover, patched network devices, and the agreed IPsec parameters where applicable.
+☐ Confirm app.fintap.com or the selected API hostname resolves to the intended endpoint and forwards
+X-Forwarded-Proto correctly.
+☐ Exercise /api/health and /api/ready through the production load balancer.
+
+Gate D - 1BILL UAT and operations
+☐ Exchange credentials only through an approved secure channel.
+☐ Prepare all 20 requested consumer cases and obtain 1LINK confirmation of the seven amount slabs.
+☐ Complete positive, negative, duplicate, timeout, and retry tests with redacted evidence.
+☐ Confirm response-code/HTTP-status handling, time zone, amount units, retry windows, idempotency
+key, and Payment reserved length.
+☐ Establish the SFTP folder, authentication, file schema, naming, encryption, retention, and operational
+contacts.
+☐ Reconcile T+1 settlement to United Bank Limited and document break handling.
+☐ Obtain QA/certification approval, production cutover approval, and named owners for at least three
+days of post-live monitoring.
+
+
+Residual risks after code remediation
+ Risk                                    Current treatment                             Required next action
+
+ No live/staging database verification   Unit/static gates only                        Run disposable-DB integration and
+                                                                                       migration tests with production-like
+                                                                                       volume.
+
+ No measured 2,000+ performance result   Bounded queries and bulk writes               Load-test at 2,000, 10,000, and expected
+                                         implemented                                   peak concurrency; record p95/p99 and
+                                                                                       database plans.
+
+
+
+
+                                         Zynotch PVT Limited | Confidential | Page 7
+                                                                                   DECISION MEMO | FINTAP PRODUCTION READINESS
+
+
+
+ Risk                                        Current treatment                             Required next action
+
+ Webhook delivery is not a durable queue     Validation, timeout, and HMAC are             Add persisted outbox, retry/backoff, dead-
+                                             present                                       letter handling, and replay UI.
+
+ SFTP settlement ingestion is outside this   Handover requirements documented              Build or formally assign settlement file
+ application                                                                               retrieval, validation, reconciliation,
+                                                                                           alerting, and retention.
+
+ API/refresh secrets remain retrievable in   Rotation and runtime secret guards            Move to hashed API keys or encrypted
+ current architecture                        improved                                      one-time display and hashed refresh-
+                                                                                           token storage.
+
+ DNS may change after webhook validation     DNS resolution blocks local/private           For higher assurance, pin resolved public
+                                             targets at validation and send time           addresses per delivery through a
+                                                                                           controlled egress proxy.
+
+ Financial reversal/refund workflow not      Duplicate posting is protected                Agree and implement 1LINK
+ certified                                                                                 reversal/refund/dispute procedures
+                                                                                           before enabling them.
+
+
+
+
+Recommended controlled release sequence
+    1. Freeze schema and API contract changes for the UAT window.
+    2. Restore a recent sanitized production backup into staging and run migrations.
+    3. Execute automated gates, database integration tests, and 2,000+/10,000-record load tests.
+    4. Configure UAT hostname, certificate, firewall/ACLs, credentials, prefix, and source IPs.
+    5. Execute the formal 1BILL test pack and close every clarification item.
+    6. Take a fresh backup, deploy during the approved window, run smoke and readiness checks, then
+       enable 1LINK traffic.
+    7. Reconcile every posting and settlement during the enhanced monitoring period; keep rollback
+       criteria explicit.
+
+
+Conclusion
+The repository is materially safer and more scalable than the reviewed baseline, and its available
+automated checks pass. It should proceed to controlled staging and 1LINK UAT. It must not be described
+as production-certified until the database/load tests, infrastructure controls, certificate/cipher
+validation, consumer test pack, SFTP/reconciliation process, and 1LINK sign-offs are complete.
+
+
+
+
+                                             Zynotch PVT Limited | Confidential | Page 8
+

@@ -1,7 +1,7 @@
-import { useState, useRef, useMemo, useEffect } from 'react';
-import { api } from '@/lib/api';
+import { useState, useRef, useMemo, useEffect, useDeferredValue } from 'react';
+import { api, StudentDirectoryMeta } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
-import { Student, StudentFinancialSnapshot, StudentScholarshipAssignment } from '@/types';
+import { Student, StudentDirectoryRecord, StudentFinancialSnapshot } from '@/types';
 import { FilterBar } from '@/components/FilterBar';
 import { ExportButton } from '@/components/ExportButton';
 import { TablePagination } from '@/components/TablePagination';
@@ -88,14 +88,7 @@ const toStudentForm = (student: Student): StudentFormState => ({
 });
 
 const StudentList = () => {
-  const { data: studentsData, loading: studentsLoading, refetch } = useApiQuery(() => api.fetchStudents({ pageSize: 9999 }), []);
-  const { data: scholarshipAssignmentsData } = useApiQuery(() => api.fetchAllScholarshipAssignments(), []);
-  const [studentList, setStudentList] = useState<Student[]>([]);
   const [search, setSearch] = useState('');
-
-  useEffect(() => {
-    if (studentsData) setStudentList(studentsData as Student[]);
-  }, [studentsData]);
   const [selectedClass, setSelectedClass] = useState<string>('all');
   const [selectedSection, setSelectedSection] = useState<string>('all');
   const [defaulterFilter, setDefaulterFilter] = useState('all');
@@ -108,6 +101,21 @@ const StudentList = () => {
   const [bulkImporting, setBulkImporting] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const deferredSearch = useDeferredValue(search.trim());
+  const { data: studentsData, meta: studentsMeta, loading: studentsLoading, refetch } = useApiQuery<StudentDirectoryRecord[], StudentDirectoryMeta>(
+    () => api.fetchStudents({
+      page,
+      pageSize,
+      search: deferredSearch || undefined,
+      className: selectedClass === 'all' ? undefined : selectedClass,
+      section: selectedSection === 'all' ? undefined : selectedSection,
+      defaulter: defaulterFilter === 'all' ? undefined : defaulterFilter,
+      risk: riskFilter === 'all' ? undefined : riskFilter,
+      scholarship: scholarshipFilter === 'all' ? undefined : scholarshipFilter,
+    }),
+    [page, pageSize, deferredSearch, selectedClass, selectedSection, defaulterFilter, riskFilter, scholarshipFilter]
+  );
+  const [studentList, setStudentList] = useState<StudentDirectoryRecord[]>([]);
   const [form, setForm] = useState<StudentFormState>(emptyStudentForm);
   const [editForm, setEditForm] = useState<StudentFormState>(emptyStudentForm);
   const [studentBeingEdited, setStudentBeingEdited] = useState<Student | null>(null);
@@ -118,15 +126,22 @@ const StudentList = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (studentsData) {
+      setStudentList(studentsData);
+      setSelectedIds(new Set());
+    }
+  }, [studentsData]);
+
   const refreshStudents = () => {
     refetch();
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === paginated.length && paginated.length > 0) {
+    if (selectedIds.size === studentList.length && studentList.length > 0) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(paginated.map((s) => s.id)));
+      setSelectedIds(new Set(studentList.map((s) => s.id)));
     }
   };
 
@@ -154,8 +169,7 @@ const StudentList = () => {
     setSelectedIds(new Set());
     setStudentList((prev) => {
       const next = prev.filter((s) => !ids.includes(s.id));
-      const maxPage = Math.max(1, Math.ceil(next.length / pageSize));
-      setPage((cur) => Math.min(cur, maxPage));
+      if (next.length === 0 && page > 1) setPage((cur) => cur - 1);
       return next;
     });
     void refreshStudents();
@@ -167,82 +181,36 @@ const StudentList = () => {
   };
 
   const classSummary = useMemo(() => {
-    const map: Record<string, number> = {};
-    studentList.forEach((s) => { map[s.class] = (map[s.class] || 0) + 1; });
-    return allClasses.map((c) => ({ name: c, count: map[c] || 0 }));
-  }, [studentList]);
-
-  const classSectionSummary = useMemo(() => {
-    const map: Record<string, Record<string, number>> = {};
-    studentList.forEach((s) => {
-      if (!map[s.class]) map[s.class] = {};
-      map[s.class][s.section] = (map[s.class][s.section] || 0) + 1;
-    });
-    return map;
-  }, [studentList]);
+    const counts = new Map((studentsMeta?.facets.classes || []).map((item) => [item.name, item.count]));
+    return allClasses.map((c) => ({ name: c, count: counts.get(c) || 0 }));
+  }, [studentsMeta]);
 
   const classSections = useMemo(() => {
     if (selectedClass === 'all') return [];
-    const sectionMap = classSectionSummary[selectedClass] || {};
-    return Object.entries(sectionMap)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([name, count]) => ({ name, count }));
-  }, [classSectionSummary, selectedClass]);
-
-  const { data: financialSummaryData } = useApiQuery(() => api.fetchStudentFinancialSummary(), []);
-
-  const scholarshipCountByStudentId = useMemo(() => {
-    const assignments = (scholarshipAssignmentsData || []) as StudentScholarshipAssignment[];
-    const map: Record<string, number> = {};
-    assignments.forEach((a) => {
-      if (a.status === 'active') {
-        map[a.studentId] = (map[a.studentId] || 0) + 1;
-      }
-    });
-    return map;
-  }, [scholarshipAssignmentsData]);
+    return (studentsMeta?.facets.classes.find((item) => item.name === selectedClass)?.sections || [])
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [studentsMeta, selectedClass]);
 
   const financialByStudentId = useMemo(() => {
-    const summaries = (financialSummaryData || []) as import('@/types').StudentFinancialSummary[];
-    const summaryMap: Record<string, import('@/types').StudentFinancialSummary> = {};
-    summaries.forEach((s) => { summaryMap[s.studentId] = s; });
-
     const map: Record<string, StudentFinancialSnapshot> = {};
     studentList.forEach((student) => {
-      const s = summaryMap[student.id];
-      const overdueMonths = s ? (Number(s.overdueMonths) || 0) : 0;
-      const totalDue = s ? (parseFloat(String(s.totalDue)) || 0) : 0;
       map[student.id] = {
         studentId: student.id,
-        overdueMonths,
-        totalDue,
-        lastPaymentDate: s?.lastPaymentDate || null,
-        scholarshipCount: scholarshipCountByStudentId[student.id] || 0,
-        riskTier: overdueMonths >= 3 ? 'critical' : overdueMonths >= 2 ? 'high-risk' : overdueMonths >= 1 ? 'watch' : 'current',
+        overdueMonths: Number(student.overdueMonths) || 0,
+        totalDue: Number(student.totalDue) || 0,
+        lastPaymentDate: student.lastPaymentDate || null,
+        scholarshipCount: Number(student.scholarshipCount) || 0,
+        riskTier: student.riskTier,
       };
     });
     return map;
-  }, [studentList, financialSummaryData, scholarshipCountByStudentId]);
+  }, [studentList]);
 
-  const filtered = studentList.filter((s) => {
-    const financial = financialByStudentId[s.id] || {
-      studentId: s.id,
-      overdueMonths: 0,
-      totalDue: 0,
-      lastPaymentDate: null,
-      scholarshipCount: 0,
-      riskTier: 'current' as const,
-    };
-    const matchSearch = s.name.toLowerCase().includes(search.toLowerCase()) || s.consumerNumber.includes(search) || s.cnic.includes(search) || s.rollNumber.toLowerCase().includes(search.toLowerCase());
-    const matchClass = selectedClass === 'all' || s.class === selectedClass;
-    const matchSection = selectedSection === 'all' || s.section === selectedSection;
-    const matchDefaulter = defaulterFilter === 'all' || (defaulterFilter === 'with_due' ? financial.totalDue > 0 : financial.overdueMonths >= 3);
-    const matchRisk = riskFilter === 'all' || financial.riskTier === riskFilter;
-    const matchScholarship = scholarshipFilter === 'all' || (scholarshipFilter === 'with' ? financial.scholarshipCount > 0 : financial.scholarshipCount === 0);
-    return matchSearch && matchClass && matchSection && matchDefaulter && matchRisk && matchScholarship;
-  });
-
-  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const filtered = studentList;
+  const paginated = studentList;
+  const totalStudents = studentsMeta?.facets.totalStudents ?? studentsMeta?.total ?? studentList.length;
+  const totalMatches = studentsMeta?.total ?? studentList.length;
 
   const handleAdd = async () => {
     if (form.usesBusService && (!form.busServiceStartMonth || Number(form.busMonthlyFee) <= 0)) {
@@ -272,7 +240,7 @@ const StudentList = () => {
         busMonthlyFee: form.usesBusService ? Number(form.busMonthlyFee) : 0,
       });
       if (result.data) {
-        setStudentList((prev) => [result.data as Student, ...prev]);
+        setStudentList((prev) => [result.data as StudentDirectoryRecord, ...prev]);
       }
       void refreshStudents();
       setDialogOpen(false);
@@ -323,7 +291,7 @@ const StudentList = () => {
         busMonthlyFee: nowUsesBus ? Number(editForm.busMonthlyFee) : studentBeingEdited.busMonthlyFee,
       });
       if (updateResult.data) {
-        setStudentList((prev) => prev.map((s) => s.id === studentBeingEdited.id ? updateResult.data as Student : s));
+        setStudentList((prev) => prev.map((s) => s.id === studentBeingEdited.id ? { ...s, ...updateResult.data } as StudentDirectoryRecord : s));
       }
       void refreshStudents();
       setEditDialogOpen(false);
@@ -345,12 +313,7 @@ const StudentList = () => {
 
     try {
       await api.deleteStudent(studentBeingDeleted.id);
-      setStudentList((prev) => {
-        const next = prev.filter((s) => s.id !== studentBeingDeleted.id);
-        const maxPage = Math.max(1, Math.ceil(next.length / pageSize));
-        setPage((currentPage) => Math.min(currentPage, maxPage));
-        return next;
-      });
+      setStudentList((prev) => prev.filter((s) => s.id !== studentBeingDeleted.id));
       void refreshStudents();
       toast.success(`${studentBeingDeleted.name} deleted`);
       setStudentBeingDeleted(null);
@@ -478,7 +441,7 @@ const StudentList = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-header">Students</h1>
-          <p className="page-description">Manage enrolled students organized by class • {studentList.length} total</p>
+          <p className="page-description">Manage enrolled students organized by class • {totalStudents} total</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <ExportButton data={filtered.map((s) => {
@@ -496,7 +459,7 @@ const StudentList = () => {
               Scholarships: financial?.scholarshipCount || 0,
               LastPayment: financial?.lastPaymentDate || '-',
             };
-          })} filename="students" />
+          })} filename={`students-page-${page}`} />
           <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" size="sm" className="rounded-lg"><Upload className="w-4 h-4 mr-1.5" />Bulk Import</Button>
@@ -685,7 +648,7 @@ const StudentList = () => {
         <button onClick={() => { setSelectedClass('all'); setSelectedSection('all'); setPage(1); }} className={`flex flex-col items-center gap-1 p-2.5 rounded-xl border-2 transition-all text-center ${selectedClass === 'all' ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:border-primary/30 bg-card'}`}>
           <Users className={`w-4 h-4 ${selectedClass === 'all' ? 'text-primary' : 'text-muted-foreground'}`} />
           <span className="text-[11px] font-semibold">All</span>
-          <span className="text-[10px] text-muted-foreground font-mono">{studentList.length}</span>
+          <span className="text-[10px] text-muted-foreground font-mono">{totalStudents}</span>
         </button>
         {classSummary.map((c) => (
           <button key={c.name} onClick={() => { setSelectedClass(c.name); setSelectedSection('all'); setPage(1); }} className={`flex flex-col items-center gap-1 p-2.5 rounded-xl border-2 transition-all text-center ${selectedClass === c.name ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:border-primary/30 bg-card'}`}>
@@ -779,7 +742,7 @@ const StudentList = () => {
                 : selectedSection === 'all'
                   ? `${selectedClass} • All Sections`
                   : `${selectedClass} • Section ${selectedSection}`}
-              <span className="text-muted-foreground font-normal ml-2">({filtered.length})</span>
+              <span className="text-muted-foreground font-normal ml-2">({totalMatches})</span>
             </p>
           )}
         </div>
@@ -945,7 +908,7 @@ const StudentList = () => {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-        <TablePagination total={filtered.length} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
+        <TablePagination total={totalMatches} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </div>
     </div>
   );

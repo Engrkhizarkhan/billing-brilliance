@@ -28,8 +28,13 @@ const logger = require('../config/logger');
 const config = require('../config');
 
 const FINTECH_PREFIX = config.fintechPrefix || '123456';
-const generateConsumerNumber = (billerCode, seq) =>
-  `${FINTECH_PREFIX}${billerCode}${String(seq).padStart(14, '0')}`;
+const generateConsumerNumber = (billerCode, seq) => {
+  const sequenceWidth = 20 - String(FINTECH_PREFIX).length - String(billerCode).length;
+  if (sequenceWidth < 1 || String(seq).length > sequenceWidth || !/^\d+$/.test(`${FINTECH_PREFIX}${billerCode}`)) {
+    throw new Error('Unable to generate a numeric 20-digit 1BILL consumer number');
+  }
+  return `${FINTECH_PREFIX}${billerCode}${String(seq).padStart(sequenceWidth, '0')}`;
+};
 
 // ── API-key authentication middleware ────────────────────────────────────────
 
@@ -474,6 +479,7 @@ router.post('/make-payment', async (req, res, next) => {
  * }
  */
 router.post('/register-consumer', async (req, res, next) => {
+  let connection;
   try {
     const { name, phone, email, externalRef, bundleId, dueDate } = req.body;
 
@@ -481,12 +487,18 @@ router.post('/register-consumer', async (req, res, next) => {
       return res.status(400).json({ error: 'name is required', code: 'MISSING_PARAM' });
     }
 
-    // Resolve tenant's biller_code
-    const [tenants] = await pool.query(
-      'SELECT id, biller_code FROM tenants WHERE id = ? AND deleted_at IS NULL LIMIT 1',
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    // Serialize registrations per tenant so sequence numbers cannot collide.
+    const [tenants] = await connection.query(
+      'SELECT id, biller_code FROM tenants WHERE id = ? AND deleted_at IS NULL LIMIT 1 FOR UPDATE',
       [req.saasTenantId]
     );
     if (tenants.length === 0) {
+      await connection.rollback();
+      connection.release();
+      connection = null;
       return res.status(404).json({ error: 'Linked biller not found', code: 'TENANT_NOT_FOUND' });
     }
     const { biller_code: billerCode } = tenants[0];
@@ -495,32 +507,34 @@ router.post('/register-consumer', async (req, res, next) => {
     // Validate bundleId if provided
     let bundleRow = null;
     if (bundleId) {
-      const [bundleRows] = await pool.query(
+      const [bundleRows] = await connection.query(
         `SELECT * FROM bundles
          WHERE bundle_id = ? AND pcid = ? AND status = 'active' AND deleted_at IS NULL
          LIMIT 1`,
         [String(bundleId).trim(), pcid]
       );
       if (bundleRows.length === 0) {
+        await connection.rollback();
+        connection.release();
+        connection = null;
         return res.status(400).json({ error: `Bundle '${bundleId}' not found or inactive for PCID '${pcid}'`, code: 'BUNDLE_NOT_FOUND' });
       }
       bundleRow = bundleRows[0];
     }
 
-    // Generate next consumer number using count of ALL students (including deleted) to avoid reuse
-    const [seqRows] = await pool.query(
-      'SELECT COUNT(*) AS cnt FROM students WHERE tenant_id = ?',
+    const [seqRows] = await connection.query(
+      'SELECT COALESCE(MAX(seq_number), 0) + 1 AS next_seq FROM students WHERE tenant_id = ?',
       [req.saasTenantId]
     );
-    const seq = seqRows[0].cnt + 1;
+    const seq = Number(seqRows[0].next_seq);
     const consumerNumber = generateConsumerNumber(billerCode, seq);
     const billId = externalRef ? String(externalRef).slice(0, 50) : `GW-${billerCode}-${String(seq).padStart(5, '0')}`;
     const consumerId = uuidv4();
 
-    await pool.query(
+    await connection.query(
       `INSERT INTO students
-         (id, tenant_id, name, phone, consumer_number, bill_id, status, balance, address)
-       VALUES (?, ?, ?, ?, ?, ?, 'active', 0, ?)`,
+         (id, tenant_id, name, phone, consumer_number, bill_id, seq_number, status, balance, address)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 0, ?)`,
       [
         consumerId,
         req.saasTenantId,
@@ -528,6 +542,7 @@ router.post('/register-consumer', async (req, res, next) => {
         phone?.trim() || null,
         consumerNumber,
         billId,
+        seq,
         email?.trim() || null,
       ]
     );
@@ -545,7 +560,7 @@ router.post('/register-consumer', async (req, res, next) => {
       }
       const invoiceNumber = `INV-${billerCode}-${String(seq).padStart(6, '0')}`;
 
-      await pool.query(
+      await connection.query(
         `INSERT INTO invoices
            (id, tenant_id, invoice_number, student_id, student_name,
             consumer_number, month, amount, status, due_date)
@@ -560,6 +575,10 @@ router.post('/register-consumer', async (req, res, next) => {
       logger.info(`SaaS register-consumer: created invoice ${invoiceNumber} for ${consumerNumber} bundle ${bundleRow.bundle_id} PKR ${bundleAmount}`);
     }
 
+    await connection.commit();
+    connection.release();
+    connection = null;
+
     return res.status(201).json({
       consumerNumber,
       consumerId,
@@ -569,6 +588,13 @@ router.post('/register-consumer', async (req, res, next) => {
       ...(invoiceInfo ? { invoice: invoiceInfo } : {}),
     });
   } catch (err) {
+    if (connection) {
+      try {
+        await connection.rollback();
+      } finally {
+        connection.release();
+      }
+    }
     next(err);
   }
 });

@@ -5,6 +5,10 @@ import { FilterBar } from '@/components/FilterBar';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -36,22 +40,33 @@ const BillerManagement = () => {
   const [editForm, setEditForm] = useState(emptyBillerForm);
   const [loading, setLoading] = useState(false);
   const [visibleKeyId, setVisibleKeyId] = useState<string | null>(null);
+  const [regenerateTarget, setRegenerateTarget] = useState<Biller | null>(null);
+  const [regenerateConfirmation, setRegenerateConfirmation] = useState('');
 
   const copyApiKey = (key: string) => {
     void navigator.clipboard.writeText(key);
     toast.success('API key copied to clipboard');
   };
 
-  const handleRegenerateKey = async (id: string) => {
-    if (!window.confirm('Regenerate API key? The old key will stop working immediately.')) return;
+  const handleRegenerateKey = async () => {
+    if (!regenerateTarget || regenerateConfirmation !== regenerateTarget.name) return;
+    const id = regenerateTarget.id;
     setLoading(true);
-    const res = await api.regenerateBillerApiKey(id);
-    if (res.data) {
-      setBillerList((prev) => prev.map((b) => (b.id === id ? res.data : b)));
-      if (editBiller?.id === id) setEditBiller(res.data);
-      toast.success('API key regenerated');
+    try {
+      const res = await api.regenerateBillerApiKey(id, `REGENERATE ${id}`);
+      if (res.data) {
+        setBillerList((prev) => prev.map((b) => (b.id === id ? res.data : b)));
+        if (editBiller?.id === id) setEditBiller(res.data);
+        setVisibleKeyId(id);
+        toast.success('API key regenerated. Copy and distribute the new key now.');
+      }
+      setRegenerateTarget(null);
+      setRegenerateConfirmation('');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to regenerate API key');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -212,7 +227,7 @@ const BillerManagement = () => {
                         <Copy className="w-4 h-4" />
                       </Button>
                     </div>
-                    <Button type="button" variant="ghost" size="sm" className="mt-1 text-xs text-destructive" onClick={() => void handleRegenerateKey(editBiller.id)} disabled={loading}>
+                    <Button type="button" variant="ghost" size="sm" className="mt-1 text-xs text-destructive" onClick={() => { setRegenerateTarget(editBiller); setRegenerateConfirmation(''); }} disabled={loading}>
                       <KeyRound className="w-3.5 h-3.5 mr-1" /> Regenerate Key
                     </Button>
                   </div>
@@ -222,6 +237,27 @@ const BillerManagement = () => {
             )}
           </DialogContent>
         </Dialog>
+
+        <AlertDialog open={Boolean(regenerateTarget)} onOpenChange={(open) => { if (!open && !loading) { setRegenerateTarget(null); setRegenerateConfirmation(''); } }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Regenerate API key?</AlertDialogTitle>
+              <AlertDialogDescription>
+                The existing key for <strong>{regenerateTarget?.name}</strong> will stop working immediately. Every connected system must be updated with the new key.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="space-y-2">
+              <Label htmlFor="biller-key-confirmation">Type the organization name to continue</Label>
+              <Input id="biller-key-confirmation" value={regenerateConfirmation} onChange={(event) => setRegenerateConfirmation(event.target.value)} autoComplete="off" />
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
+              <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={loading || regenerateConfirmation !== regenerateTarget?.name} onClick={(event) => { event.preventDefault(); void handleRegenerateKey(); }}>
+                {loading ? 'Regenerating…' : 'Regenerate and revoke old key'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       <FilterBar

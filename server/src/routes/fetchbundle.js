@@ -9,16 +9,28 @@
  */
 
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const config = require('../config');
 const bundleController = require('../controllers/bundleController');
 
 // Validate 1LINK credentials sent as HTTP headers
+const safeEqual = (provided, expected) => {
+  const left = Buffer.from(String(provided || ''));
+  const right = Buffer.from(String(expected || ''));
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+};
+
 const oneLinkAuth = (req, res, next) => {
   const username = req.headers['username'] || req.headers['Username'];
   const password = req.headers['password'] || req.headers['Password'];
+  const sourceIp = String(req.ip || req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+  const accessDenied =
+    !safeEqual(username, config.onebill.username) ||
+    !safeEqual(password, config.onebill.password) ||
+    (config.nodeEnv === 'production' && !config.onebill.allowedIps.includes(sourceIp));
 
-  if (username !== config.onebill.username || password !== config.onebill.password) {
+  if (accessDenied) {
     return res.status(401).json({
       companyId: '',
       responseCode: '04',

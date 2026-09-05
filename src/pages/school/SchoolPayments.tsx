@@ -2,7 +2,8 @@
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import { usePaymentStore } from '@/store/paymentStore';
-import type { Student } from '@/types';
+import type { StudentDirectoryRecord } from '@/types';
+import type { StudentDirectoryMeta } from '@/lib/api';
 import { FilterBar } from '@/components/FilterBar';
 import { TablePagination } from '@/components/TablePagination';
 import { EmptyState } from '@/components/EmptyState';
@@ -52,8 +53,12 @@ const SchoolPayments = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  const { data: studentsData } = useApiQuery(() => api.fetchStudents({ pageSize: 9999 }), []);
-  const students = useMemo(() => (studentsData || []) as Student[], [studentsData]);
+  // Request one row only; the server returns class facets independently of the
+  // page so filters do not require downloading the entire student directory.
+  const { meta: studentMeta } = useApiQuery<StudentDirectoryRecord[], StudentDirectoryMeta>(
+    () => api.fetchStudents({ pageSize: 1 }),
+    []
+  );
 
   const { data: historyRaw, meta: historyMeta } = useApiQuery(
     () => api.fetchPaymentHistory({
@@ -71,8 +76,10 @@ const SchoolPayments = () => {
   const total = historyMeta?.total ?? 0;
 
   const classOptions = useMemo(
-    () => Array.from(new Set(students.map((s) => s.class))).sort((a, b) => Number(a.replace(/\D/g, '')) - Number(b.replace(/\D/g, ''))),
-    [students]
+    () => (studentMeta?.facets.classes || [])
+      .map((item) => item.name)
+      .sort((a, b) => Number(a.replace(/\D/g, '')) - Number(b.replace(/\D/g, ''))),
+    [studentMeta]
   );
 
   const monthOptions = useMemo(

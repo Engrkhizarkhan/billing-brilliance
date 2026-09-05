@@ -174,15 +174,15 @@ const createPayment = async (req, res, next) => {
         : addHours(createdAt, DEFAULT_EXPIRY_HOURS);
     const billId = `ORG-${id.split('-')[0].toUpperCase()}`;
 
-    // Generate a 1BILL-compatible consumer number for this payment record.
-    // Format: FINTECH_PREFIX(6) + tenant biller_code(4) + timestamp(10) + random(4) = 24 chars.
-    // Uses timestamp+random instead of COUNT(*) to avoid race conditions on concurrent creates.
+    // Standard production identifiers are 20 digits; 24 digits are reserved for the UAT edge-case record.
     const [tenantRows] = await pool.query('SELECT biller_code FROM tenants WHERE id = ?', [tenantId]);
     if (!tenantRows.length) throw new AppError('Tenant not found', 404);
     const billerCode = tenantRows[0].biller_code;
-    const ts = String(Date.now()).slice(-10);
-    const rand = String(Math.floor(Math.random() * 9999)).padStart(4, '0');
-    const consumerNumber = `${FINTECH_PREFIX}${billerCode}${ts}${rand}`;
+    const suffixWidth = 20 - String(FINTECH_PREFIX).length - String(billerCode).length;
+    if (suffixWidth < 1 || !/^\d+$/.test(`${FINTECH_PREFIX}${billerCode}`)) {
+      throw new AppError('Tenant biller code cannot produce a numeric 20-digit 1BILL consumer number', 500, 'INVALID_BILLER_CODE');
+    }
+    const consumerNumber = `${FINTECH_PREFIX}${billerCode}${crypto.randomInt(0, 10 ** suffixWidth).toString().padStart(suffixWidth, '0')}`;
 
     await pool.query(
       `INSERT INTO org_payment_records (id, tenant_id, application_id, applicant_id, posting_id, bill_id, consumer_number, amount, status, due_date, expiry_date, created_at, description, callback_url)

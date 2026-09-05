@@ -7,6 +7,7 @@ const { pool } = require('../config/database');
 const logger = require('../config/logger');
 const { AppError } = require('../middleware/errorHandler');
 const { auditLog } = require('../middleware/auditLog');
+const { assertSafePublicHttpsUrl } = require('../services/urlSafety');
 
 const CALLBACK_URL = config.org.callbackUrl;
 const WEBHOOK_SECRET = config.org.webhookSecret;
@@ -59,20 +60,28 @@ const assertSecurity = async (req, options = {}) => {
     // Per-tenant IP whitelist — configured by org admin in settings, stored in DB
     if (req.tenantId) {
       const [settingRows] = await pool.query(
-        "SELECT value FROM settings WHERE tenant_id = ? AND `key` = 'etea_security_context' LIMIT 1",
+        `SELECT value FROM settings
+         WHERE tenant_id = ? AND \`key\` IN ('org_security_context', 'etea_security_context')
+         ORDER BY \`key\` = 'org_security_context' DESC LIMIT 1`,
         [req.tenantId]
       );
+      let setting = {};
       if (settingRows.length > 0) {
-        let setting = {};
-        try { setting = JSON.parse(settingRows[0].value); } catch { /* ignore malformed */ }
-        const allowedIps = (setting.sourceIp || '').split(',').map(s => s.trim()).filter(Boolean);
-        if (allowedIps.length > 0) {
-          const raw = req.ip || req.connection?.remoteAddress || '';
-          const ip = raw.startsWith('::ffff:') ? raw.slice(7) : raw;
-          if (!allowedIps.includes(ip)) {
-            logger.warn(`IP_BLOCKED: incoming="${ip}" (raw="${raw}"), allowed=[${allowedIps.join(', ')}]`);
-            throw new AppError('Source IP not whitelisted', 403, 'IP_BLOCKED');
-          }
+        try { setting = JSON.parse(settingRows[0].value); } catch { /* handled below */ }
+      }
+      const rawIps = setting.sourceIp;
+      const allowedIps = (Array.isArray(rawIps) ? rawIps : String(rawIps || '').split(','))
+        .map((ip) => ip.trim().replace(/^::ffff:/, ''))
+        .filter(Boolean);
+      if (config.nodeEnv === 'production' && allowedIps.length === 0) {
+        throw new AppError('Source IP allowlist is not configured', 503, 'IP_ALLOWLIST_REQUIRED');
+      }
+      if (allowedIps.length > 0) {
+        const raw = req.ip || req.connection?.remoteAddress || '';
+        const ip = raw.replace(/^::ffff:/, '');
+        if (!allowedIps.includes(ip)) {
+          logger.warn(`IP_BLOCKED: incoming="${ip}"`);
+          throw new AppError('Source IP not whitelisted', 403, 'IP_BLOCKED');
         }
       }
     }
@@ -82,7 +91,9 @@ const assertSecurity = async (req, options = {}) => {
   if (options.requireWebhookSignature && options.callback && REQUIRE_WEBHOOK_SIGNATURE) {
     const expected = generateWebhookSignature(options.callback);
     const provided = req.headers['x-webhook-signature'];
-    if (!provided || provided !== expected) {
+    const providedBuffer = Buffer.from(String(provided || ''));
+    const expectedBuffer = Buffer.from(expected);
+    if (providedBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(providedBuffer, expectedBuffer)) {
       throw new AppError('Invalid webhook signature', 401, 'INVALID_SIGNATURE');
     }
   }
@@ -166,15 +177,16 @@ const createPayment = async (req, res, next) => {
         : addHours(createdAt, DEFAULT_EXPIRY_HOURS);
     const billId = `ORG-${id.split('-')[0].toUpperCase()}`;
 
-    // Generate a 1BILL-compatible consumer number for this payment record.
-    // Format: FINTECH_PREFIX(6) + tenant biller_code(4) + timestamp(10) + random(4) = 24 chars.
-    // Uses timestamp+random instead of COUNT(*) to avoid race conditions on concurrent creates.
+    // Standard production identifiers are 20 digits: assigned prefix + biller code + CSPRNG suffix.
+    // A custom 24-digit identifier can still be provisioned separately for the required UAT edge case.
     const [tenantRows] = await pool.query('SELECT biller_code FROM tenants WHERE id = ?', [tenantId]);
     if (!tenantRows.length) throw new AppError('Tenant not found', 404);
     const billerCode = tenantRows[0].biller_code;
-    const ts = String(Date.now()).slice(-10);
-    const rand = String(Math.floor(Math.random() * 9999)).padStart(4, '0');
-    const consumerNumber = `${FINTECH_PREFIX}${billerCode}${ts}${rand}`;
+    const suffixWidth = 20 - String(FINTECH_PREFIX).length - String(billerCode).length;
+    if (suffixWidth < 1 || !/^\d+$/.test(`${FINTECH_PREFIX}${billerCode}`)) {
+      throw new AppError('Tenant biller code cannot produce a numeric 20-digit 1BILL consumer number', 500, 'INVALID_BILLER_CODE');
+    }
+    const consumerNumber = `${FINTECH_PREFIX}${billerCode}${crypto.randomInt(0, 10 ** suffixWidth).toString().padStart(suffixWidth, '0')}`;
 
     await pool.query(
       `INSERT INTO org_payment_records (id, tenant_id, application_id, applicant_id, posting_id, bill_id, consumer_number, amount, status, due_date, expiry_date, created_at, description, callback_url)
@@ -356,7 +368,7 @@ const processPaymentCallback = async (req, res, next) => {
     const orgWebhookUrl = tenantSettings.notification_url || '';
     const outboundSecret = tenantSettings.webhook_secret || WEBHOOK_SECRET;
 
-    // Push outbound notification to org's webhook endpoint (fire-and-forget, non-blocking)
+    // Revalidate before every outbound request because DNS may change after save time.
     if (orgWebhookUrl) {
       const notificationPayload = {
         application_id: updated.application_id,
@@ -368,18 +380,23 @@ const processPaymentCallback = async (req, res, next) => {
         .createHmac('sha256', outboundSecret)
         .update(JSON.stringify(notificationPayload))
         .digest('hex');
-      fetch(orgWebhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Webhook-Signature': outboundSig },
-        body: JSON.stringify(notificationPayload),
-        signal: AbortSignal.timeout(8000),
-      })
-        .then((res) => {
-          logger.info(`Org webhook push → ${orgWebhookUrl} | status=${res.status} | application_id=${updated.application_id}`);
+      try {
+        const safeWebhookUrl = await assertSafePublicHttpsUrl(orgWebhookUrl);
+        fetch(safeWebhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Webhook-Signature': outboundSig },
+          body: JSON.stringify(notificationPayload),
+          signal: AbortSignal.timeout(8000),
         })
-        .catch((err) => {
-          logger.warn(`Org webhook push failed → ${orgWebhookUrl} | ${err.message}`);
-        });
+          .then((res) => {
+            logger.info(`Org webhook push status=${res.status} | application_id=${updated.application_id}`);
+          })
+          .catch((err) => {
+            logger.warn(`Org webhook push failed | application_id=${updated.application_id} | ${err.message}`);
+          });
+      } catch (err) {
+        logger.warn(`Org webhook blocked by URL safety policy | application_id=${updated.application_id} | ${err.message}`);
+      }
     }
 
     // Record notification log

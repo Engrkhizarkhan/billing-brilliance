@@ -35,8 +35,12 @@ const fetchUsers = async (req, res, next) => {
     const total = countRows[0].total;
 
     const [rows] = await pool.query(
-      `SELECT u.id, u.tenant_id, u.email, u.name, u.role, u.school_access_role, u.school_ref, u.main_school_user_id, u.status, u.verified, u.last_login_at, u.created_at
-       FROM users u ${where} ORDER BY u.created_at DESC LIMIT ? OFFSET ?`,
+      `SELECT u.id, u.tenant_id, u.email, u.name, u.role, u.school_access_role, u.school_ref, u.main_school_user_id,
+              u.status, u.verified, u.last_login_at, u.created_at,
+              t.name AS tenant_name, t.biller_code
+       FROM users u
+       LEFT JOIN tenants t ON t.id = u.tenant_id AND t.deleted_at IS NULL
+       ${where} ORDER BY u.created_at DESC LIMIT ? OFFSET ?`,
       [...params, parseInt(pageSize), offset]
     );
 
@@ -126,7 +130,10 @@ const createUser = async (req, res, next) => {
     });
 
     const [rows] = await pool.query(
-      'SELECT id, tenant_id, email, name, role, school_access_role, school_ref, status, verified, created_at FROM users WHERE id = ?',
+      `SELECT u.id, u.tenant_id, u.email, u.name, u.role, u.school_access_role, u.school_ref, u.status, u.verified, u.created_at,
+              t.name AS tenant_name, t.biller_code
+       FROM users u LEFT JOIN tenants t ON t.id = u.tenant_id AND t.deleted_at IS NULL
+       WHERE u.id = ?`,
       [id]
     );
 
@@ -195,6 +202,24 @@ const resetPassword = async (req, res, next) => {
     });
 
     res.json({ message: 'Password reset successfully' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const deleteUser = async (req, res, next) => {
+  try {
+    const [rows] = await pool.query('SELECT * FROM users WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
+    if (rows.length === 0) throw new AppError('User not found', 404);
+
+    const target = rows[0];
+    assertNotProtectedAdminUser(target, 'deleted');
+    if (target.id === req.user.id) throw new AppError('You cannot delete your own account', 400);
+
+    await pool.query('UPDATE users SET deleted_at = NOW(), status = ? WHERE id = ?', ['banned', target.id]);
+    await auditLog(req, 'delete', 'user', target.id, `User ${target.email} soft-deleted by administrator`);
+
+    res.json({ data: true, message: 'User deleted' });
   } catch (err) {
     next(err);
   }
@@ -336,7 +361,10 @@ const updateUser = async (req, res, next) => {
     await auditLog(req, 'update', 'user', id, `User updated: ${fields.join(', ')}`);
 
     const [updated] = await pool.query(
-      'SELECT id, tenant_id, email, name, role, school_access_role, school_ref, main_school_user_id, status, verified, created_at FROM users WHERE id = ?',
+      `SELECT u.id, u.tenant_id, u.email, u.name, u.role, u.school_access_role, u.school_ref, u.main_school_user_id,
+              u.status, u.verified, u.created_at, t.name AS tenant_name, t.biller_code
+       FROM users u LEFT JOIN tenants t ON t.id = u.tenant_id AND t.deleted_at IS NULL
+       WHERE u.id = ?`,
       [id]
     );
 
@@ -347,6 +375,6 @@ const updateUser = async (req, res, next) => {
 };
 
 module.exports = {
-  fetchUsers, getUser, createUser, updateUser, updateUserStatus, resetPassword,
+  fetchUsers, getUser, createUser, updateUser, updateUserStatus, resetPassword, deleteUser,
   fetchSchoolUsers, createSchoolSubUser, deleteSchoolUser,
 };

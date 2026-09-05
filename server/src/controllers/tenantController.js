@@ -1,4 +1,5 @@
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const { auditLog } = require('../middleware/auditLog');
@@ -119,10 +120,13 @@ const updateTenantStatus = async (req, res, next) => {
 
 const regenerateTenantApiKey = async (req, res, next) => {
   try {
+    if (req.body.confirmation !== `REGENERATE ${req.params.id}`) {
+      throw new AppError('Explicit API key regeneration confirmation is required', 400, 'CONFIRMATION_REQUIRED');
+    }
     const [existing] = await pool.query('SELECT id FROM tenants WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
     if (existing.length === 0) throw new AppError('Tenant not found', 404);
 
-    const newApiKey = uuidv4().replace(/-/g, '') + uuidv4().replace(/-/g, '');
+    const newApiKey = crypto.randomBytes(32).toString('hex');
     await pool.query('UPDATE tenants SET api_key = ? WHERE id = ?', [newApiKey, req.params.id]);
     await auditLog(req, 'update', 'tenant', req.params.id, 'API key regenerated');
 

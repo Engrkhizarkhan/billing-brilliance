@@ -1,7 +1,7 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
-import { api } from '@/lib/api';
+import { Fragment, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { api, type StudentDirectoryMeta } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
-import { Scholarship, Student, StudentScholarshipAssignment } from '@/types';
+import { Scholarship, StudentDirectoryRecord, StudentScholarshipAssignment } from '@/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -26,8 +26,6 @@ import { ChevronDown, ChevronRight, Plus, Power, UserPlus, X, Search, Loader2 } 
 const Scholarships = () => {
   const { data: scholarshipsData, loading: scholarshipsLoading, refetch: refetchScholarships } = useApiQuery(() => api.fetchScholarships({}), []);
   const { data: assignmentsData, refetch: refetchAssignments } = useApiQuery(() => api.fetchAllScholarshipAssignments(), []);
-  const { data: studentsData, loading: studentsLoading } = useApiQuery(() => api.fetchStudents({ pageSize: 9999 }), []);
-  const studentDirectory = useMemo(() => (studentsData || []) as Student[], [studentsData]);
 
   const [list, setList] = useState<Scholarship[]>([]);
   const [assignments, setAssignments] = useState<StudentScholarshipAssignment[]>([]);
@@ -51,6 +49,18 @@ const Scholarships = () => {
     section: 'all',
     effectiveFrom: new Date().toISOString().split('T')[0],
   });
+  const deferredStudentLookup = useDeferredValue(studentLookup);
+  const { data: studentsData, meta: studentMeta, loading: studentsLoading } = useApiQuery<StudentDirectoryRecord[], StudentDirectoryMeta>(
+    () => api.fetchStudents({
+      pageSize: 120,
+      search: deferredStudentLookup || undefined,
+      className: assignmentForm.scope === 'class' ? assignmentForm.className : undefined,
+      section: assignmentForm.scope === 'class' && assignmentForm.section !== 'all' ? assignmentForm.section : undefined,
+      status: 'active',
+    }),
+    [deferredStudentLookup, assignmentForm.scope, assignmentForm.className, assignmentForm.section]
+  );
+  const studentDirectory = useMemo(() => (studentsData || []) as StudentDirectoryRecord[], [studentsData]);
 
   useEffect(() => {
     if (scholarshipsData) setList(scholarshipsData as Scholarship[]);
@@ -61,19 +71,15 @@ const Scholarships = () => {
   }, [assignmentsData]);
 
   const classOptions = useMemo(() => {
-    return Array.from(new Set(studentDirectory.map((student) => student.class)))
+    return (studentMeta?.facets.classes || []).map((item) => item.name)
       .sort((a, b) => Number(a.replace(/\D/g, '')) - Number(b.replace(/\D/g, '')));
-  }, [studentDirectory]);
+  }, [studentMeta]);
 
   const sectionOptions = useMemo(() => {
-    return Array.from(
-      new Set(
-        studentDirectory
-          .filter((student) => student.class === assignmentForm.className)
-          .map((student) => student.section)
-      )
-    ).sort((a, b) => a.localeCompare(b));
-  }, [assignmentForm.className, studentDirectory]);
+    return (studentMeta?.facets.classes.find((item) => item.name === assignmentForm.className)?.sections || [])
+      .map((item) => item.name)
+      .sort((a, b) => a.localeCompare(b));
+  }, [assignmentForm.className, studentMeta]);
 
   const activeAssignments = useMemo(
     () => assignments.filter((assignment) => assignment.status === 'active'),
@@ -97,13 +103,19 @@ const Scholarships = () => {
     return activeAssignments
       .map((assignment) => {
         const scholarship = list.find((item) => item.id === assignment.scholarshipId);
-        const student = studentDirectory.find((item) => item.id === assignment.studentId);
-        if (!scholarship || !student) return null;
+        if (!scholarship) return null;
+        const student = {
+          name: assignment.studentName || '—',
+          class: assignment.className || '',
+          section: assignment.section || '',
+          rollNumber: assignment.rollNumber || '—',
+          consumerNumber: assignment.consumerNumber || '—',
+        };
         return { assignment, scholarship, student };
       })
-      .filter((row): row is { assignment: StudentScholarshipAssignment; scholarship: Scholarship; student: typeof studentDirectory[number] } => row !== null)
+      .filter((row): row is NonNullable<typeof row> => row !== null)
       .sort((a, b) => a.student.class.localeCompare(b.student.class) || a.student.name.localeCompare(b.student.name));
-  }, [activeAssignments, list, studentDirectory]);
+  }, [activeAssignments, list]);
 
   const assignmentRowsByScholarship = useMemo(() => {
     const map: Record<string, typeof assignmentRows> = {};
@@ -131,25 +143,15 @@ const Scholarships = () => {
 
   const assignmentTargetPreview = useMemo(() => {
     if (assignmentForm.scope === 'student') return assignmentForm.studentId ? 1 : 0;
-    return studentDirectory.filter((student) =>
-      student.class === assignmentForm.className &&
-      (assignmentForm.section === 'all' || student.section === assignmentForm.section)
-    ).length;
-  }, [assignmentForm, studentDirectory]);
+    const selectedClass = studentMeta?.facets.classes.find((item) => item.name === assignmentForm.className);
+    if (!selectedClass) return 0;
+    if (assignmentForm.section === 'all') return selectedClass.count;
+    return selectedClass.sections.find((item) => item.name === assignmentForm.section)?.count || 0;
+  }, [assignmentForm, studentMeta]);
 
   const filteredStudentDirectory = useMemo(() => {
-    const query = studentLookup.trim().toLowerCase();
-    const source = !query
-      ? studentDirectory
-      : studentDirectory.filter((student) =>
-          student.name.toLowerCase().includes(query) ||
-          student.rollNumber.toLowerCase().includes(query) ||
-          student.cnic.includes(studentLookup) ||
-          student.consumerNumber.includes(studentLookup)
-        );
-
-    return source.slice(0, 120);
-  }, [studentLookup, studentDirectory]);
+    return studentDirectory;
+  }, [studentDirectory]);
 
   const handleCreate = async () => {
     if (!form.name || !form.value || !form.startDate || (!form.isLifetime && !form.endDate)) {
@@ -205,37 +207,20 @@ const Scholarships = () => {
       return;
     }
 
-    const targetStudentIds = assignmentForm.scope === 'student'
-      ? [assignmentForm.studentId]
-      : studentDirectory
-        .filter((student) =>
-          student.class === assignmentForm.className &&
-          (assignmentForm.section === 'all' || student.section === assignmentForm.section)
-        )
-        .map((student) => student.id);
-
-    if (targetStudentIds.length === 0) {
-      toast.error('No students found for the selected assignment scope');
-      return;
-    }
-
-    const toCreate = targetStudentIds
-      .filter((studentId) => !activeAssignmentKeySet.has(`${studentId}::${assignmentForm.scholarshipId}`));
-
-    if (toCreate.length === 0) {
+    if (assignmentForm.scope === 'student' && activeAssignmentKeySet.has(`${assignmentForm.studentId}::${assignmentForm.scholarshipId}`)) {
       toast.info('Selected students are already assigned to this scholarship');
       return;
     }
 
     setAssigning(true);
     try {
-      for (const studentId of toCreate) {
-        await api.createScholarshipAssignment({
-          studentId,
-          scholarshipId: assignmentForm.scholarshipId,
-          effectiveFrom: assignmentForm.effectiveFrom,
-        });
-      }
+      const result = await api.bulkCreateScholarshipAssignments({
+        scholarshipId: assignmentForm.scholarshipId,
+        effectiveFrom: assignmentForm.effectiveFrom,
+        studentIds: assignmentForm.scope === 'student' ? [assignmentForm.studentId] : undefined,
+        className: assignmentForm.scope === 'class' ? assignmentForm.className : undefined,
+        section: assignmentForm.scope === 'class' ? assignmentForm.section : undefined,
+      });
       refetchAssignments();
       setAssignDialogOpen(false);
       setStudentLookup('');
@@ -247,7 +232,7 @@ const Scholarships = () => {
         section: 'all',
         effectiveFrom: new Date().toISOString().split('T')[0],
       });
-      toast.success(`${toCreate.length} student(s) assigned to scholarship`);
+      toast.success(`${result.data.assigned} student(s) assigned to scholarship`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to assign scholarship');
     } finally {

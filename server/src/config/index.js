@@ -39,6 +39,10 @@ module.exports = {
     username: process.env.ONELINK_USERNAME || 'demo-user',
     password: process.env.ONELINK_PASSWORD || 'demo-pass',
     bankMnemonic: process.env.ONELINK_BANK_MNEMONIC || 'MBLINK01',
+    allowedIps: (process.env.ONELINK_ALLOWED_IPS || '')
+      .split(',')
+      .map((ip) => ip.trim().replace(/^::ffff:/, ''))
+      .filter(Boolean),
   },
 
   rateLimit: {

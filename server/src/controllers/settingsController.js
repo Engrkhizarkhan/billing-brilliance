@@ -1,9 +1,11 @@
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
+const net = require('net');
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const { auditLog } = require('../middleware/auditLog');
 const { createRequestNotification } = require('../services/notificationService');
+const { assertSafePublicHttpsUrl } = require('../services/urlSafety');
 
 const resolveTenantId = (req) => req.tenantId || req.body.tenantId || req.query.tenantId || null;
 
@@ -543,6 +545,209 @@ const createPaymentPlanAssignment = async (req, res, next) => {
   }
 };
 
+const bulkCreateScholarshipAssignments = async (req, res, next) => {
+  let connection;
+  try {
+    const tenantId = resolveTenantId(req);
+    if (!tenantId) throw new AppError('Tenant ID is required', 400);
+    const { scholarshipId, effectiveFrom, studentIds = [], className, section } = req.body;
+    if (!scholarshipId || !effectiveFrom) throw new AppError('Scholarship and effective date are required', 400);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) throw new AppError('Effective date must be YYYY-MM-DD', 400);
+    if (!Array.isArray(studentIds) || studentIds.length > 2500) throw new AppError('Invalid or oversized student selection', 400);
+    if (studentIds.length === 0 && !className) throw new AppError('Select at least one student or class', 400);
+
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    await connection.query('SELECT id FROM tenants WHERE id = ? FOR UPDATE', [tenantId]);
+    const [scholarships] = await connection.query(
+      `SELECT id, name FROM scholarships
+       WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL AND status = 'active'`,
+      [scholarshipId, tenantId]
+    );
+    if (scholarships.length === 0) throw new AppError('Active scholarship not found', 404);
+
+    let studentSql = `SELECT id FROM students WHERE tenant_id = ? AND deleted_at IS NULL AND status = 'active'`;
+    const studentParams = [tenantId];
+    if (studentIds.length > 0) { studentSql += ' AND id IN (?)'; studentParams.push(studentIds); }
+    if (className) { studentSql += ' AND class = ?'; studentParams.push(className); }
+    if (section && section !== 'all') { studentSql += ' AND section = ?'; studentParams.push(section); }
+    const [students] = await connection.query(studentSql, studentParams);
+    if (students.length === 0) throw new AppError('No active students matched the selected scope', 404);
+
+    const values = students.map((student) => [
+      uuidv4(), tenantId, student.id, scholarshipId, effectiveFrom, 'active',
+    ]);
+    await connection.query(
+      `INSERT INTO student_scholarship_assignments
+       (id, tenant_id, student_id, scholarship_id, effective_from, status)
+       VALUES ?
+       ON DUPLICATE KEY UPDATE status = 'active', effective_from = VALUES(effective_from), assigned_at = NOW()`,
+      [values]
+    );
+    await connection.commit();
+
+    await auditLog(req, 'create', 'scholarship_assignment_batch', scholarshipId, `${scholarships[0].name} assigned to ${students.length} student(s)`);
+    await createRequestNotification(req, {
+      title: 'Scholarship assignment completed',
+      message: `${scholarships[0].name} was assigned or reactivated for ${students.length} student(s).`,
+      type: 'system',
+      tenantId,
+    });
+    res.status(201).json({ data: { assigned: students.length }, message: 'Bulk scholarship assignment completed' });
+  } catch (err) {
+    if (connection) await connection.rollback();
+    next(err);
+  } finally {
+    if (connection) connection.release();
+  }
+};
+
+// Bulk assignment is intentionally a single, tenant-serialized transaction.
+// A class containing thousands of students must not fan out into thousands of
+// browser requests (and hit the API rate limiter or leave a partial result).
+const bulkCreatePaymentPlanAssignments = async (req, res, next) => {
+  let connection;
+  try {
+    const tenantId = resolveTenantId(req);
+    if (!tenantId) throw new AppError('Tenant ID is required', 400);
+
+    const {
+      feePlanId,
+      studentIds = [],
+      classNames = [],
+      assignedDate = new Date().toISOString().slice(0, 10),
+      assignedVia = classNames.length > 0 ? 'class' : 'individual',
+    } = req.body;
+    if (!feePlanId) throw new AppError('Fee plan is required', 400);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(assignedDate)) throw new AppError('Assigned date must be YYYY-MM-DD', 400);
+    if (!['class', 'individual'].includes(assignedVia)) throw new AppError('Invalid assignment source', 400);
+    if (!Array.isArray(studentIds) || !Array.isArray(classNames)) throw new AppError('Student IDs and class names must be arrays', 400);
+    if (studentIds.length > 2500 || classNames.length > 100) throw new AppError('Bulk assignment exceeds the allowed batch size', 400);
+    if (studentIds.length === 0 && classNames.length === 0) throw new AppError('Select at least one student or class', 400);
+
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    await connection.query('SELECT id FROM tenants WHERE id = ? FOR UPDATE', [tenantId]);
+
+    const [plans] = await connection.query(
+      `SELECT id, name, amount, due_day, frequency, COALESCE(plan_type, 'tuition') AS plan_type
+       FROM fee_plans WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`,
+      [feePlanId, tenantId]
+    );
+    if (plans.length === 0) throw new AppError('Fee plan not found', 404);
+    const plan = plans[0];
+
+    const selectors = [];
+    const selectorParams = [tenantId];
+    if (studentIds.length > 0) { selectors.push('id IN (?)'); selectorParams.push(studentIds); }
+    if (classNames.length > 0) { selectors.push('class IN (?)'); selectorParams.push(classNames); }
+    const [students] = await connection.query(
+      `SELECT id, name, bill_id, consumer_number FROM students
+       WHERE tenant_id = ? AND deleted_at IS NULL AND status = 'active' AND (${selectors.join(' OR ')})`,
+      selectorParams
+    );
+    if (students.length === 0) throw new AppError('No active students matched the selected scope', 404);
+
+    const selectedIds = students.map((student) => student.id);
+    const [existingRows] = await connection.query(
+      `SELECT ppa.student_id, ppa.fee_plan_id, COALESCE(fp.plan_type, 'tuition') AS plan_type
+       FROM payment_plan_assignments ppa
+       JOIN fee_plans fp ON fp.id = ppa.fee_plan_id
+       WHERE ppa.tenant_id = ? AND ppa.student_id IN (?) AND ppa.status IN ('active', 'pending')`,
+      [tenantId, selectedIds]
+    );
+    const duplicateKeys = new Set(existingRows.map((row) => `${row.student_id}:${row.fee_plan_id}`));
+    const tuitionAssigned = new Set(existingRows.filter((row) => row.plan_type === 'tuition').map((row) => row.student_id));
+    const eligible = students.filter((student) =>
+      !duplicateKeys.has(`${student.id}:${feePlanId}`) &&
+      (plan.plan_type !== 'tuition' || !tuitionAssigned.has(student.id))
+    );
+
+    const isOneTime = String(plan.frequency || '').toLowerCase() === 'one-time';
+    const assignmentStatus = isOneTime ? 'completed' : 'active';
+    const nextDueDate = isOneTime ? null : computeNextDueDate(assignedDate, plan.due_day);
+    const assignmentValues = eligible.map((student) => [
+      uuidv4(), tenantId, student.id, feePlanId, assignmentStatus, assignedVia, assignedDate, nextDueDate,
+    ]);
+
+    if (assignmentValues.length > 0) {
+      await connection.query(
+        `INSERT INTO payment_plan_assignments
+         (id, tenant_id, student_id, fee_plan_id, status, assigned_via, assigned_date, next_due_date)
+         VALUES ?`,
+        [assignmentValues]
+      );
+    }
+
+    // Preserve existing semantics: additional plans and one-time plans post a
+    // charge immediately. Build the related ledger and invoice rows in bulk.
+    if (eligible.length > 0 && (plan.plan_type === 'additional' || isOneTime)) {
+      const [balanceRows] = await connection.query(
+        `SELECT student_id,
+                CAST(SUBSTRING_INDEX(GROUP_CONCAT(balance ORDER BY date DESC, created_at DESC), ',', 1) AS DECIMAL(12,2)) AS balance
+         FROM ledger_entries WHERE tenant_id = ? AND student_id IN (?) GROUP BY student_id`,
+        [tenantId, selectedIds]
+      );
+      const balances = Object.fromEntries(balanceRows.map((row) => [row.student_id, Number(row.balance || 0)]));
+      const [seqRows] = await connection.query(
+        `SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(invoice_number, '-', -1) AS UNSIGNED)), 10000) AS max_seq
+         FROM invoices WHERE tenant_id = ?`,
+        [tenantId]
+      );
+      let invoiceSequence = Number(seqRows[0].max_seq);
+      const chargeAmount = Number(plan.amount);
+      const ledgerValues = [];
+      const invoiceValues = [];
+      for (const student of eligible) {
+        invoiceSequence += 1;
+        const invoiceNumber = `INV-${invoiceSequence}`;
+        const newBalance = Number(((balances[student.id] || 0) + chargeAmount).toFixed(2));
+        ledgerValues.push([
+          uuidv4(), tenantId, student.id, assignedDate, plan.name, chargeAmount, 0,
+          newBalance, student.bill_id, invoiceNumber, 'charge',
+        ]);
+        invoiceValues.push([
+          uuidv4(), tenantId, invoiceNumber, student.id, feePlanId, student.name,
+          student.consumer_number, assignedDate.slice(0, 7), chargeAmount, 0, 'pending', assignedDate,
+        ]);
+      }
+      await connection.query(
+        `INSERT INTO ledger_entries
+         (id, tenant_id, student_id, date, description, debit, credit, balance, bill_id, reference, entry_type)
+         VALUES ?`,
+        [ledgerValues]
+      );
+      await connection.query(
+        `INSERT INTO invoices
+         (id, tenant_id, invoice_number, student_id, fee_plan_id, student_name, consumer_number, month, amount, late_fee, status, due_date)
+         VALUES ?`,
+        [invoiceValues]
+      );
+      await connection.query(
+        'UPDATE students SET balance = COALESCE(balance, 0) + ? WHERE tenant_id = ? AND id IN (?)',
+        [chargeAmount, tenantId, eligible.map((student) => student.id)]
+      );
+    }
+
+    await connection.commit();
+    const created = eligible.length;
+    const skipped = students.length - created;
+    await auditLog(req, 'create', 'payment_plan_assignment_batch', feePlanId, `${plan.name} assigned to ${created} student(s); ${skipped} skipped`);
+    await createRequestNotification(req, {
+      title: 'Payment plan assignment completed',
+      message: `${plan.name} was assigned to ${created} student(s); ${skipped} already assigned or ineligible.`,
+      type: 'system',
+      tenantId,
+    });
+    res.status(201).json({ data: { created, skipped, matched: students.length }, message: 'Bulk assignment completed' });
+  } catch (err) {
+    if (connection) await connection.rollback();
+    next(err);
+  } finally {
+    if (connection) connection.release();
+  }
+};
+
 const updatePaymentPlanAssignment = async (req, res, next) => {
   try {
     let where = 'WHERE ppa.id = ?';
@@ -666,6 +871,16 @@ const upsertSetting = async (req, res, next) => {
     if (!tenantId) throw new AppError('Tenant ID is required', 400);
 
     const value = req.body.value;
+    if (req.params.key === 'org_security_context') {
+      const sourceIps = value?.sourceIp;
+      if (!Array.isArray(sourceIps) || sourceIps.length === 0 || sourceIps.length > 50) {
+        throw new AppError('Configure between 1 and 50 source IP addresses', 400);
+      }
+      if (sourceIps.some((ip) => typeof ip !== 'string' || net.isIP(ip.trim()) === 0)) {
+        throw new AppError('Every source IP must be a valid IPv4 or IPv6 address', 400);
+      }
+      value.sourceIp = [...new Set(sourceIps.map((ip) => ip.trim()))];
+    }
     await pool.query(
       `INSERT INTO settings (id, tenant_id, \`key\`, value)
        VALUES (?, ?, ?, ?)
@@ -724,12 +939,18 @@ const saveWebhookConfig = async (req, res, next) => {
 
     const { notification_url, webhook_secret } = req.body;
 
-    if (!notification_url || !/^https:\/\/.+/.test(notification_url)) {
-      throw new AppError('notification_url must be a valid https:// URL', 400);
+    let safeNotificationUrl;
+    try {
+      safeNotificationUrl = await assertSafePublicHttpsUrl(notification_url);
+    } catch (error) {
+      throw new AppError(error.message, 400, 'UNSAFE_WEBHOOK_URL');
     }
 
-    const patch = { notification_url };
+    const patch = { notification_url: safeNotificationUrl };
     if (webhook_secret !== undefined && webhook_secret !== '') {
+      if (typeof webhook_secret !== 'string' || webhook_secret.length < 32) {
+        throw new AppError('Webhook secret must contain at least 32 characters', 400);
+      }
       patch.webhook_secret = webhook_secret;
     }
 
@@ -765,6 +986,12 @@ const testWebhookConfig = async (req, res, next) => {
     if (!notificationUrl) {
       throw new AppError('Notification URL is not configured. Save a webhook URL first.', 400);
     }
+    let safeNotificationUrl;
+    try {
+      safeNotificationUrl = await assertSafePublicHttpsUrl(notificationUrl);
+    } catch (error) {
+      throw new AppError(error.message, 400, 'UNSAFE_WEBHOOK_URL');
+    }
 
     const payload = { status: 'test', application_id: 'TEST-0000' };
     const sig = crypto
@@ -773,7 +1000,7 @@ const testWebhookConfig = async (req, res, next) => {
       .digest('hex');
 
     try {
-      const response = await fetch(notificationUrl, {
+      const response = await fetch(safeNotificationUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -803,9 +1030,11 @@ module.exports = {
   fetchStudentScholarships,
   fetchAllScholarshipAssignments,
   createScholarshipAssignment,
+  bulkCreateScholarshipAssignments,
   updateScholarshipAssignment,
   fetchPaymentPlanAssignments,
   createPaymentPlanAssignment,
+  bulkCreatePaymentPlanAssignments,
   updatePaymentPlanAssignment,
   deletePaymentPlanAssignment,
   getSetting,

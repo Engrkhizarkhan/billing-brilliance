@@ -184,10 +184,22 @@ const logout = async (req, res, next) => {
   }
 };
 
-const getProfile = async (req, res) => {
+const getProfile = async (req, res, next) => {
+  try {
   const { password_hash, ...safeUser } = req.user;
   void password_hash;
+  if (req.user.tenant_id) {
+    const [tenantRows] = await pool.query(
+      'SELECT api_key FROM tenants WHERE id = ? AND deleted_at IS NULL',
+      [req.user.tenant_id]
+    );
+    safeUser.tenantApiKey = tenantRows[0]?.api_key || null;
+  }
+  res.set('Cache-Control', 'no-store');
   res.json({ data: safeUser });
+  } catch (err) {
+    next(err);
+  }
 };
 
 const changePassword = async (req, res, next) => {

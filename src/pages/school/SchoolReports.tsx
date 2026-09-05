@@ -1,8 +1,6 @@
-import { useMemo } from 'react';
 import { StatCard } from '@/components/StatCard';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
-import type { Student, Invoice } from '@/types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { Wallet, AlertTriangle, BarChart3, Receipt, Loader2 } from 'lucide-react';
 import { formatPKR } from '@/lib/formatters';
@@ -10,42 +8,28 @@ import { formatPKR } from '@/lib/formatters';
 const CHART_COLORS = ['hsl(221, 83%, 53%)', 'hsl(160, 84%, 39%)', 'hsl(38, 92%, 50%)', 'hsl(271, 55%, 55%)', 'hsl(0, 72%, 51%)'];
 
 const SchoolReports = () => {
-  const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({ pageSize: 9999 }), []);
-  const { data: invoicesData, loading: li } = useApiQuery(() => api.fetchInvoices({ pageSize: 9999 }), []);
   const { data: statsData, loading: lStats } = useApiQuery(() => api.getDashboardStats(), []);
   const { data: monthlyTrendData, loading: lTrend } = useApiQuery(() => api.getMonthlyTrend(), []);
   const { data: feeByPlanData, loading: lFee } = useApiQuery(() => api.getCollectionByFeePlan(), []);
 
-  const students = useMemo(() => (studentsData || []) as Student[], [studentsData]);
-  const invoices = useMemo(() => (invoicesData || []) as Invoice[], [invoicesData]);
-  const stats = statsData as { paidRevenue?: number; overdueInvoices?: number } | null;
+  const stats = statsData || {};
   const monthlyTrend = (monthlyTrendData || []) as { month: string; collected: number }[];
   const feeByPlan = (feeByPlanData || []) as { name: string; value: number }[];
 
-  const loading = ls || li || lStats || lTrend || lFee;
+  const loading = lStats || lTrend || lFee;
 
-  const invoiceStatusData = useMemo(() => [
-    { status: 'Paid', count: invoices.filter((invoice) => invoice.status === 'paid').length },
-    { status: 'Pending', count: invoices.filter((invoice) => invoice.status === 'pending').length },
-    { status: 'Overdue', count: invoices.filter((invoice) => invoice.status === 'overdue').length },
-  ], [invoices]);
+  const invoiceStatusData = [
+    { status: 'Paid', count: stats.paidInvoices ?? 0 },
+    { status: 'Pending', count: stats.pendingInvoices ?? 0 },
+    { status: 'Overdue', count: stats.overdueInvoices ?? 0 },
+  ];
 
   const totalCollected = stats?.paidRevenue ?? 0;
-  const paidInvoiceCount = invoices.filter((invoice) => invoice.status === 'paid').length;
-  const pendingInvoiceCount = invoices.filter((invoice) => invoice.status === 'pending').length;
-  const overdueCount = stats?.overdueInvoices ?? invoices.filter((invoice) => invoice.status === 'overdue').length;
-
-  const defaultersByClass = useMemo(() => {
-    const classMap: Record<string, number> = {};
-    students.forEach((student) => {
-      const due = invoices.filter((inv) => inv.consumerNumber === student.consumerNumber && (inv.status === 'overdue' || inv.status === 'pending')).reduce((sum, inv) => sum + inv.amount, 0);
-      if (due > 0) classMap[student.class] = (classMap[student.class] || 0) + 1;
-    });
-
-    return Object.entries(classMap)
-      .map(([className, count]) => ({ className: className.replace('Class ', 'C'), count }))
-      .sort((a, b) => a.className.localeCompare(b.className));
-  }, [students, invoices]);
+  const paidInvoiceCount = stats.paidInvoices ?? 0;
+  const pendingInvoiceCount = stats.pendingInvoices ?? 0;
+  const overdueCount = stats.overdueInvoices ?? 0;
+  const defaultersByClass = (stats.defaultersByClass ?? [])
+    .map((item) => ({ ...item, className: item.className.replace('Class ', 'C') }));
 
   if (loading) return <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin" /></div>;
 

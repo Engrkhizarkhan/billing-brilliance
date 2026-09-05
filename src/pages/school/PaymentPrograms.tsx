@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
-import { api } from '@/lib/api';
+import { useState, useMemo, useDeferredValue } from 'react';
+import { api, type StudentDirectoryMeta } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
-import type { Student, FeePlan, PaymentPlanAssignment } from '@/types';
+import type { StudentDirectoryRecord, FeePlan, PaymentPlanAssignment } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -17,10 +17,23 @@ import { Plus, GraduationCap, CheckCircle2, Search, Pencil, Trash2, Loader2 } fr
 const allClasses = ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
 
 const PaymentPrograms = () => {
-  const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({ pageSize: 9999 }), []);
+  const [studentSearch, setStudentSearch] = useState('');
+  const [studentClassFilter, setStudentClassFilter] = useState('all');
+  const [studentSectionFilter, setStudentSectionFilter] = useState('all');
+  const deferredStudentSearch = useDeferredValue(studentSearch);
+  const { data: studentsData, meta: studentMeta, loading: ls } = useApiQuery<StudentDirectoryRecord[], StudentDirectoryMeta>(
+    () => api.fetchStudents({
+      pageSize: 200,
+      search: deferredStudentSearch || undefined,
+      className: studentClassFilter !== 'all' ? studentClassFilter : undefined,
+      section: studentSectionFilter !== 'all' ? studentSectionFilter : undefined,
+      status: 'active',
+    }),
+    [deferredStudentSearch, studentClassFilter, studentSectionFilter]
+  );
   const { data: feePlansData, loading: lf } = useApiQuery(() => api.fetchFeePlans(), []);
   const { data: assignmentsData, loading: la, refetch: refetchAssignments } = useApiQuery(() => api.fetchPaymentPlanAssignments(), []);
-  const students = useMemo(() => (studentsData || []) as Student[], [studentsData]);
+  const students = useMemo(() => (studentsData || []) as StudentDirectoryRecord[], [studentsData]);
   const feePlans = (feePlansData || []) as FeePlan[];
   const assignments = useMemo(() => (assignmentsData || []) as PaymentPlanAssignment[], [assignmentsData]);
   const pageLoading = ls || lf || la;
@@ -35,9 +48,6 @@ const PaymentPrograms = () => {
   const [selectedIndividualPlan, setSelectedIndividualPlan] = useState('');
   const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
-  const [studentSearch, setStudentSearch] = useState('');
-  const [studentClassFilter, setStudentClassFilter] = useState('all');
-  const [studentSectionFilter, setStudentSectionFilter] = useState('all');
   const [assignmentClassFilter, setAssignmentClassFilter] = useState('all');
   const [assignmentStatusFilter, setAssignmentStatusFilter] = useState('all');
   const [assignmentFrequencyFilter, setAssignmentFrequencyFilter] = useState('all');
@@ -77,30 +87,22 @@ const PaymentPrograms = () => {
 
   // Class summary
   const classCounts = useMemo(() => {
-    const map: Record<string, number> = {};
-    students.forEach((s) => { map[s.class] = (map[s.class] || 0) + 1; });
-    return map;
-  }, [students]);
+    return Object.fromEntries((studentMeta?.facets.classes || []).map((item) => [item.name, item.count]));
+  }, [studentMeta]);
 
   const individualSections = useMemo(() => {
-    const pool = studentClassFilter === 'all' ? students : students.filter((student) => student.class === studentClassFilter);
-    return Array.from(new Set(pool.map((student) => student.section))).sort((a, b) => a.localeCompare(b));
-  }, [studentClassFilter, students]);
+    if (studentClassFilter === 'all') {
+      return Array.from(new Set((studentMeta?.facets.classes || []).flatMap((item) => item.sections.map((section) => section.name))))
+        .sort((a, b) => a.localeCompare(b));
+    }
+    return (studentMeta?.facets.classes.find((item) => item.name === studentClassFilter)?.sections || [])
+      .map((section) => section.name)
+      .sort((a, b) => a.localeCompare(b));
+  }, [studentClassFilter, studentMeta]);
 
   const filteredStudentDirectory = useMemo(() => {
-    const query = studentSearch.trim().toLowerCase();
-    const source = students.filter((student) => {
-      const classMatch = studentClassFilter === 'all' || student.class === studentClassFilter;
-      const sectionMatch = studentSectionFilter === 'all' || student.section === studentSectionFilter;
-      const searchMatch = !query ||
-        student.name.toLowerCase().includes(query) ||
-        student.rollNumber.toLowerCase().includes(query) ||
-        student.cnic.includes(studentSearch) ||
-        student.consumerNumber.includes(studentSearch);
-      return classMatch && sectionMatch && searchMatch;
-    });
-    return source.slice(0, 200);
-  }, [studentSearch, studentClassFilter, studentSectionFilter, students]);
+    return students;
+  }, [students]);
 
   // Students who already have any active/pending tuition plan (max 1 tuition per student)
   const assignedTuitionStudentIds = useMemo(
@@ -130,37 +132,21 @@ const PaymentPrograms = () => {
     const plan = feePlans.find((p) => p.id === selectedClassPlan);
     if (!plan) return;
 
-    const classStudents = students.filter((s) => selectedClasses.includes(s.class));
-    const eligibleStudents = classStudents.filter((student) =>
-      plan.planType === 'tuition'
-        ? !assignedTuitionStudentIds.has(student.id)
-        : !assignedStudentPlanPairs.has(`${student.id}:${plan.id}`)
-    );
-    const alreadyAssigned = classStudents.length - eligibleStudents.length;
-
-    if (eligibleStudents.length === 0) {
-      toast.info('All students in the selected classes already have this plan assigned.');
-      return;
-    }
-
     setAssigning(true);
     try {
-      const results = await Promise.allSettled(
-        eligibleStudents.map((student) =>
-          api.createPaymentPlanAssignment({ studentId: student.id, feePlanId: plan.id, assignedVia: 'class' })
-        )
-      );
-      const succeeded = results.filter((r) => r.status === 'fulfilled').length;
-      const failed = results.filter((r) => r.status === 'rejected').length;
+      const result = await api.bulkCreatePaymentPlanAssignments({
+        feePlanId: plan.id,
+        classNames: selectedClasses,
+        assignedVia: 'class',
+      });
       await refetchAssignments();
       setClassAssignOpen(false);
       setSelectedClassPlan('');
       setSelectedClasses([]);
-      const skippedTotal = alreadyAssigned + failed;
-      if (skippedTotal === 0) {
-        toast.success(`${plan.name} assigned to ${succeeded} students across ${selectedClasses.length} class(es)`);
+      if (result.data.skipped === 0) {
+        toast.success(`${plan.name} assigned to ${result.data.created} students across ${selectedClasses.length} class(es)`);
       } else {
-        toast.success(`${plan.name} assigned to ${succeeded} student(s). ${skippedTotal} skipped (already have this plan).`);
+        toast.success(`${plan.name} assigned to ${result.data.created} student(s). ${result.data.skipped} skipped.`);
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to assign plan');
@@ -177,17 +163,11 @@ const PaymentPrograms = () => {
     const plan = feePlans.find((p) => p.id === selectedIndividualPlan);
     if (!plan) return;
 
-    const chosenStudents = selectedStudents
-      .map((sid) => students.find((student) => student.id === sid))
-      .filter((student): student is (typeof students)[number] => Boolean(student));
-
-    const eligibleIds = chosenStudents
-      .filter((student) =>
-        plan.planType === 'tuition'
-          ? !assignedTuitionStudentIds.has(student.id)
-          : !assignedStudentPlanPairs.has(`${student.id}:${plan.id}`)
-      )
-      .map((student) => student.id);
+    const eligibleIds = selectedStudents.filter((studentId) =>
+      plan.planType === 'tuition'
+        ? !assignedTuitionStudentIds.has(studentId)
+        : !assignedStudentPlanPairs.has(`${studentId}:${plan.id}`)
+    );
 
     if (eligibleIds.length === 0) {
       toast.info('All selected students already have this plan assigned.');
@@ -196,12 +176,11 @@ const PaymentPrograms = () => {
 
     setAssigning(true);
     try {
-      const results = await Promise.allSettled(
-        eligibleIds.map((studentId) =>
-          api.createPaymentPlanAssignment({ studentId, feePlanId: plan.id, assignedVia: 'individual' })
-        )
-      );
-      const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+      const result = await api.bulkCreatePaymentPlanAssignments({
+        feePlanId: plan.id,
+        studentIds: eligibleIds,
+        assignedVia: 'individual',
+      });
       await refetchAssignments();
       setSingleAssignOpen(false);
       setSelectedIndividualPlan('');
@@ -209,7 +188,7 @@ const PaymentPrograms = () => {
       setStudentSearch('');
       setStudentClassFilter('all');
       setStudentSectionFilter('all');
-      toast.success(`Payment plan assigned to ${succeeded} student(s)`);
+      toast.success(`Payment plan assigned to ${result.data.created} student(s)`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to assign plan');
     } finally {

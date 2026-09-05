@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useDeferredValue, useState } from 'react';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
-import type { Student } from '@/types';
+import type { StudentDirectoryRecord } from '@/types';
 import { FilterBar } from '@/components/FilterBar';
 import { ExportButton } from '@/components/ExportButton';
 import { TablePagination } from '@/components/TablePagination';
@@ -16,52 +16,25 @@ const Defaulters = () => {
   const [riskFilter, setRiskFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const deferredSearch = useDeferredValue(search);
 
-  const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({ pageSize: 9999 }), []);
-  const { data: summaryData, loading: li } = useApiQuery(() => api.fetchStudentFinancialSummary(), []);
-  const students = useMemo(() => (studentsData || []) as Student[], [studentsData]);
-  const loading = ls || li;
-
-  const financialByStudentId = useMemo(() => {
-    const summaries = (summaryData || []) as import('@/types').StudentFinancialSummary[];
-    const map = new Map<string, { totalDue: number; overdueMonths: number; riskTier: string }>();
-    summaries.forEach((s) => {
-      const overdueMonths = Number(s.overdueMonths) || 0;
-      const totalDue = parseFloat(String(s.totalDue)) || 0;
-      const riskTier = overdueMonths >= 3 ? 'critical' : overdueMonths >= 2 ? 'high-risk' : overdueMonths >= 1 ? 'watch' : 'none';
-      map.set(s.studentId, { totalDue, overdueMonths, riskTier });
-    });
-    return map;
-  }, [summaryData]);
-
-  const classOptions = useMemo(
-    () => Array.from(new Set(students.map((student) => student.class))).sort((a, b) => Number(a.replace(/\D/g, '')) - Number(b.replace(/\D/g, ''))),
-    [students]
+  const { data, meta, loading } = useApiQuery(
+    () => api.fetchStudents({
+      page,
+      pageSize,
+      search: deferredSearch || undefined,
+      className: classFilter === 'all' ? undefined : classFilter,
+      status: 'active',
+      defaulter: 'with_due',
+      risk: riskFilter === 'all' ? undefined : riskFilter,
+    }),
+    [page, pageSize, deferredSearch, classFilter, riskFilter]
   );
 
-  const defaulters = students
-    .filter((student) => student.status === 'active')
-    .map((student) => {
-      const financial = financialByStudentId.get(student.id);
-      if (!financial || financial.totalDue <= 0) return null;
-      return { student, financial };
-    })
-    .filter((item): item is { student: Student; financial: { totalDue: number; overdueMonths: number; riskTier: string } } => item !== null);
-
-  const filtered = defaulters.filter((item) => {
-    const query = search.toLowerCase();
-    const matchSearch = item.student.name.toLowerCase().includes(query)
-      || item.student.cnic.includes(search)
-      || item.student.consumerNumber.includes(search)
-      || (item.student.rollNumber || '').toLowerCase().includes(query);
-    const matchClass = classFilter === 'all' || item.student.class === classFilter;
-    const matchRisk = riskFilter === 'all' || item.financial.riskTier === riskFilter;
-    return matchSearch && matchClass && matchRisk;
-  });
-
-  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
-
-  const totalDue = filtered.reduce((sum, item) => sum + item.financial.totalDue, 0);
+  const defaulters = (data || []) as StudentDirectoryRecord[];
+  const total = meta?.total ?? 0;
+  const totalDue = meta?.filteredTotalDue ?? 0;
+  const classOptions = (meta?.facets.classes ?? []).map((item) => item.name);
 
   if (loading) return <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin" /></div>;
 
@@ -70,20 +43,28 @@ const Defaulters = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-header">Defaulters</h1>
-          <p className="page-description">Students with outstanding dues • {filtered.length} defaulters • Total: {formatPKR(totalDue)}</p>
+          <p className="page-description">Students with outstanding dues · {total} defaulters · Total: {formatPKR(totalDue)}</p>
         </div>
-        <ExportButton data={filtered.map((item) => ({ Name: item.student.name, Father: item.student.fatherName, Class: item.student.class, CNIC: item.student.cnic, Phone: item.student.phone, AmountDue: item.financial.totalDue, OverdueMonths: item.financial.overdueMonths, Risk: item.financial.riskTier }))} filename="defaulters" />
+        <ExportButton
+          data={defaulters.map((student) => ({
+            Name: student.name,
+            Father: student.fatherName,
+            Class: student.class,
+            CNIC: student.cnic,
+            Phone: student.phone,
+            AmountDue: student.totalDue,
+            OverdueMonths: student.overdueMonths,
+            Risk: student.riskTier,
+          }))}
+          filename={`defaulters-page-${page}`}
+        />
       </div>
 
       <FilterBar
         searchPlaceholder="Search by name, consumer #, roll #, or CNIC..."
-        onSearch={v => { setSearch(v); setPage(1); }}
+        onSearch={(value) => { setSearch(value); setPage(1); }}
         filters={[
-          {
-            key: 'class',
-            label: 'Class',
-            options: classOptions.map((className) => ({ value: className, label: className })),
-          },
+          { key: 'class', label: 'Class', options: classOptions.map((className) => ({ value: className, label: className })) },
           {
             key: 'risk',
             label: 'Risk Tier',
@@ -102,7 +83,7 @@ const Defaulters = () => {
       />
 
       <div className="table-container">
-        {paginated.length === 0 ? (
+        {defaulters.length === 0 ? (
           <EmptyState icon={AlertTriangle} title="No defaulters" description="All students are up to date with their fee payments!" />
         ) : (
           <Table>
@@ -120,7 +101,7 @@ const Defaulters = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paginated.map(({ student, financial }) => (
+              {defaulters.map((student) => (
                 <TableRow key={student.id} className="hover:bg-muted/30">
                   <TableCell className="font-medium text-sm">{student.name}</TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">{student.consumerNumber}</TableCell>
@@ -128,15 +109,21 @@ const Defaulters = () => {
                   <TableCell><span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md">{student.class} {student.section}</span></TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">{student.cnic}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{student.phone}</TableCell>
-                  <TableCell className="text-right font-mono text-sm font-semibold text-destructive">{formatPKR(financial.totalDue)}</TableCell>
-                  <TableCell className="text-right font-mono text-xs text-destructive">{financial.overdueMonths} mo</TableCell>
-                  <TableCell><span className="text-xs capitalize bg-warning/10 text-warning px-2 py-0.5 rounded-md">{financial.riskTier}</span></TableCell>
+                  <TableCell className="text-right font-mono text-sm font-semibold text-destructive">{formatPKR(student.totalDue)}</TableCell>
+                  <TableCell className="text-right font-mono text-xs text-destructive">{student.overdueMonths} mo</TableCell>
+                  <TableCell><span className="text-xs capitalize bg-warning/10 text-warning px-2 py-0.5 rounded-md">{student.riskTier}</span></TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         )}
-        <TablePagination total={filtered.length} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
+        <TablePagination
+          total={total}
+          page={page}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+        />
       </div>
     </div>
   );
