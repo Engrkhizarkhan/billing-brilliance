@@ -59,7 +59,7 @@ const getDashboardStats = async (req, res, next) => {
            SELECT amount, date FROM payments WHERE ${tenantClause}
          ), latest AS (SELECT DATE(MAX(date)) AS payment_date FROM scoped_payments)
          SELECT COALESCE(SUM(CASE WHEN DATE_FORMAT(sp.date, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m') THEN sp.amount ELSE 0 END), 0) AS collected_this_month,
-                latest.payment_date AS latest_payment_date,
+                MAX(latest.payment_date) AS latest_payment_date,
                 COALESCE(SUM(CASE WHEN DATE(sp.date) = latest.payment_date THEN 1 ELSE 0 END), 0) AS latest_day_payments,
                 COALESCE(SUM(CASE WHEN DATE(sp.date) = latest.payment_date THEN sp.amount ELSE 0 END), 0) AS latest_day_amount
          FROM scoped_payments sp CROSS JOIN latest`,

@@ -219,7 +219,11 @@ const billInquiry1Link = async (req, res) => {
         });
       }
 
-      if (org.status === 'expired' || org.status === 'failed') {
+      if (org.status === 'failed') {
+        return res.json(inquiryError('02'));
+      }
+
+      if (org.status === 'expired') {
         return res.json(inquiryError('01'));
       }
 

@@ -160,6 +160,7 @@ const createPayment = async (req, res, next) => {
 
     const id = uuidv4();
     const createdAt = new Date().toISOString();
+    const createdAtDb = toMySQLDatetime(createdAt);
     // due_date: derive from expireAt date portion if provided, otherwise default to today+2
     const dueDate = normalized.dueDate
       ? new Date(normalized.dueDate).toISOString().slice(0, 10)
@@ -168,10 +169,11 @@ const createPayment = async (req, res, next) => {
         : new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     // never_expires = store a far-future date (year 9999) so expiry queries never trigger
     const expiryDate = normalized.neverExpires
-      ? '9999-12-31T23:59:59.000Z'
+      ? '9999-12-31 23:59:59'
       : normalized.expireAt
-        ? new Date(normalized.expireAt).toISOString()
-        : addHours(createdAt, DEFAULT_EXPIRY_HOURS);
+        ? toMySQLDatetime(normalized.expireAt)
+        : toMySQLDatetime(addHours(createdAt, DEFAULT_EXPIRY_HOURS));
+    if (!expiryDate || !createdAtDb) throw new AppError('Invalid expiry date', 400, 'INVALID_EXPIRY_DATE');
     const billId = `ORG-${id.split('-')[0].toUpperCase()}`;
 
     // Standard production identifiers are 20 digits; 24 digits are reserved for the UAT edge-case record.
@@ -188,7 +190,7 @@ const createPayment = async (req, res, next) => {
       `INSERT INTO org_payment_records (id, tenant_id, application_id, applicant_id, posting_id, bill_id, consumer_number, amount, status, due_date, expiry_date, created_at, description, callback_url)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
       [id, tenantId, normalized.applicationId, normalized.applicantId, normalized.postingId, billId, consumerNumber,
-        normalized.amount, dueDate, expiryDate, createdAt, description, CALLBACK_URL]
+        normalized.amount, dueDate, expiryDate, createdAtDb, description, CALLBACK_URL]
     );
 
     const [rows] = await pool.query('SELECT * FROM org_payment_records WHERE id = ?', [id]);

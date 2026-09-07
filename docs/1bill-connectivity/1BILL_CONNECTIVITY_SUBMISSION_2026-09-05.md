@@ -15,22 +15,18 @@ This document provides the currently verified connectivity, HTTPS certificate, a
 | Public API hostname | `app.fintap.pk` | Active |
 | Public IP | `178.238.236.126` | Active and resolves from the hostname |
 | HTTPS application port | `TCP 443` | Active |
-| VM private IP | Not assigned | The VM is single-homed and has only `178.238.236.126/24` on `eth0`. See the selector question below. |
+| Existing Contabo private IP | `10.0.0.1/22` | Unchanged |
+| Dedicated 1LINK protected IP | `172.29.250.10/32` | Active and persistent on loopback |
 | 1LINK application source IPs | `10.95.8.92/32`, `10.95.8.94/32` | Configured in the 1BILL API allowlist |
 | 1LINK public IPsec peer | `103.248.140.4` | Taken from the supplied IKEv2 template dated 15 August 2025 |
 | TLS versions | TLS 1.2 and TLS 1.3 | Verified on the public endpoint |
 | SSL certificate | `app.fintap.pk-leaf.crt` | CA-authorized Let's Encrypt certificate; full chain is also supplied |
-| Web-service username | `zynotch-1bill-prod` | Active |
+| Web-service username | `1bill-user` | Active |
 | Web-service password | Shared separately through a secure channel | Do not send in the same email as this document |
 
-### Required confirmation for the private or protected IP
+### IPsec protected addresses
 
-The Contabo VM does not have an RFC1918 private address. Please confirm which traffic selector should be used in the TSR and IPsec policy:
-
-1. use `178.238.236.126/32` as Zynotch's protected application host; or
-2. assign and approve a mutually agreed private `/32` address for the tunnel and application listener.
-
-Please also confirm the 1LINK protected subnet or individual host selectors. Based on the kickoff information, the expected 1LINK application hosts are `10.95.8.92/32` and `10.95.8.94/32`, but Zynotch will not assume that these are the final IPsec traffic selectors without 1LINK confirmation.
+Zynotch has configured the dedicated protected address `172.29.250.10/32`. The existing Contabo private network `10.0.0.0/22` is not included in the 1LINK tunnel. The configured 1LINK protected hosts are `10.95.8.92/32` and `10.95.8.94/32`.
 
 ## REST API service
 
@@ -46,7 +42,7 @@ POST https://app.fintap.pk/api/1.0/Payments/BillInquiry
 
 ```text
 Content-Type: application/json
-username: zynotch-1bill-prod
+username: 1bill-user
 password: <shared separately>
 ```
 
@@ -92,7 +88,7 @@ POST https://app.fintap.pk/api/1.0/Payments/BillPayment
 
 ```text
 Content-Type: application/json
-username: zynotch-1bill-prod
+username: 1bill-user
 password: <shared separately>
 ```
 
@@ -144,8 +140,8 @@ The following values reproduce the supplied 1LINK template. The HTTPS TLS cipher
 | 1LINK public peer | `103.248.140.4` |
 | Zynotch public peer | `178.238.236.126` |
 | 1LINK protected hosts proposed for confirmation | `10.95.8.92/32`, `10.95.8.94/32` |
-| Zynotch protected host | Pending 1LINK confirmation as described above |
-| Pre-shared key | Pending separate secure exchange |
+| Zynotch protected host | `172.29.250.10/32` |
+| Pre-shared key | Received from 1LINK and stored securely; intentionally excluded from this document |
 
 For tunnel establishment, please confirm whether UDP `500`, UDP `4500` for NAT-T, and ESP protocol `50` are required and permitted on the 1LINK side. Zynotch will mirror the confirmed requirement.
 
@@ -157,9 +153,9 @@ The supplied certificate details are:
 |---|---|
 | Subject | `CN=app.fintap.pk` |
 | Issuer | `CN=YE1, O=Let's Encrypt, C=US` |
-| Valid from | 8 July 2026 22:42:37 UTC |
-| Valid until | 6 October 2026 22:42:36 UTC |
-| SHA-256 fingerprint | `2E:B7:40:CF:BE:91:84:7F:B7:70:CD:DD:79:3F:31:E8:7B:3A:23:93:AA:C1:CB:3A:1A:52:68:EA:47:96:32:95` |
+| Valid from | 5 September 2026 19:19:27 UTC |
+| Valid until | 4 December 2026 19:19:26 UTC |
+| SHA-256 fingerprint | `FE:D9:1B:40:C2:C4:C9:4B:5E:8F:69:89:41:99:86:55:A6:1D:FC:6B:2D:17:40:18:35:66:7F:39:A6:47:FB:52` |
 
 TLS 1.2 is enabled and was verified with `TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256`. TLS 1.3 is also enabled. The certificate uses an ECDSA key. Please confirm the exact HTTPS cipher required by 1LINK and whether an ECDSA Let's Encrypt certificate is accepted. The supplied IPsec document specifies the VPN cipher suite but does not specify the required HTTPS TLS cipher.
 
@@ -167,25 +163,32 @@ The certificate is automatically renewed and the leaf certificate will change. P
 
 ## Current implementation verification
 
-The following checks passed on 5 September 2026:
+The following checks passed through 7 September 2026:
 
 - `https://app.fintap.pk/api/health` returned HTTP `200`.
 - A request from allowed source `10.95.8.92` with the active credential reached the inquiry controller.
 - A request from a non-allowlisted source with the active credential returned HTTP `401`.
-- The former default `demo-user` credential returned HTTP `401` even when tested from an allowed source.
-- The deployed service remained online after credential rotation and allowlist enforcement.
+- Invalid credentials returned HTTP `401` even when tested from an allowed source.
+- All 20 synthetic UAT consumers returned their expected Inquiry response code and bill status.
+- Organization payment creation with `neverExpires` returned HTTP `201` after correcting MySQL date formatting.
+- The organization dashboard returned HTTP `200` under strict MySQL mode.
+- StrongSwan is active and both `onebill-92` and `onebill-94` are loaded.
+- The dedicated protected address `172.29.250.10/32` is active and persistent.
+- UDP ports `500` and `4500` are listening.
+- IKEv2 requests leave `178.238.236.126:500` for `103.248.140.4:500`, but no response is received.
+- No IKE SA or CHILD SA is currently established.
 
 ## Items requested from 1LINK to complete the tunnel
 
 Please provide or confirm the following so Zynotch can complete the IPsec configuration without conflicting assumptions:
 
-1. final 1LINK protected network selectors, including whether both `10.95.8.92/32` and `10.95.8.94/32` are included;
-2. the approved Zynotch protected host selector because the VM has no private address;
-3. IPsec pre-shared-key ownership and secure exchange method;
-4. the exact HTTPS TLS cipher required by the earlier highlighted-cipher instruction;
-5. whether the current ECDSA CA-authorized certificate is accepted;
-6. whether the current hostname is for initial connectivity only, UAT, or Production, since separate UAT and Production connections were requested at kickoff; and
-7. the final UAT source or NAT IPs if they differ from `10.95.8.92` and `10.95.8.94`.
+1. activate or verify the 1LINK VPN peer at `103.248.140.4`;
+2. whitelist the Zynotch public VPN IP `178.238.236.126` for IKEv2;
+3. confirm that UDP `500` and UDP `4500` can reach the 1LINK peer;
+4. confirm the mirrored selectors: Zynotch `172.29.250.10/32` and 1LINK `10.95.8.92/32`, `10.95.8.94/32`;
+5. confirm whether 1LINK or Zynotch should initiate the tunnel;
+6. provide a coordinated packet-capture and tunnel-test window; and
+7. after the peer responds, confirm the HTTPS cipher and certificate requirements for API UAT.
 
 ## Suggested covering message
 
@@ -193,9 +196,9 @@ Assalam-o-Alaikum,
 
 Please find Zynotch's REST API, public IP, port, SSL certificate, and web-service username attached. The password will be shared separately through a secure channel.
 
-Our public IP is `178.238.236.126` and the service is available on TCP port `443` at `app.fintap.pk`. The VM has no separate private IP, so please confirm whether `178.238.236.126/32` should be used as our protected host selector or whether 1LINK will approve a private tunnel address. We have configured `10.95.8.92` and `10.95.8.94` in the 1BILL application allowlist.
+Our public VPN IP is `178.238.236.126`, our dedicated protected IP is `172.29.250.10/32`, and the service is available on TCP port `443` at `app.fintap.pk`. We have configured `10.95.8.92` and `10.95.8.94` in the 1BILL application allowlist and IPsec CHILD selectors.
 
-We have reviewed the IKEv2 template and recorded the Phase 1 and Phase 2 parameters. To complete the tunnel, please confirm the protected selectors, pre-shared-key exchange method, and exact HTTPS TLS cipher requirement.
+Our peer sends IKEv2 `IKE_SA_INIT` packets from `178.238.236.126:500` to `103.248.140.4:500`, but no packets return from the 1LINK peer. Please verify that the 1LINK VPN configuration is active and our public IP is whitelisted, then provide a coordinated retest window.
 
 Regards,  
 Khizar Khan  
