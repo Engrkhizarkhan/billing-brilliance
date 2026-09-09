@@ -45,8 +45,8 @@ DELIMITER $$
 CREATE PROCEDURE provision_1bill_uat_20()
 BEGIN
   DECLARE v_tenant_id VARCHAR(36) DEFAULT NULL;
-  DECLARE v_existing_name VARCHAR(255) DEFAULT NULL;
   DECLARE v_tenant_status VARCHAR(20) DEFAULT NULL;
+  DECLARE v_lifecycle_stage VARCHAR(30) DEFAULT NULL;
   DECLARE v_posting_id VARCHAR(36) DEFAULT NULL;
   DECLARE v_base VARCHAR(44);
   DECLARE v_case_count INT DEFAULT 0;
@@ -76,8 +76,8 @@ BEGIN
   END IF;
 
   -- Find an existing dedicated UAT tenant by name.
-  SELECT COUNT(*), MAX(id), MAX(status)
-    INTO v_tenant_matches, v_tenant_id, v_tenant_status
+  SELECT COUNT(*), MAX(id), MAX(status), MAX(lifecycle_stage)
+    INTO v_tenant_matches, v_tenant_id, v_tenant_status, v_lifecycle_stage
     FROM tenants
    WHERE name = @uat_tenant_name
      AND deleted_at IS NULL;
@@ -87,33 +87,22 @@ BEGIN
       SET MESSAGE_TEXT = 'More than one active record uses the configured UAT tenant name; resolve it before provisioning';
   END IF;
 
-  -- If it does not exist, make sure the requested biller code is unused, then
-  -- create the dedicated tenant. A collision is a hard stop, never a takeover.
+  -- Tenant creation and production activation must go through the audited admin
+  -- workflow; this data script must never bypass that checklist.
   IF v_tenant_id IS NULL THEN
-    SELECT MAX(name)
-      INTO v_existing_name
-      FROM tenants
-     WHERE biller_code = @uat_biller_code
-       AND deleted_at IS NULL;
-
-    IF v_existing_name IS NOT NULL THEN
-      SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT = 'The configured UAT biller code belongs to another tenant; choose a dedicated unused numeric code';
-    END IF;
-
-    SET v_tenant_id = UUID();
-    INSERT INTO tenants
-      (id, name, type, biller_code, email, phone, status, api_key)
-    VALUES
-      (v_tenant_id, @uat_tenant_name, 'org', @uat_biller_code,
-       '1bill-uat@fintap.pk', NULL, 'active', SHA2(CONCAT(UUID(), UUID()), 256));
-    SET v_tenant_status = 'active';
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'Create the dedicated UAT tenant through Biller Management, activate it after checklist review, then rerun this script';
   END IF;
 
   -- Refuse to silently reactivate a deliberately suspended/banned test tenant.
   IF v_tenant_status <> 'active' THEN
     SIGNAL SQLSTATE '45000'
       SET MESSAGE_TEXT = 'The dedicated UAT tenant is not active; review its status before provisioning test cases';
+  END IF;
+
+  IF v_lifecycle_stage <> 'live' THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'The dedicated UAT tenant is not live; complete the audited activation checklist first';
   END IF;
 
   -- The existing tenant name must also have the configured biller code.
@@ -372,6 +361,12 @@ BEGIN
   FROM org_payment_records r
   JOIN uat_1bill_cases c ON c.consumer_number = r.consumer_number
   WHERE r.tenant_id = v_tenant_id;
+
+  -- Keep the shared allocator beyond the explicit UAT suffixes so a later API
+  -- registration cannot generate the same 24-digit consumer identifier.
+  UPDATE tenants
+     SET next_consumer_sequence = GREATEST(next_consumer_sequence, 21)
+   WHERE id = v_tenant_id;
 
   COMMIT;
 

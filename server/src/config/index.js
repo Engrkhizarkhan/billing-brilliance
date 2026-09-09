@@ -3,11 +3,14 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env'
 module.exports = {
   port: parseInt(process.env.PORT, 10) || 5000,
   nodeEnv: process.env.NODE_ENV || 'development',
+  appEnvironment: process.env.APP_ENVIRONMENT || (process.env.NODE_ENV === 'production' ? 'production' : 'development'),
+  trustProxyHops: Math.max(0, parseInt(process.env.TRUST_PROXY_HOPS, 10)
+    || (process.env.NODE_ENV === 'production' ? 1 : 0)),
 
   db: {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT, 10) || 3306,
-    database: process.env.DB_NAME || 'payniva',
+    database: process.env.DB_NAME || 'Fintap',
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT, 10) || 20,
@@ -36,8 +39,8 @@ module.exports = {
   },
 
   onebill: {
-    username: process.env.ONELINK_USERNAME || 'demo-user',
-    password: process.env.ONELINK_PASSWORD || 'demo-pass',
+    username: process.env.ONELINK_USERNAME || '',
+    password: process.env.ONELINK_PASSWORD || '',
     bankMnemonic: process.env.ONELINK_BANK_MNEMONIC || 'MBLINK01',
     allowedIps: (process.env.ONELINK_ALLOWED_IPS || '')
       .split(',')
@@ -48,12 +51,14 @@ module.exports = {
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 900000,
     max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS, 10) || 100,
+    oneLinkMaxPerMinute: parseInt(process.env.ONELINK_RATE_LIMIT_PER_MINUTE, 10) || 600,
+    saasMaxPerMinute: parseInt(process.env.SAAS_RATE_LIMIT_PER_MINUTE, 10) || 300,
   },
 
   cors: {
     origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   },
 
-  fintechPrefix: process.env.FINTECH_PREFIX || '123456',
+  fintechPrefix: process.env.FINTECH_PREFIX || '',
   logLevel: process.env.LOG_LEVEL || 'info',
 };

@@ -1,12 +1,13 @@
 {
-  "name": "payniva-server",
+  "name": "fintap-server",
   "version": "1.0.0",
-  "description": "Billing Brilliance - Multi-Tenant Education & ETEA Payment Platform Backend",
+  "description": "Fintap multi-tenant invoice and payment platform backend",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "migrate": "node src/db/migrate.js",
+    "worker:outbox": "node src/workers/outboxWorker.js",
     "seed": "node src/db/seed.js",
     "restdb": "node src/db/reset.js",
     "migrate:fresh": "node src/db/migrate.js --fresh",

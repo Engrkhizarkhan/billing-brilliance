@@ -5,10 +5,6 @@ import type {
   BillInquiryResponse,
   BillPaymentRequest,
   BillPaymentResult,
-  Bundle,
-  PcidKey,
-  BundlePackage,
-  FetchBundleResponse,
   OrgPosting,
   FeePlan,
   Invoice,
@@ -23,6 +19,10 @@ import type {
   StudentFinancialSnapshot,
   OrgPaymentRecord,
   OrgPaymentNotification,
+  ManualPaymentRequest,
+  ManualPaymentResult,
+  ManualPaymentReversalResult,
+  AdminPaymentInquiry,
   PaymentPlanAssignment,
   AppNotification,
   AuditLog,
@@ -32,12 +32,19 @@ export type PaginationMeta = { page: number; pageSize: number; total: number };
 export type StudentDirectoryMeta = PaginationMeta & { facets: StudentDirectoryFacets; filteredTotalDue: number };
 export type InvoiceListMeta = PaginationMeta & { classes: Array<{ name: string; count: number }> };
 export type ApiResponse<T, TMeta = PaginationMeta> = { data: T; meta?: TMeta; message?: string };
+export type OrgStats = {
+  totalRequests: number; pending: number; pendingValue: number; paid: number; expired: number; failed: number;
+  feeCollected: number; verifiedTransactions: number; todayPaidCount: number; todayCollected: number;
+  statusDistribution: Record<string, number>;
+  collectionTrend: Array<{ month: string; revenue: number; requests: number; failed: number }>;
+  postingRevenue: Array<{ postingId: string; posting: string; totalRequests: number; paidRequests: number; pendingRequests: number; failedRequests: number; collected: number; avgAmount: number }>;
+};
 
 // ---- Auth ----
 export const api = {
-  async login(email: string, password: string): Promise<ApiResponse<{ token: string; refreshToken: string; user: User } | null>> {
+  async login(email: string, password: string): Promise<ApiResponse<{ token: string; user: User } | null>> {
     try {
-      return await post<ApiResponse<{ token: string; refreshToken: string; user: User }>>('/auth/login', { email, password }, { skipAuth: true });
+      return await post<ApiResponse<{ token: string; user: User }>>('/auth/login', { email, password }, { skipAuth: true });
     } catch (e) {
       return { data: null, message: e instanceof Error ? e.message : 'Login failed' };
     }
@@ -54,7 +61,7 @@ export const api = {
 
   async logout(): Promise<void> {
     try {
-      await post('/auth/logout', { refreshToken: localStorage.getItem('refresh_token') });
+      await post('/auth/logout', {});
     } catch {
       // ignore
     }
@@ -115,7 +122,7 @@ export const api = {
     return get<ApiResponse<Biller[]>>(`/tenants${q}`);
   },
 
-  async createBiller(payload: Pick<Biller, 'name' | 'type' | 'email' | 'phone'>): Promise<ApiResponse<Biller>> {
+  async createBiller(payload: Pick<Biller, 'name' | 'type' | 'email' | 'phone' | 'consumerNumberLength'>): Promise<ApiResponse<Biller>> {
     return post<ApiResponse<Biller>>('/tenants', payload);
   },
 
@@ -123,12 +130,20 @@ export const api = {
     return put<ApiResponse<Biller | null>>(`/tenants/${id}`, payload);
   },
 
-  async updateBillerStatus(id: string, status: Biller['status']): Promise<ApiResponse<Biller | null>> {
-    return patch<ApiResponse<Biller | null>>(`/tenants/${id}/status`, { status });
+  async updateBillerStatus(id: string, status: Biller['status'], reason?: string): Promise<ApiResponse<Biller | null>> {
+    return patch<ApiResponse<Biller | null>>(`/tenants/${id}/status`, { status, reason });
+  },
+
+  async updateBillerLifecycle(id: string, lifecycleStage: Biller['lifecycleStage'], checklist: Record<string, boolean> = {}, confirmation = '', reason = ''): Promise<ApiResponse<Biller>> {
+    return patch<ApiResponse<Biller>>(`/tenants/${id}/lifecycle`, { lifecycleStage, checklist, confirmation, reason });
   },
 
   async regenerateBillerApiKey(id: string, confirmation: string): Promise<ApiResponse<Biller>> {
     return post<ApiResponse<Biller>>(`/tenants/${id}/regenerate-api-key`, { confirmation });
+  },
+
+  async offboardBiller(id: string, confirmation: string, reason: string): Promise<ApiResponse<boolean>> {
+    return post<ApiResponse<boolean>>(`/tenants/${id}/offboard`, { confirmation, reason });
   },
 
   // ---- Students ----
@@ -212,41 +227,6 @@ export const api = {
     return post<ApiResponse<BillPaymentResult>>('/billing/payment', request);
   },
 
-  async fetchBundles(pcid?: string): Promise<ApiResponse<FetchBundleResponse>> {
-    return post<ApiResponse<FetchBundleResponse>>('/billing/fetchbundle', { PCID: pcid });
-  },
-
-  // ---- Admin Bundle Management ----
-  async fetchAdminBundles(params: { pcid?: string; status?: string; search?: string; page?: number; pageSize?: number } = {}): Promise<ApiResponse<Bundle[]>> {
-    const q = buildQuery(params);
-    return get<ApiResponse<Bundle[]>>(`/bundles${q}`);
-  },
-
-  async createBundle(payload: Omit<Bundle, 'id' | 'createdAt' | 'updatedAt'>): Promise<ApiResponse<Bundle>> {
-    return post<ApiResponse<Bundle>>('/bundles', payload);
-  },
-
-  async updateBundle(id: string, payload: Partial<Omit<Bundle, 'id' | 'createdAt' | 'updatedAt'>>): Promise<ApiResponse<Bundle>> {
-    return put<ApiResponse<Bundle>>(`/bundles/${id}`, payload);
-  },
-
-  async deleteBundle(id: string): Promise<ApiResponse<boolean>> {
-    return del<ApiResponse<boolean>>(`/bundles/${id}`);
-  },
-
-  // ---- PCID API Key Management ----
-  async fetchPcidKeys(): Promise<ApiResponse<PcidKey[]>> {
-    return get<ApiResponse<PcidKey[]>>('/bundles/pcid-keys');
-  },
-
-  async regeneratePcidKey(pcid: string, confirmation: string): Promise<ApiResponse<PcidKey>> {
-    return post<ApiResponse<PcidKey>>(`/bundles/pcid-keys/${pcid}/regenerate`, { confirmation });
-  },
-
-  async linkPcidBiller(pcid: string, billerId: string | null): Promise<ApiResponse<PcidKey>> {
-    return put<ApiResponse<PcidKey>>(`/bundles/pcid-keys/${pcid}/biller`, { billerId });
-  },
-
   // ---- Transactions & Payments ----
   async fetchTransactions(params: { page?: number; pageSize?: number; status?: string; search?: string } = {}): Promise<ApiResponse<unknown[]>> {
     const q = buildQuery({ page: params.page, pageSize: params.pageSize, status: params.status, search: params.search });
@@ -314,8 +294,14 @@ export const api = {
     return get<ApiResponse<unknown>>(`/payments/${applicationId}`);
   },
 
-  async listOrgPayments(): Promise<ApiResponse<OrgPaymentRecord[]>> {
-    return get<ApiResponse<OrgPaymentRecord[]>>('/payments');
+  async listOrgPayments(params: { page?: number; pageSize?: number; status?: string; search?: string; applicationId?: string; from?: string; to?: string } = {}): Promise<ApiResponse<OrgPaymentRecord[]>> {
+    const q = buildQuery({ page: params.page, limit: params.pageSize, status: params.status, search: params.search,
+      application_id: params.applicationId, from: params.from, to: params.to });
+    return get<ApiResponse<OrgPaymentRecord[]>>(`/payments${q}`);
+  },
+
+  async getOrgStats(): Promise<ApiResponse<OrgStats>> {
+    return get<ApiResponse<OrgStats>>('/stats');
   },
 
   async listOrgPaymentNotifications(): Promise<ApiResponse<OrgPaymentNotification[]>> {
@@ -323,11 +309,28 @@ export const api = {
   },
 
   async orgHealthCheck(): Promise<ApiResponse<{ status: string; service: string; timestamp: string }>> {
-    return get<ApiResponse<{ status: string; service: string; timestamp: string }>>('/health', { skipAuth: true });
+    return get<ApiResponse<{ status: string; service: string; timestamp: string }>>('/payments/health', { skipAuth: true });
   },
 
   async processOrgPaymentCallback(payload: unknown): Promise<ApiResponse<unknown>> {
     return post<ApiResponse<unknown>>('/payment/callback', payload);
+  },
+
+  async recordManualPayment(request: ManualPaymentRequest): Promise<ApiResponse<ManualPaymentResult>> {
+    return post<ApiResponse<ManualPaymentResult>>('/manual-payments/record', request, {
+      headers: {
+        'X-Idempotency-Key': request.idempotencyKey,
+        ...(request.tenantId ? { 'X-Tenant-Id': request.tenantId } : {}),
+      },
+    });
+  },
+
+  async inquireAdminPayment(consumerNumber: string): Promise<ApiResponse<AdminPaymentInquiry>> {
+    return post<ApiResponse<AdminPaymentInquiry>>('/manual-payments/inquiry', { consumerNumber }, { skipTransform: true });
+  },
+
+  async reverseManualPayment(paymentId: string, confirmation: string, reason: string): Promise<ApiResponse<ManualPaymentReversalResult>> {
+    return post<ApiResponse<ManualPaymentReversalResult>>('/manual-payments/reverse', { paymentId, confirmation, reason });
   },
 
   async expireOverduePayments(): Promise<ApiResponse<{ expired: number }>> {
@@ -526,11 +529,6 @@ export const api = {
     totalApplicants: number; totalRevenue: number;
   }>> {
     return get('/reports/platform-summary');
-  },
-
-  // ---- Admin Dev Tools ----
-  async verifyHash(hash: string, plaintext: string): Promise<ApiResponse<{ match: boolean }>> {
-    return post<ApiResponse<{ match: boolean }>>('/admin/tools/verify-hash', { hash, plaintext });
   },
 
   // ---- Admin Impersonation ----

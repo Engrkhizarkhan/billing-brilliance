@@ -4,7 +4,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { FilterBar } from '@/components/FilterBar';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -12,12 +12,30 @@ import {
 import { Ban, Upload, Download, FileText, Plus, RefreshCcw, LogIn, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
-import { useApiQuery } from '@/hooks/useApiQuery';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Biller, User } from '@/types';
 import { useAuthStore } from '@/store/authStore';
+import { TablePagination } from '@/components/TablePagination';
+
+const parseCsvLine = (line: string) => {
+  const values: string[] = [];
+  let value = '';
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === '"') {
+      if (quoted && line[index + 1] === '"') { value += '"'; index += 1; }
+      else quoted = !quoted;
+    } else if (character === ',' && !quoted) {
+      values.push(value.trim()); value = '';
+    } else value += character;
+  }
+  if (quoted) throw new Error('CSV contains an unclosed quoted field');
+  values.push(value.trim());
+  return values;
+};
 
 const UserManagement = () => {
   const navigate = useNavigate();
@@ -39,28 +57,43 @@ const UserManagement = () => {
   const [loading, setLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
-  const { data: billersData } = useApiQuery(() => api.fetchBillers({ pageSize: 100 }), []);
-
-  const billers = (billersData || []) as Biller[];
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [total, setTotal] = useState(0);
+  const [billers, setBillers] = useState<Biller[]>([]);
   const schoolTenants = billers.filter((b) => b.type === 'school');
   const orgTenants = billers.filter((b) => b.type === 'org');
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      const response = await api.fetchUsers({ pageSize: 100 });
-      setUsers(response.data);
-      setLoading(false);
+    const loadTenantOptions = async () => {
+      const first = await api.fetchBillers({ page: 1, pageSize: 100 });
+      const pages = Math.ceil(Number(first.meta?.total || first.data.length) / 100);
+      const remaining = pages > 1
+        ? await Promise.all(Array.from({ length: pages - 1 }, (_, index) => api.fetchBillers({ page: index + 2, pageSize: 100 })))
+        : [];
+      setBillers([...first.data, ...remaining.flatMap((response) => response.data)]);
     };
-    load();
+    void loadTenantOptions();
   }, []);
 
-  const filtered = users.filter((u) => {
-    const matchSearch = u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
-    const matchRole = roleFilter === 'all' || u.role === roleFilter;
-    const matchStatus = statusFilter === 'all' || u.status === statusFilter;
-    return matchSearch && matchRole && matchStatus;
-  });
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      const response = await api.fetchUsers({
+        page,
+        pageSize,
+        search: search || undefined,
+        role: roleFilter === 'all' ? undefined : roleFilter,
+        status: statusFilter === 'all' ? undefined : statusFilter,
+      });
+      setUsers(response.data);
+      setTotal(Number(response.meta?.total || 0));
+      setLoading(false);
+    };
+    void load();
+  }, [page, pageSize, search, roleFilter, statusFilter]);
+
+  const filtered = users;
 
   const banUser = async (id: string) => {
     setLoading(true);
@@ -88,6 +121,7 @@ const UserManagement = () => {
     try {
       await api.deleteUser(deleteTarget.id);
       setUsers((current) => current.filter((user) => user.id !== deleteTarget.id));
+      setTotal((current) => Math.max(0, current - 1));
       toast.success(`User ${deleteTarget.email} deleted`);
       setDeleteTarget(null);
       setDeleteConfirmation('');
@@ -108,6 +142,10 @@ const UserManagement = () => {
       toast.error('Please select a tenant for non-admin users');
       return;
     }
+    if (createForm.password && createForm.password.length < 12) {
+      toast.error('Password must be at least 12 characters');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -118,7 +156,8 @@ const UserManagement = () => {
         password: createForm.password || undefined,
         tenantId: createForm.role !== 'admin' ? createForm.tenantId : undefined,
       });
-      setUsers((prev) => [...prev, response.data.user]);
+      setUsers((prev) => [response.data.user, ...prev].slice(0, pageSize));
+      setTotal((current) => current + 1);
       setCreateDialogOpen(false);
       setCreateForm({ name: '', email: '', role: 'school', password: '', tenantId: '' });
 
@@ -134,23 +173,46 @@ const UserManagement = () => {
     }
   };
 
-  const handleBulkUpload = async () => {
-    if (!schoolTenants[0] || !orgTenants[0]) {
-      toast.error('Please create at least one school tenant and one Organization tenant first');
-      return;
-    }
-
+  const handleBulkUpload = async (file: File) => {
     setLoading(true);
-    const bulkPayload = [
-      { name: 'Saad Qureshi', email: 'saad@school.com', role: 'school' as User['role'], tenantId: schoolTenants[0].id },
-      { name: 'Farah Naz', email: 'farah@agency.com', role: 'org' as User['role'], tenantId: orgTenants[0].id },
-      { name: 'Kashif Raza', email: 'kashif@school.com', role: 'school' as User['role'], tenantId: schoolTenants[0].id },
-    ];
     try {
-      const created = await Promise.all(bulkPayload.map((u) => api.createUser(u)));
-      setUsers((prev) => [...prev, ...created.map((c) => c.data.user)]);
-      setBulkDialogOpen(false);
-      toast.success('3 users imported successfully (default passwords set)');
+      const lines = (await file.text()).replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim());
+      if (lines.length < 2) throw new Error('CSV must contain a header and at least one user');
+      if (lines.length > 101) throw new Error('Import is limited to 100 users per file');
+      const headers = parseCsvLine(lines[0]).map((header) => header.toLowerCase().replace(/[^a-z]/g, ''));
+      const requiredHeaders = ['name', 'email', 'role'];
+      if (requiredHeaders.some((header) => !headers.includes(header))) {
+        throw new Error('CSV headers must include Name, Email and Role');
+      }
+      const indexOf = (header: string) => headers.indexOf(header);
+      const payloads = lines.slice(1).map((line, rowIndex) => {
+        const row = parseCsvLine(line);
+        const role = row[indexOf('role')]?.toLowerCase() as User['role'];
+        const name = row[indexOf('name')]?.trim();
+        const email = row[indexOf('email')]?.trim();
+        const tenantId = indexOf('tenantid') >= 0 ? row[indexOf('tenantid')]?.trim() : '';
+        const password = indexOf('password') >= 0 ? row[indexOf('password')] : '';
+        if (!name || !email || !['admin', 'school', 'org'].includes(role)) {
+          throw new Error(`Invalid Name, Email or Role on CSV row ${rowIndex + 2}`);
+        }
+        if (role !== 'admin' && !tenantId) throw new Error(`TenantId is required on CSV row ${rowIndex + 2}`);
+        if (!password || password.length < 12) throw new Error(`Password must be 12+ characters on CSV row ${rowIndex + 2}`);
+        return { name, email, role, tenantId: role === 'admin' ? undefined : tenantId, password };
+      });
+      const created: Awaited<ReturnType<typeof api.createUser>>[] = [];
+      const failures: string[] = [];
+      for (const payload of payloads) {
+        try { created.push(await api.createUser(payload)); }
+        catch (error) { failures.push(`${payload.email}: ${error instanceof Error ? error.message : 'failed'}`); }
+      }
+      setUsers((prev) => [...created.map((c) => c.data.user), ...prev].slice(0, pageSize));
+      setTotal((current) => current + created.length);
+      if (failures.length === 0) {
+        setBulkDialogOpen(false);
+        toast.success(`${created.length} users imported successfully`);
+      } else {
+        toast.error(`${created.length} imported, ${failures.length} failed. First error: ${failures[0]}`);
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Bulk import failed');
     } finally {
@@ -159,7 +221,7 @@ const UserManagement = () => {
   };
 
   const downloadTemplate = () => {
-    const csv = 'Name,Email,Role\nJohn Doe,john@example.com,school\n';
+    const csv = 'Name,Email,Role,TenantId,Password\nJohn Doe,john@example.com,school,REPLACE-TENANT-UUID,StrongTemporary!2026\n';
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -183,7 +245,7 @@ const UserManagement = () => {
               <Button size="sm" disabled={loading}><Plus className="w-3.5 h-3.5 mr-1.5" />Add User</Button>
             </DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle>Create User</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Create User</DialogTitle><DialogDescription>Create a tenant-scoped account with the appropriate portal role.</DialogDescription></DialogHeader>
               <div className="space-y-3 pt-2">
                 <div className="space-y-2">
                   <Label>Name</Label>
@@ -221,9 +283,10 @@ const UserManagement = () => {
                   <Label>Password (optional)</Label>
                   <Input
                     type="password"
+                    minLength={12}
                     value={createForm.password}
                     onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
-                    placeholder="Leave empty to auto-generate"
+                    placeholder="Leave empty to auto-generate, or use 12+ characters"
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">Default password is generated per user and shown once on create.</p>
@@ -239,18 +302,22 @@ const UserManagement = () => {
               </Button>
             </DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle>Import Users in Bulk</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Import Users in Bulk</DialogTitle><DialogDescription>Upload a validated CSV file containing up to 100 user accounts.</DialogDescription></DialogHeader>
               <div className="space-y-4 pt-2">
                 <div className="rounded-lg border-2 border-dashed border-border p-6 text-center">
                   <FileText className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
                   <p className="text-sm font-medium">Upload CSV file</p>
-                  <p className="text-xs text-muted-foreground mt-1">Columns: Name, Email, Role</p>
+                  <p className="text-xs text-muted-foreground mt-1">Columns: Name, Email, Role, TenantId, Password (12+ characters)</p>
                   <input
                     ref={fileInputRef}
                     type="file"
                     accept=".csv"
                     className="hidden"
-                    onChange={() => handleBulkUpload()}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void handleBulkUpload(file);
+                      event.target.value = '';
+                    }}
                   />
                   <Button variant="outline" size="sm" className="mt-3" onClick={() => fileInputRef.current?.click()}>
                     Choose File
@@ -259,7 +326,6 @@ const UserManagement = () => {
                 <Button variant="ghost" size="sm" className="w-full" onClick={downloadTemplate}>
                   <Download className="w-3.5 h-3.5 mr-1.5" />Download CSV Template
                 </Button>
-                <Button onClick={handleBulkUpload} className="w-full" disabled={loading}>Simulate Bulk Import (3 Users)</Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -268,14 +334,15 @@ const UserManagement = () => {
 
       <FilterBar
         searchPlaceholder="Search users…"
-        onSearch={setSearch}
+        onSearch={(value) => { setSearch(value); setPage(1); }}
         filters={[
           { key: 'role', label: 'Role', options: [{ value: 'admin', label: 'Admin' }, { value: 'school', label: 'School' }, { value: 'org', label: 'Organization' }] },
-          { key: 'status', label: 'Status', options: [{ value: 'active', label: 'Active' }, { value: 'banned', label: 'Banned' }] },
+          { key: 'status', label: 'Status', options: [{ value: 'active', label: 'Active' }, { value: 'suspended', label: 'Suspended' }, { value: 'banned', label: 'Banned' }] },
         ]}
         onFilterChange={(key, value) => {
           if (key === 'role') setRoleFilter(value);
           if (key === 'status') setStatusFilter(value);
+          setPage(1);
         }}
       />
 
@@ -376,6 +443,13 @@ const UserManagement = () => {
           </TableBody>
         </Table>
       </div>
+      <TablePagination
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(value) => { setPageSize(value); setPage(1); }}
+      />
     </div>
   );
 };

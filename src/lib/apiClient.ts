@@ -1,19 +1,15 @@
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
-let accessToken: string | null = localStorage.getItem('access_token');
-let refreshToken: string | null = localStorage.getItem('refresh_token');
+let accessToken: string | null = sessionStorage.getItem('access_token');
 
-export const setTokens = (access: string, refresh: string) => {
+export const setTokens = (access: string, _refresh?: string) => {
   accessToken = access;
-  refreshToken = refresh;
-  localStorage.setItem('access_token', access);
-  localStorage.setItem('refresh_token', refresh);
+  sessionStorage.setItem('access_token', access);
 };
 
 export const clearTokens = () => {
   accessToken = null;
-  refreshToken = null;
-  localStorage.removeItem('access_token');
+  sessionStorage.removeItem('access_token');
   localStorage.removeItem('refresh_token');
 };
 
@@ -71,8 +67,6 @@ const processRefreshQueue = (token: string | null, error?: Error) => {
 };
 
 const attemptTokenRefresh = async (): Promise<string> => {
-  if (!refreshToken) throw new Error('No refresh token');
-
   if (isRefreshing) {
     return new Promise<string>((resolve, reject) => {
       refreshQueue.push({ resolve, reject });
@@ -84,7 +78,8 @@ const attemptTokenRefresh = async (): Promise<string> => {
     const res = await fetch(`${BASE_URL}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
+      credentials: 'include',
+      body: JSON.stringify({}),
     });
 
     if (!res.ok) {
@@ -94,8 +89,7 @@ const attemptTokenRefresh = async (): Promise<string> => {
 
     const json = await res.json();
     const newAccess = json.data.token;
-    const newRefresh = json.data.refreshToken;
-    setTokens(newAccess, newRefresh);
+    setTokens(newAccess);
     processRefreshQueue(newAccess);
     return newAccess;
   } catch (err) {
@@ -134,14 +128,14 @@ export const request = async <T = unknown>(
     reqHeaders['Authorization'] = `Bearer ${accessToken}`;
   }
 
-  const fetchOpts: RequestInit = { method, headers: reqHeaders };
+  const fetchOpts: RequestInit = { method, headers: reqHeaders, credentials: 'include' };
   if (body !== undefined) {
     fetchOpts.body = JSON.stringify(body);
   }
 
   let res = await fetch(url, fetchOpts);
 
-  if (res.status === 401 && !skipAuth && refreshToken && !path.includes('/auth/refresh')) {
+  if (res.status === 401 && !skipAuth && !path.includes('/auth/refresh')) {
     try {
       const newToken = await attemptTokenRefresh();
       reqHeaders['Authorization'] = `Bearer ${newToken}`;

@@ -4,7 +4,7 @@ import { useApiQuery } from '@/hooks/useApiQuery';
 import { FeePlan } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -104,7 +104,7 @@ const FeePlans = () => {
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditingPlan(null); setForm(emptyForm); } }}>
           <DialogTrigger asChild><Button onClick={openCreate}><Plus className="w-4 h-4 mr-2" />Create Plan</Button></DialogTrigger>
           <DialogContent className="max-w-xl">
-            <DialogHeader><DialogTitle>{editingPlan ? 'Edit Fee Plan' : 'Create Fee Plan'}</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{editingPlan ? 'Edit Fee Plan' : 'Create Fee Plan'}</DialogTitle><DialogDescription>Configure the amount, billing frequency, due day, and late fee.</DialogDescription></DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="space-y-1.5">
                 <Label>Plan Type</Label>

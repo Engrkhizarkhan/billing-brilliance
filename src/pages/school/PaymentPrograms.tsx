@@ -4,7 +4,7 @@ import { useApiQuery } from '@/hooks/useApiQuery';
 import type { StudentDirectoryRecord, FeePlan, PaymentPlanAssignment } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -269,7 +269,7 @@ const PaymentPrograms = () => {
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-3xl">
-              <DialogHeader><DialogTitle>Assign Plan to Entire Class</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Assign Plan to Entire Class</DialogTitle><DialogDescription>Assign one fee plan to every eligible student in the selected classes.</DialogDescription></DialogHeader>
               <p className="text-xs text-muted-foreground -mt-1">Select one or more classes to apply a fee plan. Students who already have this specific plan will be skipped.</p>
               <div className="grid grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] gap-4 pt-2">
                 <div className="space-y-2 lg:pr-2">
@@ -343,7 +343,7 @@ const PaymentPrograms = () => {
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-3xl">
-              <DialogHeader><DialogTitle>Assign Plan to Students</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Assign Plan to Students</DialogTitle><DialogDescription>Select individual students and assign the required fee plan.</DialogDescription></DialogHeader>
               <div className="space-y-4 pt-2">
                 <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_160px_160px] gap-3">
                   <div className="space-y-2">
@@ -553,7 +553,7 @@ const PaymentPrograms = () => {
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Edit Assignment</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Edit Assignment</DialogTitle><DialogDescription>Update the plan or schedule for this student assignment.</DialogDescription></DialogHeader>
           {editAssignment && (
             <div className="space-y-3">
               <div>

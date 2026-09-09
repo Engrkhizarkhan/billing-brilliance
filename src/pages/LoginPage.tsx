@@ -46,7 +46,7 @@ const LoginPage = () => {
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-xl shadow-primary/30">
               <Building2 className="w-5 h-5 text-primary-foreground" />
             </div>
-            <span className="font-bold text-xl tracking-tight">Payniva</span>
+            <span className="font-bold text-xl tracking-tight">Fintap</span>
           </div>
         </div>
 
@@ -66,7 +66,7 @@ const LoginPage = () => {
         </div>
 
         <div className="relative">
-          <p className="text-[11px] text-sidebar-muted">© 2026 Payniva. Enterprise Billing Platform v1</p>
+          <p className="text-[11px] text-sidebar-muted">© 2026 Fintap. Enterprise Billing Platform</p>
         </div>
       </div>
 
@@ -77,7 +77,7 @@ const LoginPage = () => {
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
               <Building2 className="w-5 h-5 text-primary-foreground" />
             </div>
-            <span className="font-bold text-xl tracking-tight">Payniva</span>
+            <span className="font-bold text-xl tracking-tight">Fintap</span>
           </div>
 
           <h2 className="text-2xl font-bold tracking-tight">Welcome back</h2>
@@ -86,10 +86,11 @@ const LoginPage = () => {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label className="text-xs font-semibold">Email address</Label>
+                <Label htmlFor="login-email" className="text-xs font-semibold">Email address</Label>
                 <div className="relative">
                   <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
+                    id="login-email"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -101,10 +102,11 @@ const LoginPage = () => {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-xs font-semibold">Password</Label>
+                <Label htmlFor="login-password" className="text-xs font-semibold">Password</Label>
                 <div className="relative">
                   <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
+                    id="login-password"
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -125,7 +127,7 @@ const LoginPage = () => {
             <div className="rounded-xl bg-muted/60 border border-border p-4">
               <p className="text-[11px] font-semibold text-foreground mb-1.5">Access</p>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Use the credentials provided by your administrator. For support, contact at <a href="mailto:support@payniva.com" className='text-primary font-bold underline text-[13px]'>support@payniva.com</a>.
+                Use the credentials provided by your administrator. For support, contact your Fintap platform administrator.
               </p>
             </div>
           </form>

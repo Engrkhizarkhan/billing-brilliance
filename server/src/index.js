@@ -4,6 +4,7 @@ const cors = require('cors');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const hpp = require('hpp');
+const crypto = require('crypto');
 
 const config = require('./config');
 const logger = require('./config/logger');
@@ -27,14 +28,20 @@ const notificationRoutes = require('./routes/notifications');
 const auditRoutes = require('./routes/audit');
 const reportRoutes = require('./routes/reports');
 const oneLinkRoutes = require('./routes/onelink');
-const fetchBundleRoutes = require('./routes/fetchbundle');
-const bundleRoutes = require('./routes/bundles');
 const saasGatewayRoutes = require('./routes/saasGateway');
-const adminToolsRoutes = require('./routes/adminTools');
+const manualPaymentRoutes = require('./routes/manualPayments');
 
 // ---- Startup security guards ----
 const INSECURE_DEFAULTS = ['change-me-in-production', 'change-refresh-in-production', 'your_jwt_secret_here_change_in_production', 'your_refresh_secret_here_change_in_production'];
 if (config.nodeEnv === 'production') {
+  if (!['production', 'sandbox'].includes(config.appEnvironment)) {
+    console.error('FATAL: APP_ENVIRONMENT must be production or sandbox in NODE_ENV=production.');
+    process.exit(1);
+  }
+  if (config.appEnvironment === 'sandbox' && !/(sandbox|uat|test)/i.test(config.db.database)) {
+    console.error('FATAL: Sandbox runtime must use a database name containing sandbox, uat, or test.');
+    process.exit(1);
+  }
   if (!config.requireHttps) {
     console.error('FATAL: REQUIRE_HTTPS must be enabled in production. Terminate TLS at the trusted reverse proxy and forward X-Forwarded-Proto.');
     process.exit(1);
@@ -51,11 +58,11 @@ if (config.nodeEnv === 'production') {
     console.error('FATAL: DB_USER or DB_PASSWORD is not set. Configure real database credentials before deploying.');
     process.exit(1);
   }
-  if (!config.onebill.username || !config.onebill.password || ['demo-user', 'demo-pass'].includes(config.onebill.username) || ['demo-user', 'demo-pass'].includes(config.onebill.password)) {
+  if (config.appEnvironment === 'production' && (!config.onebill.username || !config.onebill.password || ['demo-user', 'demo-pass'].includes(config.onebill.username) || ['demo-user', 'demo-pass'].includes(config.onebill.password))) {
     console.error('FATAL: Configure non-default ONELINK_USERNAME and ONELINK_PASSWORD values before deploying.');
     process.exit(1);
   }
-  if (config.onebill.allowedIps.length === 0) {
+  if (config.appEnvironment === 'production' && config.onebill.allowedIps.length === 0) {
     console.error('FATAL: Configure ONELINK_ALLOWED_IPS before deploying 1BILL endpoints.');
     process.exit(1);
   }
@@ -76,8 +83,8 @@ const app = express();
 // instead of nginx's loopback address (127.0.0.1).
 // Keep this at 1 (not true) to prevent callers from spoofing their IP
 // by injecting a fake X-Forwarded-For header directly.
-if (config.nodeEnv === 'production') {
-  app.set('trust proxy', 1);
+if (config.trustProxyHops > 0) {
+  app.set('trust proxy', config.trustProxyHops);
 }
 
 if (config.nodeEnv === 'production' && config.requireHttps) {
@@ -104,6 +111,7 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: 'Too many requests, please try again later' },
+  skip: (req) => req.path.startsWith('/1.0/Payments') || req.path.startsWith('/saas/v1'),
 });
 app.use('/api/', limiter);
 
@@ -138,12 +146,13 @@ app.use('/api/org', orgRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/audit-logs', auditRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/manual-payments', manualPaymentRoutes);
 
 // Dedicated rate limiter for 1LINK gateway endpoints — always applied (even in dev)
 // because these are externally reachable endpoints called by the payment gateway.
 const oneLinkLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 200,
+  max: config.rateLimit.oneLinkMaxPerMinute,
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: 'Too many requests to payment gateway endpoint' },
@@ -151,27 +160,28 @@ const oneLinkLimiter = rateLimit({
 
 // 1LINK / 1BILL gateway endpoints — must be registered BEFORE the broad app.use('/api', ...) mounts
 // because transactionRoutes / settingsRoutes apply router.use(authenticate) which intercepts ALL /api/** requests
-app.use('/api/1.0/Payments', oneLinkLimiter, oneLinkRoutes);
-
-// 1LINK FetchBundle endpoint (external — authenticated by 1LINK credentials)
-app.use('/v1/Transaction', oneLinkLimiter, fetchBundleRoutes);
+if (config.appEnvironment !== 'sandbox') {
+  app.use('/api/1.0/Payments', oneLinkLimiter, oneLinkRoutes);
+}
 
 // SaaS payment gateway (external — authenticated by per-tenant API key)
-app.use('/api/saas/v1', saasGatewayRoutes);
-
-// Admin bundle management
-app.use('/api/bundles', bundleRoutes);
-
-// Admin dev / maintenance tools (authenticate + authorize inside the router)
-app.use('/api/admin', adminToolsRoutes);
+const saasLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: config.rateLimit.saasMaxPerMinute,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => crypto.createHash('sha256').update(String(req.headers['x-api-key'] || 'missing-api-key')).digest('hex'),
+  message: { message: 'Tenant API rate limit exceeded' },
+});
+app.use('/api/saas/v1', saasLimiter, saasGatewayRoutes);
 
 // Orchestrator readiness probe. Liveness remains available at /api/health.
 app.get('/api/ready', async (req, res) => {
   try {
     await pool.query('SELECT 1');
-    res.json({ status: 'ready', service: 'payniva-api', timestamp: new Date().toISOString() });
+    res.json({ status: 'ready', service: 'fintap-api', timestamp: new Date().toISOString() });
   } catch {
-    res.status(503).json({ status: 'not_ready', service: 'payniva-api', timestamp: new Date().toISOString() });
+    res.status(503).json({ status: 'not_ready', service: 'fintap-api', timestamp: new Date().toISOString() });
   }
 });
 
@@ -179,7 +189,7 @@ app.get('/api/ready', async (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
-    service: 'payniva-api',
+    service: 'fintap-api',
     timestamp: new Date().toISOString(),
   });
 });
@@ -194,6 +204,7 @@ app.use(notFound);
 app.use(errorHandler);
 
 // ---- Start server ----
+let httpServer;
 const startServer = async () => {
   try {
     const connected = await testConnection();
@@ -203,27 +214,18 @@ const startServer = async () => {
     }
     logger.info('Database connected successfully');
 
-    // Auto-migrate: rename legacy etea_* tables and enum values to org_*
-    const { pool } = require('./config/database');
-    const migrations = [
-      { check: "SHOW TABLES LIKE 'etea_postings'", rename: 'RENAME TABLE etea_postings TO org_postings' },
-      { check: "SHOW TABLES LIKE 'etea_payment_records'", rename: 'RENAME TABLE etea_payment_records TO org_payment_records' },
-      { check: "SHOW TABLES LIKE 'etea_payment_notifications'", rename: 'RENAME TABLE etea_payment_notifications TO org_payment_notifications' },
-    ];
-    for (const m of migrations) {
-      const [rows] = await pool.query(m.check);
-      if (rows.length > 0) {
-        await pool.query(m.rename);
-        logger.info(`Auto-migration: ${m.rename}`);
+    if (config.nodeEnv === 'production') {
+      const [migrationRows] = await pool.query(
+        "SELECT version FROM schema_migrations WHERE version = '007_production_foundation.js' LIMIT 1"
+      );
+      if (!migrationRows.length) {
+        throw new Error('Database schema is not current. Run npm run migrate before starting production.');
       }
     }
-    // Normalize legacy 'etea' role and type values
-    await pool.query("UPDATE users SET role = 'org' WHERE role = 'etea'");
-    await pool.query("UPDATE tenants SET type = 'org' WHERE type = 'etea'");
 
     await ensureProtectedAdmin();
 
-    app.listen(config.port, '127.0.0.1', () => {
+    httpServer = app.listen(config.port, '127.0.0.1', () => {
       logger.info(`Server running on port ${config.port} in ${config.nodeEnv} mode`);
       logger.info(`API base URL: http://localhost:${config.port}/api`);
     });
@@ -231,6 +233,20 @@ const startServer = async () => {
     logger.error('Failed to start server:', err);
     process.exit(1);
   }
+};
+
+const shutdown = (signal) => {
+  logger.info(`Received ${signal}; draining HTTP connections`);
+  const forceTimer = setTimeout(() => process.exit(1), 15000);
+  forceTimer.unref();
+  const finish = async () => {
+    try { await pool.end(); } finally {
+      clearTimeout(forceTimer);
+      process.exit(0);
+    }
+  };
+  if (httpServer) httpServer.close(() => { void finish(); });
+  else void finish();
 };
 
 // Handle unhandled rejections
@@ -246,6 +262,8 @@ process.on('uncaughtException', (err) => {
 
 if (require.main === module) {
   startServer();
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 module.exports = app;

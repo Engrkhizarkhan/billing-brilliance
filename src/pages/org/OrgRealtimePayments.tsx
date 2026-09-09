@@ -36,7 +36,11 @@ const OrgRealtimePayments = () => {
     setLastLiveUpdateAt(now.toISOString());
   }, [paymentVersion]);
 
-  const { data: paymentsData, loading } = useApiQuery(() => api.listOrgPayments(), [paymentVersion, liveClock]);
+  const { data: paymentsData, loading } = useApiQuery(
+    () => api.listOrgPayments({ page: 1, pageSize: 100, status: 'paid' }),
+    [paymentVersion, liveClock]
+  );
+  const { data: statsData } = useApiQuery(() => api.getOrgStats(), [paymentVersion, liveClock]);
   const allPayments = useMemo(() => (paymentsData || []) as OrgPaymentRecord[], [paymentsData]);
 
   const paidPayments = useMemo(
@@ -46,9 +50,8 @@ const OrgRealtimePayments = () => {
     [allPayments]
   );
 
-  const todayKey = liveClock.toISOString().slice(0, 10);
-  const todaysPaidPayments = paidPayments.filter((p) => (p.paidAt || p.createdAt).slice(0, 10) === todayKey);
-  const todaysTotal = todaysPaidPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+  const todaysPaidCount = Number(statsData?.todayPaidCount || 0);
+  const todaysTotal = Number(statsData?.todayCollected || 0);
   const lastPayment = paidPayments[0] || null;
 
   if (loading && allPayments.length === 0) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
@@ -79,7 +82,7 @@ const OrgRealtimePayments = () => {
 
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-lg border bg-muted/20 p-3">
-              <p className="text-[11px] text-muted-foreground">Paid transactions (session)</p>
+              <p className="text-[11px] text-muted-foreground">Most recent paid transactions</p>
               <p className="mt-1 text-xl font-semibold">{paidPayments.length}</p>
             </div>
             <div className="rounded-lg border bg-muted/20 p-3">
@@ -88,7 +91,7 @@ const OrgRealtimePayments = () => {
             </div>
             <div className="rounded-lg border bg-muted/20 p-3">
               <p className="text-[11px] text-muted-foreground">Today paid count</p>
-              <p className="mt-1 text-xl font-semibold">{todaysPaidPayments.length}</p>
+              <p className="mt-1 text-xl font-semibold">{todaysPaidCount}</p>
             </div>
             <div className="rounded-lg border bg-muted/20 p-3">
               <p className="text-[11px] text-muted-foreground">Most recent bill ID</p>

@@ -5,7 +5,7 @@ import { Scholarship, StudentDirectoryRecord, StudentScholarshipAssignment } fro
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -303,7 +303,7 @@ const Scholarships = () => {
           >
             <DialogTrigger asChild><Button variant="outline"><UserPlus className="w-4 h-4 mr-2" />Assign Scholarship</Button></DialogTrigger>
             <DialogContent className="max-w-3xl">
-              <DialogHeader><DialogTitle>Assign Scholarship</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Assign Scholarship</DialogTitle><DialogDescription>Apply an active scholarship to one or more eligible students.</DialogDescription></DialogHeader>
               <div className="space-y-4 pt-2">
                 <div>
                   <Label>Scholarship</Label>
@@ -416,7 +416,7 @@ const Scholarships = () => {
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild><Button><Plus className="w-4 h-4 mr-2" />Create Scholarship</Button></DialogTrigger>
             <DialogContent className="max-w-xl">
-              <DialogHeader><DialogTitle>Create Scholarship</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Create Scholarship</DialogTitle><DialogDescription>Define the discount, validity period, and availability of a scholarship.</DialogDescription></DialogHeader>
               <div className="space-y-4 pt-2">
                 <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
                 <div>

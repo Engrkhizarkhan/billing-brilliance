@@ -2,6 +2,8 @@ const jwt = require('jsonwebtoken');
 const config = require('../config');
 const logger = require('../config/logger');
 const { pool } = require('../config/database');
+const { hashApiKey } = require('../services/apiKeyService');
+const expectedApiKeyScope = config.appEnvironment === 'sandbox' ? 'test' : 'live';
 
 const authenticate = async (req, res, next) => {
   try {
@@ -15,7 +17,14 @@ const authenticate = async (req, res, next) => {
 
     // Verify user still exists and is active
     const [rows] = await pool.query(
-      'SELECT id, tenant_id, email, name, role, school_access_role, school_ref, main_school_user_id, status, verified FROM users WHERE id = ? AND deleted_at IS NULL',
+      `SELECT u.id, u.tenant_id, u.email, u.name, u.role, u.school_access_role,
+              u.school_ref, u.main_school_user_id, u.status, u.verified,
+              t.name AS tenant_name, t.status AS tenant_status,
+              t.lifecycle_stage AS tenant_lifecycle_stage,
+              t.consumer_number_length
+       FROM users u
+       LEFT JOIN tenants t ON t.id = u.tenant_id AND t.deleted_at IS NULL
+       WHERE u.id = ? AND u.deleted_at IS NULL`,
       [decoded.userId]
     );
 
@@ -27,11 +36,29 @@ const authenticate = async (req, res, next) => {
     if (user.status !== 'active') {
       return res.status(403).json({ error: 'Account is not active' });
     }
+    if (user.tenant_id && !user.tenant_status) {
+      return res.status(403).json({ error: 'Tenant account is unavailable', code: 'TENANT_NOT_FOUND' });
+    }
+    if (user.tenant_status === 'banned') {
+      return res.status(403).json({ error: 'Tenant account is banned', code: 'TENANT_BANNED' });
+    }
+    if (user.tenant_status === 'suspended' && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+      return res.status(403).json({ error: 'Tenant account is suspended; dashboard access is read-only', code: 'TENANT_SUSPENDED' });
+    }
 
     // Normalize legacy 'etea' role to 'org'
     if (user.role === 'etea') user.role = 'org';
     req.user = user;
     req.tenantId = user.tenant_id;
+    if (user.tenant_id) {
+      req.tenant = {
+        id: user.tenant_id,
+        name: user.tenant_name,
+        status: user.tenant_status,
+        lifecycleStage: user.tenant_lifecycle_stage,
+        consumerNumberLength: Number(user.consumer_number_length),
+      };
+    }
     next();
   } catch (err) {
     if (err.name === 'TokenExpiredError') {
@@ -65,6 +92,7 @@ const authorizeSchoolRole = (...schoolRoles) => {
     if (!req.user) {
       return res.status(401).json({ error: 'Authentication required' });
     }
+    if (req.user.role === 'admin') return next();
     if (req.user.role !== 'school') {
       return res.status(403).json({ error: 'School access required' });
     }
@@ -81,13 +109,15 @@ const apiKeyAuth = async (req, res, next) => {
     if (!apiKey) return res.status(401).json({ error: 'API key required' });
 
     const [rows] = await pool.query(
-      "SELECT id FROM tenants WHERE api_key = ? AND deleted_at IS NULL AND status = 'active'",
-      [apiKey]
+      `SELECT id, name, status, lifecycle_stage, consumer_number_length
+       FROM tenants WHERE api_key_hash = ? AND api_key_scope = ? AND deleted_at IS NULL AND status = 'active'`,
+      [hashApiKey(apiKey), expectedApiKeyScope]
     );
     if (rows.length === 0) return res.status(401).json({ error: 'Invalid API key' });
 
     req.tenantId = rows[0].id;
     req.authType = 'apiKey';
+    req.tenant = rows[0];
     next();
   } catch (err) {
     logger.error('API key auth error:', err);
@@ -101,12 +131,14 @@ const authenticateOrApiKey = async (req, res, next) => {
   if (apiKey) {
     try {
       const [rows] = await pool.query(
-        "SELECT id FROM tenants WHERE api_key = ? AND deleted_at IS NULL AND status = 'active'",
-        [apiKey]
+        `SELECT id, name, status, lifecycle_stage, consumer_number_length
+         FROM tenants WHERE api_key_hash = ? AND api_key_scope = ? AND deleted_at IS NULL AND status = 'active'`,
+        [hashApiKey(apiKey), expectedApiKeyScope]
       );
       if (rows.length === 0) return res.status(401).json({ error: 'Invalid API key' });
       req.tenantId = rows[0].id;
       req.authType = 'apiKey';
+      req.tenant = rows[0];
       return next();
     } catch (err) {
       logger.error('API key auth error:', err);
@@ -156,4 +188,32 @@ const tenantScope = async (req, res, next) => {
   next();
 };
 
-module.exports = { authenticate, authorize, authorizeSchoolRole, apiKeyAuth, authenticateOrApiKey, tenantScope };
+const requireLiveTenant = async (req, res, next) => {
+  try {
+    if (!req.tenantId) return res.status(400).json({ error: 'Tenant scope is required', code: 'TENANT_REQUIRED' });
+    let tenant = req.tenant;
+    if (!tenant || !tenant.status) {
+      const [rows] = await pool.query(
+        `SELECT id, name, status, lifecycle_stage, consumer_number_length
+         FROM tenants WHERE id = ? AND deleted_at IS NULL LIMIT 1`,
+        [req.tenantId]
+      );
+      if (!rows.length) return res.status(404).json({ error: 'Tenant not found', code: 'TENANT_NOT_FOUND' });
+      tenant = rows[0];
+      req.tenant = tenant;
+    }
+    if (tenant.status !== 'active') {
+      return res.status(403).json({ error: 'Tenant is suspended', code: 'TENANT_SUSPENDED' });
+    }
+    const lifecycle = tenant.lifecycleStage || tenant.lifecycle_stage;
+    if (config.appEnvironment === 'production' && lifecycle !== 'live') {
+      return res.status(403).json({ error: 'Tenant is still in testing and is not enabled for production payments', code: 'TENANT_NOT_LIVE' });
+    }
+    next();
+  } catch (err) {
+    logger.error('Tenant policy error:', err);
+    res.status(500).json({ error: 'Unable to validate tenant state', code: 'TENANT_POLICY_ERROR' });
+  }
+};
+
+module.exports = { authenticate, authorize, authorizeSchoolRole, apiKeyAuth, authenticateOrApiKey, tenantScope, requireLiveTenant };

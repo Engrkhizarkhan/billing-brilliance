@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatPKR } from '@/lib/formatters';
 import { usePaymentStore } from '@/store/paymentStore';
 import { useOrgSecurityStore } from '@/store/orgSecurityStore';
+import { useAuthStore } from '@/store/authStore';
 import {
   OrgCreatePaymentResponse,
   OrgHealthResponse,
@@ -37,7 +38,7 @@ const OrgPayments = () => {
 
   const queryApplicationId = searchParams.get('application') || '';
 
-  const apiKey = useOrgSecurityStore((state) => state.apiKey);
+  const user = useAuthStore((state) => state.user);
   const sourceIp = useOrgSecurityStore((state) => state.sourceIp);
 
   const [createForm, setCreateForm] = useState({
@@ -179,7 +180,7 @@ const OrgPayments = () => {
         <Copy className="w-3.5 h-3.5 shrink-0" />
         <span>
           <span className="font-medium text-foreground">API Key:</span>{' '}
-          <code className="font-mono">{apiKey ? '••••••••' + apiKey.slice(-6) : 'Not configured — go to Settings'}</code>
+          <code className="font-mono">{user?.tenantApiKeyPrefix ? `${user.tenantApiKeyPrefix}…` : 'Not issued — contact the platform administrator'}</code>
           {sourceIp ? <span className="ml-4"><span className="font-medium text-foreground">Source IP:</span> {sourceIp}</span> : null}
         </span>
       </div>
@@ -236,7 +237,7 @@ const OrgPayments = () => {
                   <Input type="number" value={createForm.amount} onChange={(e) => setCreateForm({ ...createForm, amount: Number(e.target.value) || 0 })} className="rounded-lg" placeholder="1200" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">expires_in_minutes (0 = server default)</Label>
+                  <Label className="text-xs">expires_in_minutes (0 = 48 hours)</Label>
                   <Input type="number" min={0} disabled={createForm.never_expires} value={createForm.expires_in_minutes} onChange={(e) => setCreateForm({ ...createForm, expires_in_minutes: Number(e.target.value) || 0 })} className="rounded-lg" placeholder="e.g. 30" />
                 </div>
                 <div className="flex items-center gap-2 pt-4">
@@ -250,8 +251,8 @@ const OrgPayments = () => {
                   <Input value={createForm.description} onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })} className="rounded-lg" placeholder="Application fee" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">customer_name (optional)</Label>
-                  <Input value={createForm.customer_name} onChange={(e) => setCreateForm({ ...createForm, customer_name: e.target.value })} className="rounded-lg" placeholder="Ali Khan" />
+                  <Label className="text-xs">customer_name (Company_details) (optional)</Label>
+                  <Input value={createForm.customer_name} onChange={(e) => setCreateForm({ ...createForm, customer_name: e.target.value })} className="rounded-lg" placeholder="T-Groups (Ali Khan)" />
                 </div>
               </div>
 
@@ -375,7 +376,7 @@ const OrgPayments = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400 font-mono">GET</span>
-                <span className="font-mono text-sm">/api/health</span>
+                <span className="font-mono text-sm">/api/payments/health</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">

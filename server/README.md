@@ -1,329 +1,103 @@
-# Billing Brilliance - Backend API
+# Fintap server
 
-Production-ready Node.js + Express + MySQL backend for the Billing Brilliance multi-tenant education and ETEA payment platform.
+Express 5 and MySQL 8 backend for the Fintap multi-tenant invoice and payment platform. The active product roles are platform administrator, school tenant, and organization/private-agency tenant.
 
-## Quick Start
+## Runtime boundaries
+
+- Production uses `APP_ENVIRONMENT=production`; invoice-based 1LINK routes are enabled.
+- Sandbox uses `APP_ENVIRONMENT=sandbox`; its database name must contain `sandbox`, `uat`, or `test`, and 1LINK routes are disabled.
+- HTTP binds to `127.0.0.1`; Nginx terminates TLS and forwards the source address.
+- The durable webhook outbox runs as a separate PM2 worker.
+
+Never share `.env`, database credentials, JWT/webhook secrets, tenant API keys, the IPsec PSK, or a TLS private key.
+
+## Local setup
 
 ```bash
-cd server
-
-# Install dependencies
 npm install
-
-# Copy environment file and configure
 cp .env.example .env
-# Edit .env with your MySQL credentials and JWT secrets
-
-# Run migration (creates all 23 tables)
 npm run migrate
-
-# Seed the database (demo data matching frontend)
-npm run seed
-
-# Start development server
 npm run dev
-
-# Start production server
-npm start
 ```
 
-## Architecture
+For localhost, keep `NODE_ENV=development` and `REQUIRE_HTTPS=false`. Production must use `REQUIRE_HTTPS=true` behind the trusted one-hop reverse proxy.
 
-```
-server/
-├── src/
-│   ├── index.js                  # Express app entry point
-│   ├── config/
-│   │   ├── index.js              # Centralized config (env vars)
-│   │   ├── database.js           # MySQL2 connection pool
-│   │   └── logger.js             # Winston structured logging
-│   ├── controllers/              # Business logic
-│   │   ├── authController.js     # JWT login, refresh, logout
-│   │   ├── userController.js     # User CRUD + school sub-users
-│   │   ├── tenantController.js   # Tenant/biller management
-│   │   ├── studentController.js  # Students, ledger, snapshots
-│   │   ├── invoiceController.js  # Invoice lifecycle
-│   │   ├── billingController.js  # 1LINK bill inquiry/payment
-│   │   ├── applicantController.js # ETEA applicants
-│   │   ├── postingController.js  # ETEA postings & services
-│   │   ├── eteaPaymentController.js # ETEA payment system
-│   │   ├── transactionController.js # Transaction records
-│   │   ├── paymentController.js  # Payment history
-│   │   ├── settingsController.js # Fee plans, heads, scholarships
-│   │   ├── notificationController.js # Notifications
-│   │   ├── auditController.js    # Audit trail
-│   │   └── reportController.js   # Dashboard stats, trends
-│   ├── middleware/
-│   │   ├── auth.js               # JWT auth, RBAC, tenant scoping
-│   │   ├── errorHandler.js       # Centralized error handling
-│   │   ├── auditLog.js           # Audit trail middleware
-│   │   ├── validate.js           # express-validator rules
-│   │   └── handleValidation.js   # Validation result handler
-│   ├── routes/                   # Express routers
-│   └── db/
-│       ├── migrations/           # SQL schema files
-│       ├── migrate.js            # Migration runner
-│       └── seed.js               # Database seeder
-└── tests/
-    └── api.test.js               # Integration tests
+## Verification
+
+```bash
+npm test
+npm run lint
+npm audit --omit=dev
 ```
 
-## Database Schema
+Database integration tests require a disposable MySQL database and explicit opt-in. Never point tests at production.
 
-23 tables with full relational integrity, indexes, and soft-delete support:
+## Production deployment
 
-| Table | Description |
-|-------|-------------|
-| `tenants` | School/ETEA organizations (multi-tenant isolation) |
-| `roles` | System roles (admin, school_admin, school_finance, etc.) |
-| `permissions` | Granular permissions (16 resources × 4 CRUD) |
-| `role_permissions` | Role-permission mapping |
-| `users` | All platform users with role + tenant association |
-| `user_roles` | User-role many-to-many |
-| `students` | Student records with consumer numbers |
-| `fee_heads` | Fee categories (Tuition, Transport, Lab, etc.) |
-| `fee_plans` | Fee plan templates |
-| `scholarships` | Scholarship definitions (% or fixed) |
-| `student_scholarship_assignments` | Student-scholarship mapping |
-| `invoices` | Monthly billing invoices |
-| `transactions` | Payment transaction records |
-| `ledger_entries` | Student financial ledger |
-| `payments` | Bill payment records |
-| `etea_postings` | ETEA entry test / job postings |
-| `applicants` | ETEA applicant records |
-| `services` | ETEA service definitions |
-| `etea_payment_records` | ETEA payment lifecycle records |
-| `etea_payment_notifications` | Payment status notifications |
-| `callback_idempotency_log` | Webhook idempotency protection |
-| `bill_bundles` | Fee bundle packages |
-| `payment_plan_assignments` | Student fee plan assignments |
-| `audit_logs` | Complete audit trail |
-| `notifications` | User notifications |
-| `settings` | Tenant key-value settings |
-| `refresh_tokens` | JWT refresh token store |
+Use [`../docs/PRODUCTION_DEPLOYMENT_RUNBOOK.md`](../docs/PRODUCTION_DEPLOYMENT_RUNBOOK.md). The core commands are:
 
-## API Endpoints
+```bash
+npm ci
+npm run migrate
+pm2 startOrReload ecosystem.config.cjs --update-env
+```
 
-### Authentication
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/auth/login` | Login with email/password/role → JWT tokens |
-| POST | `/api/auth/refresh` | Refresh access token |
-| POST | `/api/auth/logout` | Revoke refresh token |
-| GET | `/api/auth/profile` | Get current user profile |
-| PUT | `/api/auth/change-password` | Change password |
-
-### Users
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/users` | JWT | List users (paginated, filterable) |
-| GET | `/api/users/:id` | JWT | Get user details |
-| POST | `/api/users` | Admin | Create user |
-| PUT | `/api/users/:id/status` | Admin | Update user status |
-| PUT | `/api/users/:id/reset-password` | Admin | Reset user password |
-| GET | `/api/users/school/:schoolRef` | JWT | List school sub-users |
-| POST | `/api/users/school/sub-user` | JWT | Create school sub-user |
-| DELETE | `/api/users/school/:id` | JWT | Delete school sub-user |
-
-### Tenants (Admin Only)
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/tenants` | List all tenants |
-| GET | `/api/tenants/:id` | Get tenant details |
-| POST | `/api/tenants` | Create tenant (auto biller code) |
-| PUT | `/api/tenants/:id` | Update tenant info |
-| PUT | `/api/tenants/:id/status` | Update tenant status |
-
-### Students
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/students` | List students (search, class, status filters) |
-| GET | `/api/students/:id` | Get student details |
-| POST | `/api/students` | Create student (auto consumer number) |
-| PUT | `/api/students/:id/bus-service` | Update bus service settings |
-| GET | `/api/students/:id/ledger` | Get student financial ledger |
-| GET | `/api/students/:id/snapshot` | Get financial risk snapshot |
-
-### Invoices
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/invoices` | List invoices (status, search, biller filters) |
-| GET | `/api/invoices/:id` | Get invoice details |
-| POST | `/api/invoices` | Create invoice |
-| PUT | `/api/invoices/:id/status` | Update invoice status |
-
-### Billing (1LINK Integration)
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/billing/inquiry` | API Key | Bill inquiry by consumer number |
-| POST | `/api/billing/payment` | API Key | Post bill payment |
-| GET | `/api/billing/bundles` | JWT | Fetch fee bundles |
-
-### Applicants (ETEA)
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/applicants` | List applicants (status, posting, search) |
-| GET | `/api/applicants/:id` | Get applicant details |
-| POST | `/api/applicants` | Create applicant |
-| PUT | `/api/applicants/:id/assign-roll` | Assign roll number |
-| PUT | `/api/applicants/:id/result` | Record test result |
-
-### ETEA Postings & Services
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/etea/postings` | List all postings |
-| GET | `/api/etea/postings/:id` | Get posting details |
-| POST | `/api/etea/postings` | Create posting |
-| PUT | `/api/etea/postings/:id/status` | Update posting status |
-| GET | `/api/etea/services` | List services |
-| POST | `/api/etea/services` | Create service |
-
-### ETEA Payments
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/payments/create` | JWT + API Key | Create payment record |
-| GET | `/api/payments/:applicationId` | JWT + API Key | Get payment status |
-| POST | `/api/payment/callback` | Webhook sig | Payment callback (idempotent) |
-| GET | `/api/payments` | JWT | List all payments |
-| GET | `/api/payment-notifications` | JWT | List notifications |
-| POST | `/api/payments/expire` | JWT | Expire overdue payments |
-| GET | `/api/health` | Public | Health check |
-
-### Transactions & Payments
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/transactions` | List transactions |
-| GET | `/api/transactions/:id` | Get transaction details |
-| GET | `/api/payment-history` | Payment history with student info |
-
-### Settings
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/fee-plans` | List fee plans |
-| GET | `/api/fee-heads` | List fee heads |
-| GET | `/api/scholarships` | List scholarships |
-| GET | `/api/students/:studentId/scholarships` | Student scholarship assignments |
-
-### Reports
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/reports/dashboard` | JWT | Dashboard stats |
-| GET | `/api/reports/collection-trend` | JWT | Monthly collection trend |
-| GET | `/api/reports/platform-summary` | Admin | Platform-wide summary |
-
-### Notifications
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/notifications` | User notifications |
-| PUT | `/api/notifications/:id/read` | Mark as read |
-| PUT | `/api/notifications/read-all` | Mark all as read |
-
-### Audit Logs
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/audit-logs` | Paginated audit trail |
+Production migration refuses `--fresh` and refuses to create a missing database. Migration `007_production_foundation.js` is additive and checksum-ledgered; after deployment, create a new numbered migration instead of editing it.
 
 ## Authentication
 
-### JWT Token Flow
-1. `POST /api/auth/login` → returns `accessToken` + `refreshToken`
-2. Send access token: `Authorization: Bearer <token>`
-3. When expired: `POST /api/auth/refresh` with refresh token
-4. Logout: `POST /api/auth/logout` to revoke refresh token
+Dashboard sessions use a short-lived JWT access token plus a rotating HttpOnly/Secure/SameSite refresh cookie. Only refresh-token hashes are stored.
 
-### API Key Authentication
-For external integrations (1LINK, 1Bill):
-```
-X-API-Key: <your-api-key>
-```
+Tenant integrations use `X-API-Key`. Keys are generated once, stored only as SHA-256 hashes, displayed only during creation/rotation, and scoped to the live or sandbox runtime.
 
-### Webhook Signature
-For ETEA payment callbacks:
-```
-X-Webhook-Signature: <hash>
-X-Idempotency-Key: <unique-key>
+The dedicated 1LINK routes use the agreed `username` and `password` headers plus the production source-IP allowlist:
+
+```text
+POST /api/1.0/Payments/BillInquiry
+POST /api/1.0/Payments/BillPayment
 ```
 
-Signature = hash of `billId|status|transactionId|paidAt|WEBHOOK_SECRET`
+## Core APIs
 
-## Multi-Tenancy
+| Area | Base route | Access |
+|---|---|---|
+| Authentication | `/api/auth` | Public login/refresh; authenticated profile/logout |
+| Billers | `/api/tenants` | Platform admin |
+| Users | `/api/users` | Platform admin; scoped school sub-user operations |
+| Students | `/api/students` | Platform admin or school, role restricted |
+| Invoices | `/api/invoices` | Platform admin or school, role restricted |
+| Manual payment/reversal | `/api/manual-payments` | Admin/tenant finance roles, live tenant only |
+| Organization portal | `/api/org` | Platform admin or organization |
+| Organization payments | `/api/payments`, `/api/payment`, `/api/stats` | JWT or tenant key as defined per route |
+| Tenant API | `/api/saas/v1` | Environment-scoped tenant key |
+| 1LINK invoice service | `/api/1.0/Payments` | Gateway credentials and source allowlist |
+| Reports/audit | `/api/reports`, `/api/audit-logs` | Authenticated and role/tenant scoped |
 
-- Every data table has a `tenant_id` column
-- Middleware automatically scopes queries to the user's tenant
-- Admin users can access all tenants via `X-Tenant-Id` header
-- School users see only their school's data
+## Financial posting rules
 
-## Consumer Number Format
+All real paid outcomes delegate to `services/paymentPostingService.js`. One successful commit creates payment evidence, transaction, allocation, invoice/org status, ledger effect where applicable, financial audit row, and outbox event atomically. External reference/idempotency uniqueness prevents retry duplicates.
 
-```
-{FINTECH_PREFIX}{billerCode}{14-digit-padded-sequence}
-example: 123456100100000000000001
-```
+The UI cannot directly toggle an invoice to paid. “Record payment” requires an exact amount, unique reference, reason, timestamp, channel, and typed consumer confirmation. Manual corrections create compensating reversal records; 1LINK/external payments require settlement reconciliation and cannot be reversed locally.
 
-## Security Features
+## Tenant lifecycle and consumer numbers
 
-- JWT with token rotation (access + refresh)
-- bcryptjs password hashing (12 rounds)
-- Helmet HTTP security headers
-- CORS with configurable origin
-- Rate limiting (100 req/15min global, 20 req/15min for auth)
-- HPP (HTTP Parameter Pollution) protection
-- Input validation with express-validator
-- SQL injection prevention (parameterized queries)
-- Audit trail for all sensitive operations
-- Webhook signature verification
-- Idempotency protection for payment callbacks
-- IP whitelisting for ETEA endpoints
+- Account status (`active`, `suspended`, `banned`) is separate from onboarding lifecycle (`testing`, `ready_for_live`, `live`, `offboarding`).
+- Suspended tenants retain read-only dashboard access, while payment writes and 1LINK visibility are blocked.
+- Live activation requires the explicit five-part checklist and typed confirmation.
+- New tenants use an exact 14- or 24-digit consumer-number policy. Existing 20-digit identifiers remain valid.
+- Allocation is centralized, numeric, capacity checked, and serialized by a tenant row lock.
 
-## Environment Variables
+## FetchBundle retirement
 
-See `.env.example` for all configurable values including:
-- Database connection
-- JWT secrets and expiry
-- ETEA payment configuration
-- 1Bill/OneBill integration
-- Rate limiting
-- CORS origin
+FetchBundle application routes, controllers, pages, clients, and active tests are removed because the requested onboarding scope is invoice based. Legacy bundle tables are retained for one rollback release only and have no active readers. Written 1LINK confirmation is required before a later migration drops them.
 
-## Testing
+## Webhooks
 
-```bash
-# Run all tests
-npm test
+Payment commits enqueue `outbox_events`. The worker signs the exact JSON body with HMAC-SHA256, sends `X-Fintap-Event-Id` and `X-Webhook-Signature`, permits only public HTTPS port 443 destinations, retries with exponential backoff, and reclaims events abandoned during a worker crash.
 
-# Run with coverage
-npm run test:coverage
+## Documentation
 
-# Watch mode
-npm run test:watch
-```
-
-## Database Commands
-
-```bash
-# Run migrations
-npm run migrate
-
-# Fresh migration (drops all tables first)
-npm run migrate:fresh
-
-# Seed database with demo data
-npm run seed
-```
-
-## Seed Data
-
-The seeder creates data matching the frontend mock data exactly:
-- 5 tenants (Beacon House, City Grammar, ETEA KPK, Premier Academy, Peshawar University)
-- 6 roles with 64 permissions (16 resources × 4 CRUD)
-- 5 users (admin, school admin, ETEA manager, school finance, banned user)
-- 50 students across 2 schools
-- 4 fee plans, 7 fee heads, 10 scholarships
-- 30 invoices, 20 transactions
-- 4 ETEA postings, 5 services, 15 applicants
-- 5 bill bundles, 10 audit logs
-
-Default credentials:
-- Admin: `admin@example.com` / `123456` (role: admin)
-- School: `school@example.com` / `123456` (role: school)
-- ETEA: `etea@example.com` / `123456` (role: etea)
+- [`../docs/IMPLEMENTATION_AUDIT_2026-09-08.md`](../docs/IMPLEMENTATION_AUDIT_2026-09-08.md)
+- [`../docs/PRODUCTION_DEPLOYMENT_RUNBOOK.md`](../docs/PRODUCTION_DEPLOYMENT_RUNBOOK.md)
+- [`../docs/1BILL_HANDOVER_AND_COMPLIANCE_2026-09-08.md`](../docs/1BILL_HANDOVER_AND_COMPLIANCE_2026-09-08.md)
+- [`src/db/SCHEMA.md`](src/db/SCHEMA.md)

@@ -115,6 +115,13 @@ const updateInvoiceStatus = async (req, res, next) => {
     if (!['pending', 'paid', 'overdue'].includes(status)) {
       throw new AppError('Invalid status', 400);
     }
+    if (status === 'paid') {
+      throw new AppError(
+        'Use Record payment so the payment, transaction, ledger and audit trail are created together',
+        409,
+        'PAYMENT_POSTING_REQUIRED'
+      );
+    }
 
     let where = 'WHERE id = ? AND deleted_at IS NULL';
     const params = [req.params.id];
@@ -123,38 +130,10 @@ const updateInvoiceStatus = async (req, res, next) => {
     const [existing] = await pool.query(`SELECT * FROM invoices ${where}`, params);
     if (existing.length === 0) throw new AppError('Invoice not found', 404);
 
-    const now = new Date();
     await pool.query(
       `UPDATE invoices SET status = ?, paid_at = ? WHERE id = ?`,
-      [status, status === 'paid' ? now : null, req.params.id]
+      [status, null, req.params.id]
     );
-
-    // Apply late fee charge to ledger when manually marking paid after due date
-    if (status === 'paid') {
-      const inv = existing[0];
-      const lateFeeAmt = parseFloat(inv.late_fee || 0);
-      const dueDate = new Date(inv.due_date);
-      if (lateFeeAmt > 0 && now > dueDate && !inv.late_fee_applied) {
-        const monthLabel = (inv.month || String(inv.due_date).slice(0, 7));
-        const studentId = inv.student_id;
-        const tId = req.tenantId || inv.tenant_id;
-
-        const [lastBal] = await pool.query(
-          'SELECT balance FROM ledger_entries WHERE student_id = ? ORDER BY date DESC, created_at DESC LIMIT 1',
-          [studentId]
-        );
-        const prevBalance = lastBal.length ? parseFloat(lastBal[0].balance) : 0;
-        const lateFeeBalance = parseFloat((prevBalance + lateFeeAmt).toFixed(2));
-
-        await pool.query(
-          `INSERT INTO ledger_entries (id, tenant_id, student_id, date, description, debit, credit, balance, reference, entry_type)
-           VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, 'late_fee')`,
-          [uuidv4(), tId, studentId, now.toISOString().slice(0, 10),
-           `Late Fee — ${monthLabel}`, lateFeeAmt, lateFeeBalance, inv.invoice_number]
-        );
-        await pool.query('UPDATE invoices SET late_fee_applied = 1 WHERE id = ?', [req.params.id]);
-      }
-    }
 
     await auditLog(req, 'update', 'invoice', req.params.id, `Invoice status → ${status}`);
     await createRequestNotification(req, {

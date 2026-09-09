@@ -1,11 +1,15 @@
 # Fintap Architecture Decision Reasons
 
-Status: proposed decisions for approval  
+Status: decisions implemented locally; operational validation pending
 Prepared: 7 September 2026
+
+The implementation follows these decisions. Verification evidence, deliberate deviations, and remaining production gates are recorded in `docs/FULL_APPLICATION_QA_AUDIT_2026-09-09.md` and `docs/IMPLEMENTATION_AUDIT_2026-09-08.md`.
+
+The decisions below are retained as the architectural record. Where the original text uses future tense, the corresponding local code is now implemented; external infrastructure, production-data rehearsal, performance evidence, and 1LINK sign-off remain pending.
 
 ## 1. Decision summary
 
-| Request | Proposed decision | Main reason |
+| Request | Implemented decision | Main reason |
 |---|---|---|
 | Mark a payment paid | Add a confirmed manual payment-posting workflow backed by the same atomic service as 1LINK | A status-only change creates accounting inconsistencies and duplicate-payment risk |
 | Suspend a biller | Gate the tenant at inquiry/payment/auth/worker boundaries; preserve stored consumer numbers | Nulling or regenerating identifiers damages history, references, and recovery |
@@ -311,24 +315,24 @@ Call the current repository a working baseline, not production-certified. Produc
 
 Compilation proves that code can build; it does not prove financial atomicity, tenant isolation, race handling, performance, recovery, or external contract compliance.
 
-## 13. Decisions intentionally deferred for approval
+## 13. Decisions resolved during implementation
 
-These choices materially affect workflow or contract behavior and should be confirmed before schema/API implementation:
+The implementation used the following conservative defaults. They still require product/1LINK confirmation before production cutover where noted:
 
-1. Manual payment permissions: recommended platform admin plus tenant finance/admin, never viewer/staff by default.
-2. Manual payment amounts: recommended exact invoice payment initially; enable partial payment only with the allocation model and clear receipt behavior. Reject overpayment until a credit-balance policy exists.
-3. Suspended dashboard access: recommended read-only access with a suspension banner; banned accounts are denied.
-4. Fourteen-digit eligibility: recommended for capacity-qualified school tenants only; default/enforce 24 digits for per-application organization/private-agency models.
-5. Existing 20-digit tenants: recommended grandfathering; no mass identifier migration.
-6. FetchBundle retirement: obtain 1LINK confirmation and decide whether to return a temporary retirement response for one release.
-7. SaaS gateway scope: decide which `/api/saas/v1` endpoints remain after FetchBundle and whether external clients may post real payments.
-8. Sandbox hosting: approve separate hostname, database, process, certificate, monitoring, and retention cost.
-9. Reversal/refund scope: decide whether it is included with manual payments or delivered as a subsequent controlled workflow.
-10. 1LINK error mapping for suspension: confirm whether suspended consumers should return not-found code `01` or a specific blocked response in every scenario.
+1. Manual payment permission is platform admin plus tenant finance/admin; viewer/staff access is denied.
+2. Manual posting is exact-amount only. Partial/overpayment remains disabled until an approved credit/allocation policy exists.
+3. Suspended tenants retain read-only dashboard access; banned tenants are denied.
+4. New tenants select 14 or 24 digits subject to namespace capacity; 24 is the default.
+5. Existing 20-digit identifiers are grandfathered and never mass-reformatted.
+6. FetchBundle application code is retired; legacy tables remain for one rollback release. Written 1LINK scope confirmation is still required.
+7. Tenant SaaS inquiry, status, history, registration, and canonical payment endpoints remain, protected by environment-scoped keys.
+8. Sandbox code guards exist, but the separate hostname/database/process/certificate still require infrastructure provisioning.
+9. Manual reversal is included through compensating records; external/1LINK reversal remains a settlement/reconciliation operation.
+10. Suspended tenants are invisible to 1LINK and return not-found semantics. 1LINK confirmation is still required.
 
 ## 14. Existing findings that influence the plan
 
-These are planning findings, not changes made in this phase:
+These were the audit findings that drove implementation; their current disposition is recorded in the implementation audit:
 
 - organization status lookup lacks a tenant predicate;
 - transaction detail lacks a tenant predicate;
@@ -360,4 +364,3 @@ Application work must continue from the established VPN state without redesignin
 - application HTTPS port: 443.
 
 The lack of an inbound IKE response remains a 1LINK/upstream connectivity dependency. It is independent of this application plan. No feature phase should alter the working loopback/IPsec design merely to compensate for a peer that has not responded.
-

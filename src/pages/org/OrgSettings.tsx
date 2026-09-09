@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Copy, Eye, EyeOff, KeyRound, Plus, ShieldCheck, X } from 'lucide-react';
+import { KeyRound, Plus, ShieldCheck, X } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +21,6 @@ const OrgSettings = () => {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [keyVisible, setKeyVisible] = useState(false);
   const { user } = useAuthStore();
   const storedSourceIp = useOrgSecurityStore((state) => state.sourceIp);
   const setSourceIp = useOrgSecurityStore((state) => state.setSourceIp);
@@ -81,12 +80,8 @@ const OrgSettings = () => {
       <Card className="max-w-3xl">
         <CardHeader><CardTitle className="flex items-center gap-2"><KeyRound className="h-5 w-5" /> Organization API key</CardTitle><CardDescription>Use this key only from your backend. Never embed it in a website, mobile app, source repository, email, or support ticket.</CardDescription></CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex gap-2">
-            <Input value={keyVisible ? (user?.tenantApiKey || 'Not available - contact the platform administrator') : '•'.repeat(32)} readOnly className="font-mono" />
-            <Button variant="outline" size="icon" aria-label={keyVisible ? 'Hide API key' : 'Reveal API key'} onClick={() => setKeyVisible((value) => !value)}>{keyVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</Button>
-            <Button variant="outline" size="icon" aria-label="Copy API key" disabled={!user?.tenantApiKey} onClick={() => { void navigator.clipboard.writeText(user?.tenantApiKey || ''); toast.success('API key copied'); }}><Copy className="h-4 w-4" /></Button>
-          </div>
-          <p className="text-xs text-muted-foreground">Key rotation is restricted to platform administrators and requires typed confirmation.</p>
+          <Input value={user?.tenantApiKeyPrefix ? `${user.tenantApiKeyPrefix}…` : 'Key identifier unavailable'} readOnly className="font-mono" />
+          <p className="text-xs text-muted-foreground">The secret is shown once when issued and is never retrievable afterward. Key rotation is restricted to platform administrators and requires typed confirmation.</p>
         </CardContent>
       </Card>
 

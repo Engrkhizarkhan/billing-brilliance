@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const { auditLog } = require('../middleware/auditLog');
+const { allocateConsumerNumber } = require('../services/consumerNumberService');
 
 const fetchApplicants = async (req, res, next) => {
   try {
@@ -53,30 +54,19 @@ const createApplicant = async (req, res, next) => {
   try {
     const tenantId = req.tenantId || req.body.tenantId;
     if (!tenantId) throw new AppError('Tenant ID is required', 400);
-
-    // Get tenant biller code
-    const [tenants] = await pool.query('SELECT biller_code FROM tenants WHERE id = ?', [tenantId]);
-    if (tenants.length === 0) throw new AppError('Tenant not found', 404);
-    const billerCode = tenants[0].biller_code;
+    const { serviceId } = req.body;
 
     // Get sequence — use MAX()+1 inside a transaction to avoid race conditions
     const conn = await pool.getConnection();
     let seq, id, consumerNumber, billId;
     try {
       await conn.beginTransaction();
-      // Lock the tenant row to serialize concurrent inserts
-      await conn.query('SELECT id FROM tenants WHERE id = ? FOR UPDATE', [tenantId]);
-      const [[seqRow]] = await conn.query(
-        'SELECT COALESCE(MAX(seq_number), 0) + 1 AS next_seq FROM applicants WHERE tenant_id = ?',
-        [tenantId]
-      );
-      seq = seqRow.next_seq;
-
-      const FINTECH_PREFIX = require('../config').fintechPrefix || '123456';
-      consumerNumber = `${FINTECH_PREFIX}${billerCode}${String(seq).padStart(14, '0')}`;
+      const allocated = await allocateConsumerNumber(conn, tenantId);
+      seq = allocated.sequence;
+      consumerNumber = allocated.consumerNumber;
 
       // Derive bill ID prefix from service title or fall back to biller code
-      let billPrefix = `ORG-${billerCode}`;
+      let billPrefix = `ORG-${allocated.billerCode}`;
       if (serviceId) {
         const [[svc]] = await conn.query('SELECT title FROM org_postings WHERE id = ? LIMIT 1', [serviceId]);
         if (svc && svc.title) {
@@ -107,6 +97,12 @@ const createApplicant = async (req, res, next) => {
       throw txErr;
     }
     conn.release();
+
+    await auditLog(req, 'create', 'applicant', id, 'Applicant created');
+    const [rows] = await pool.query(
+      'SELECT * FROM applicants WHERE id = ? AND tenant_id = ?',
+      [id, tenantId]
+    );
 
     res.status(201).json({ data: rows[0], message: 'Applicant created' });
   } catch (err) {

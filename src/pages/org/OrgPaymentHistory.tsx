@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import { Copy, Loader2 } from 'lucide-react';
+import { ReversePaymentDialog } from '@/components/ReversePaymentDialog';
 
 const OrgPaymentHistory = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
@@ -19,24 +20,11 @@ const OrgPaymentHistory = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  const { data: paymentsData, loading: loadingPayments } = useApiQuery(() => api.listOrgPayments(), [paymentVersion]);
+  const { data: paymentsData, meta, loading: loadingPayments } = useApiQuery(
+    () => api.listOrgPayments({ page, pageSize, search: search || undefined, status: statusFilter === 'all' ? undefined : statusFilter }),
+    [paymentVersion, page, pageSize, search, statusFilter]
+  );
   const paymentRecords = useMemo(() => (paymentsData || []) as OrgPaymentRecord[], [paymentsData]);
-
-  const filteredPayments = useMemo(() => {
-    const query = search.toLowerCase();
-    return paymentRecords.filter((p) => {
-      const matchesSearch =
-        p.applicationId.toLowerCase().includes(query) ||
-        p.applicantId.toLowerCase().includes(query) ||
-        p.postingId.toLowerCase().includes(query) ||
-        (p.consumerNumber || '').toLowerCase().includes(query) ||
-        (p.transactionId || '').toLowerCase().includes(query);
-      const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
-      return Boolean(matchesSearch && matchesStatus);
-    });
-  }, [paymentRecords, search, statusFilter]);
-
-  const paginatedPayments = filteredPayments.slice((page - 1) * pageSize, page * pageSize);
 
   if (loadingPayments && paymentRecords.length === 0)
     return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
@@ -79,17 +67,18 @@ const OrgPaymentHistory = () => {
               <TableHead>created_at</TableHead>
               <TableHead>paid_at</TableHead>
               <TableHead>transaction_id</TableHead>
+              <TableHead>actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginatedPayments.length === 0 ? (
+            {paymentRecords.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center text-sm text-muted-foreground py-6">
+                <TableCell colSpan={10} className="text-center text-sm text-muted-foreground py-6">
                   No payment records match your filters.
                 </TableCell>
               </TableRow>
             ) : (
-              paginatedPayments.map((payment) => (
+              paymentRecords.map((payment) => (
                 <TableRow key={payment.applicationId}>
                   <TableCell className="font-mono text-xs">{payment.applicationId}</TableCell>
                   <TableCell className="font-mono text-xs">{payment.applicantId}</TableCell>
@@ -114,6 +103,7 @@ const OrgPaymentHistory = () => {
                   <TableCell className="text-xs text-muted-foreground">{payment.createdAt}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{payment.paidAt || '—'}</TableCell>
                   <TableCell className="font-mono text-xs">{payment.transactionId || '—'}</TableCell>
+                  <TableCell>{payment.postedPaymentId && payment.paymentSource === 'manual' && payment.paymentReceiptNumber ? <ReversePaymentDialog paymentId={payment.postedPaymentId} receiptNumber={payment.paymentReceiptNumber} onSuccess={() => usePaymentStore.getState().bump()} /> : null}</TableCell>
                 </TableRow>
               ))
             )}
@@ -121,7 +111,7 @@ const OrgPaymentHistory = () => {
         </Table>
 
         <TablePagination
-          total={filteredPayments.length}
+          total={Number((meta as { total?: number } | null)?.total || 0)}
           page={page}
           pageSize={pageSize}
           onPageChange={setPage}

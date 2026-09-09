@@ -15,7 +15,10 @@ export interface User {
   schoolAccessRole?: SchoolAccessRole;
   verified?: boolean;
   isProtected?: boolean;
-  tenantApiKey?: string;
+  tenantApiKeyPrefix?: string | null;
+  tenantStatus?: 'active' | 'suspended' | 'banned';
+  tenantLifecycleStage?: 'testing' | 'ready_for_live' | 'live' | 'offboarding';
+  consumerNumberLength?: 14 | 20 | 24;
 }
 
 export interface Biller {
@@ -26,8 +29,14 @@ export interface Biller {
   email: string;
   phone: string;
   status: 'active' | 'suspended' | 'banned';
+  lifecycleStage: 'testing' | 'ready_for_live' | 'live' | 'offboarding';
+  consumerNumberLength: 14 | 20 | 24;
+  suspensionReason?: string | null;
+  suspendedAt?: string | null;
+  restoredAt?: string | null;
   createdAt: string;
   apiKey?: string;
+  apiKeyPrefix?: string | null;
 }
 
 export interface Student {
@@ -52,6 +61,69 @@ export interface Student {
   busServiceStartMonth: string | null;
   busServiceEndMonth: string | null;
   busMonthlyFee: number;
+}
+
+export interface ManualPaymentRequest {
+  targetType: 'invoice' | 'org_payment';
+  tenantId?: string;
+  invoiceId?: string;
+  orgPaymentId?: string;
+  consumerNumber: string;
+  amount: number;
+  receivedAt: string;
+  channel: string;
+  externalReference: string;
+  reason: string;
+  idempotencyKey: string;
+}
+
+export interface AdminPaymentInquiry {
+  found: boolean;
+  targetType?: 'invoice' | 'org_payment';
+  targetId?: string;
+  tenantId?: string;
+  tenantName?: string;
+  billerCode?: string;
+  tenantStatus?: string;
+  lifecycleStage?: string;
+  consumerStatus?: string;
+  consumerNumber: string;
+  payerName?: string;
+  className?: string;
+  section?: string;
+  applicationId?: string;
+  billId?: string;
+  invoiceNumber?: string | null;
+  dueDate?: string | null;
+  expiryDate?: string | null;
+  pendingCount?: number;
+  baseAmount?: number;
+  lateFee?: number;
+  amount?: number;
+  currency?: string;
+  payable: boolean;
+  reason?: string | null;
+  oneBillResponse: Record<string, string>;
+}
+
+export interface ManualPaymentResult {
+  paymentId: string;
+  receiptNumber: string;
+  consumerNumber: string;
+  amount: number;
+  remainingBalance: number;
+  status: 'paid' | 'partial';
+  paidAt: string;
+  reference: string;
+}
+
+export interface ManualPaymentReversalResult {
+  paymentId: string;
+  reversalPaymentId: string;
+  reference: string;
+  receiptNumber: string;
+  amount: number;
+  status: 'reversed';
 }
 
 export interface StudentDirectoryRecord extends Student {
@@ -303,18 +375,8 @@ export type BillStatus = 'paid' | 'unpaid' | 'partial' | 'overdue';
 export interface OneLinkInquiryReservedFields {
   cnic?: string;
   accountId?: string;
-  bundleId?: string;
   supportingInfo1?: string;
   supportingInfo2?: string;
-}
-
-export interface BillBundleDetail {
-  bundleId: string;
-  bundleName: string;
-  description?: string;
-  expiryDate?: string;
-  amount?: string;
-  tag?: string;
 }
 
 export type PaymentChannel = 'jazzcash' | 'easypaisa' | 'bank_app' | 'atm' | 'counter' | 'cash_offline';
@@ -350,7 +412,6 @@ export interface BillInquiryResponse {
   message?: string;
   companyId?: string;
   responseCode?: string;
-  bundleDetails?: BillBundleDetail[];
 }
 
 export interface BillPaymentRequest {
@@ -378,22 +439,6 @@ export interface BillPaymentResult {
   notes?: string;
 }
 
-export interface BundlePackage {
-  code: string;
-  name: string;
-  amount: number;
-  frequency: 'monthly' | 'quarterly' | 'yearly' | 'one-time';
-  description: string;
-  dueDay?: number;
-  lateFee?: number;
-}
-
-export interface FetchBundleResponse {
-  companyId: string;
-  responseCode: string;
-  billerName: string;
-  bundleDetails: BillBundleDetail[];
-}
 
 export type OrgPaymentStatus = 'pending' | 'paid' | 'failed' | 'expired';
 
@@ -413,6 +458,9 @@ export interface OrgPaymentRecord {
   transactionId?: string;
   description?: string;
   callbackUrl: string;
+  postedPaymentId?: string;
+  paymentSource?: string;
+  paymentReceiptNumber?: string;
 }
 
 export interface OrgCreatePaymentRequest {
@@ -494,30 +542,4 @@ export interface OrgRequestSecurityContext {
   protocol?: 'https' | 'http';
   webhookSignature?: string;
   idempotencyKey?: string;
-}
-
-// ── 1LINK Bundle Management ──────────────────────────────────────────────────
-
-export interface Bundle {
-  id: string;
-  pcid: string;
-  billerName: string;
-  bundleId: string;
-  bundleName: string;
-  description?: string;
-  expiryDate?: string;
-  amount: string;
-  tag?: string;
-  status: 'active' | 'inactive';
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-export interface PcidKey {
-  pcid: string;
-  apiKey: string;
-  billerId?: string;
-  billerName?: string;
-  createdAt?: string;
-  updatedAt?: string;
 }

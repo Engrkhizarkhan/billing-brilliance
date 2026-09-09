@@ -8,7 +8,7 @@ import { TablePagination } from '@/components/TablePagination';
 import { EmptyState } from '@/components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -465,7 +465,7 @@ const StudentList = () => {
               <Button variant="outline" size="sm" className="rounded-lg"><Upload className="w-4 h-4 mr-1.5" />Bulk Import</Button>
             </DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle>Import Students in Bulk</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Import Students in Bulk</DialogTitle><DialogDescription>Upload a CSV file to validate and add multiple students to this school.</DialogDescription></DialogHeader>
               <div className="space-y-4 pt-2">
                 <div className="rounded-xl border-2 border-dashed border-border p-8 text-center">
                   <FileText className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
@@ -485,7 +485,7 @@ const StudentList = () => {
               <Button size="sm" className="rounded-lg"><Plus className="w-4 h-4 mr-1.5" />Add Student</Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg">
-              <DialogHeader><DialogTitle>Add Student</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Add Student</DialogTitle><DialogDescription>Create a student profile and allocate the next tenant consumer number.</DialogDescription></DialogHeader>
               <div className="space-y-4 pt-2 max-h-[70vh] overflow-y-auto">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2"><Label className="text-xs font-semibold">Full Name *</Label><Input className="h-10 rounded-xl" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ahmed Khan" /></div>
@@ -568,7 +568,7 @@ const StudentList = () => {
             }}
           >
             <DialogContent className="max-w-lg">
-              <DialogHeader><DialogTitle>Edit Student</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Edit Student</DialogTitle><DialogDescription>Update student details without changing the issued consumer number.</DialogDescription></DialogHeader>
               <div className="space-y-4 pt-2 max-h-[70vh] overflow-y-auto">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2"><Label className="text-xs font-semibold">Full Name *</Label><Input className="h-10 rounded-xl" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} placeholder="Ahmed Khan" /></div>
@@ -814,6 +814,8 @@ const StudentList = () => {
                       <div className="flex items-center justify-end gap-1">
                         <Button
                           type="button"
+                          aria-label={`View ledger for ${s.name}`}
+                          title={`View ledger for ${s.name}`}
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
@@ -826,6 +828,8 @@ const StudentList = () => {
                         </Button>
                         <Button
                           type="button"
+                          aria-label={`Edit ${s.name}`}
+                          title={`Edit ${s.name}`}
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
@@ -838,6 +842,8 @@ const StudentList = () => {
                         </Button>
                         <Button
                           type="button"
+                          aria-label={`Delete ${s.name}`}
+                          title={`Delete ${s.name}`}
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"

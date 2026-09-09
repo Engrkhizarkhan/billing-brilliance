@@ -11,6 +11,7 @@ import { ExportButton } from '@/components/ExportButton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { CreditCard } from 'lucide-react';
 import { formatPKR } from '@/lib/formatters';
+import { ReversePaymentDialog } from '@/components/ReversePaymentDialog';
 
 const CHANNELS: Record<string, string> = {
   bank_app: 'Bank App',
@@ -41,6 +42,9 @@ type PaymentRecord = {
   section: string;
   channel: string;
   voucherNumber: string;
+  status: 'posted' | 'reversed' | 'voided';
+  source: string;
+  reversalOfPaymentId?: string | null;
 };
 
 const SchoolPayments = () => {
@@ -143,6 +147,7 @@ const SchoolPayments = () => {
                 <TableHead className="text-xs font-semibold">Receipt #</TableHead>
                 <TableHead className="text-xs font-semibold">Txn Ref</TableHead>
                 <TableHead className="text-xs font-semibold text-right">Amount</TableHead>
+                <TableHead className="text-xs font-semibold">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -167,6 +172,7 @@ const SchoolPayments = () => {
                   <TableCell className="font-mono text-xs text-muted-foreground">{p.receiptNumber || '---'}</TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">{p.reference || '---'}</TableCell>
                   <TableCell className="font-mono text-sm font-semibold text-success text-right">{formatPKR(p.amount)}</TableCell>
+                  <TableCell>{p.source === 'manual' && p.status === 'posted' && !p.reversalOfPaymentId && p.receiptNumber ? <ReversePaymentDialog paymentId={p.id} receiptNumber={p.receiptNumber} onSuccess={() => usePaymentStore.getState().bump()} /> : null}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

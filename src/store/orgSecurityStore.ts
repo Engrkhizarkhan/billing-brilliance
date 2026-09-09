@@ -1,21 +1,17 @@
 import { create } from 'zustand';
 
 interface OrgSecurityStore {
-  apiKey: string;
   sourceIp: string;
-  setApiKey: (apiKey: string) => void;
   setSourceIp: (sourceIp: string) => void;
   reset: () => void;
 }
 
 const STORAGE_KEY = 'org-payment-security-context';
-const DEFAULT_API_KEY = import.meta.env.VITE_ORG_API_KEY || 'org-dev-key';
-const DEFAULT_SOURCE_IP = '127.0.0.1';
+const DEFAULT_SOURCE_IP = '';
 
 const readStoredState = () => {
   if (typeof window === 'undefined') {
     return {
-      apiKey: DEFAULT_API_KEY,
       sourceIp: DEFAULT_SOURCE_IP,
     };
   }
@@ -24,46 +20,38 @@ const readStoredState = () => {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) {
       return {
-        apiKey: DEFAULT_API_KEY,
         sourceIp: DEFAULT_SOURCE_IP,
       };
     }
 
-    const parsed = JSON.parse(raw) as Partial<Pick<OrgSecurityStore, 'apiKey' | 'sourceIp'>>;
+    const parsed = JSON.parse(raw) as Partial<Pick<OrgSecurityStore, 'sourceIp'>>;
     return {
-      apiKey: parsed.apiKey || DEFAULT_API_KEY,
       sourceIp: parsed.sourceIp || DEFAULT_SOURCE_IP,
     };
   } catch {
     return {
-      apiKey: DEFAULT_API_KEY,
       sourceIp: DEFAULT_SOURCE_IP,
     };
   }
 };
 
-const persistState = (apiKey: string, sourceIp: string) => {
+const persistState = (sourceIp: string) => {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ apiKey, sourceIp }));
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ sourceIp }));
 };
 
 const initial = readStoredState();
+persistState(initial.sourceIp);
 
-export const useOrgSecurityStore = create<OrgSecurityStore>((set, get) => ({
-  apiKey: initial.apiKey,
+export const useOrgSecurityStore = create<OrgSecurityStore>((set) => ({
   sourceIp: initial.sourceIp,
-  setApiKey: (apiKey) => {
-    const normalized = apiKey.trim();
-    set({ apiKey: normalized });
-    persistState(normalized, get().sourceIp);
-  },
   setSourceIp: (sourceIp) => {
     const normalized = sourceIp.trim();
     set({ sourceIp: normalized });
-    persistState(get().apiKey, normalized);
+    persistState(normalized);
   },
   reset: () => {
-    set({ apiKey: DEFAULT_API_KEY, sourceIp: DEFAULT_SOURCE_IP });
-    persistState(DEFAULT_API_KEY, DEFAULT_SOURCE_IP);
+    set({ sourceIp: DEFAULT_SOURCE_IP });
+    persistState(DEFAULT_SOURCE_IP);
   },
 }));

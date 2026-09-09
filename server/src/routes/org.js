@@ -1,11 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate } = require('../middleware/auth');
+const { authenticate, authorize } = require('../middleware/auth');
 const { tenantScope } = require('../middleware/auth');
 const postingController = require('../controllers/postingController');
 const settingsController = require('../controllers/settingsController');
 
 router.use(authenticate);
+router.use(authorize('admin', 'org'));
 router.use(tenantScope);
 
 // Webhook Config

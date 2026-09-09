@@ -7,8 +7,8 @@ const userController = require('../controllers/userController');
 
 router.use(authenticate);
 
-router.get('/', paginationValidation, handleValidation, userController.fetchUsers);
-router.get('/:id', idParam, handleValidation, userController.getUser);
+router.get('/', authorize('admin'), paginationValidation, handleValidation, userController.fetchUsers);
+router.get('/:id', authorize('admin'), idParam, handleValidation, userController.getUser);
 router.post('/', authorize('admin'), createUserValidation, handleValidation, userController.createUser);
 router.put('/:id', idParam, handleValidation, userController.updateUser);
 router.patch('/:id/status', authorize('admin'), idParam, handleValidation, userController.updateUserStatus);

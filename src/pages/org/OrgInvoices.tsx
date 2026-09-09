@@ -9,6 +9,7 @@ import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import { OrgPaymentRecord } from '@/types';
 import { Loader2 } from 'lucide-react';
+import { RecordPaymentDialog } from '@/components/RecordPaymentDialog';
 
 const mapPaymentToInvoiceStatus = (status: 'pending' | 'paid' | 'failed' | 'expired'): 'paid' | 'pending' | 'overdue' => {
   if (status === 'paid') return 'paid';
@@ -23,7 +24,11 @@ const OrgInvoices = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  const { data: paymentsData, loading } = useApiQuery(() => api.listOrgPayments(), [paymentVersion]);
+  const apiStatus = statusFilter === 'overdue' ? 'overdue' : statusFilter === 'all' ? undefined : statusFilter;
+  const { data: paymentsData, meta, loading } = useApiQuery(
+    () => api.listOrgPayments({ page, pageSize, search: search || undefined, status: apiStatus }),
+    [paymentVersion, page, pageSize, search, apiStatus]
+  );
   const rawPayments = useMemo(() => (paymentsData || []) as OrgPaymentRecord[], [paymentsData]);
 
   const invoiceRows = useMemo(
@@ -36,22 +41,10 @@ const OrgInvoices = () => {
       amount: payment.amount,
       status: mapPaymentToInvoiceStatus(payment.status),
       dueDate: payment.dueDate,
+      consumerNumber: payment.consumerNumber || '',
     })),
     [rawPayments]
   );
-
-  const filteredRows = invoiceRows.filter((row) => {
-    const query = search.toLowerCase();
-    const matchSearch =
-      (row.invoiceNumber ?? '').toLowerCase().includes(query) ||
-      (row.applicationId ?? '').toLowerCase().includes(query) ||
-      (row.applicantId ?? '').toLowerCase().includes(query) ||
-      (row.postingId ?? '').toLowerCase().includes(query);
-    const matchStatus = statusFilter === 'all' || row.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
-
-  const paginatedRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
 
@@ -90,17 +83,18 @@ const OrgInvoices = () => {
               <TableHead>amount</TableHead>
               <TableHead>status</TableHead>
               <TableHead>due_date</TableHead>
+              <TableHead>actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginatedRows.length === 0 ? (
+            {invoiceRows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">
+                <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-6">
                   No invoices match your filters.
                 </TableCell>
               </TableRow>
             ) : (
-              paginatedRows.map((row) => (
+              invoiceRows.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell className="font-mono text-xs">{row.invoiceNumber}</TableCell>
                   <TableCell className="font-mono text-xs">{row.applicationId}</TableCell>
@@ -109,6 +103,7 @@ const OrgInvoices = () => {
                   <TableCell className="font-mono text-sm">{formatPKR(row.amount)}</TableCell>
                   <TableCell><StatusBadge status={row.status} /></TableCell>
                   <TableCell className="text-sm text-muted-foreground">{row.dueDate}</TableCell>
+                  <TableCell>{row.status !== 'paid' && row.consumerNumber ? <RecordPaymentDialog targetType="org_payment" targetId={row.id} consumerNumber={row.consumerNumber} payerLabel={row.applicationId} amount={Number(row.amount)} onSuccess={() => usePaymentStore.getState().bump()} /> : null}</TableCell>
                 </TableRow>
               ))
             )}
@@ -116,7 +111,7 @@ const OrgInvoices = () => {
         </Table>
 
         <TablePagination
-          total={filteredRows.length}
+          total={Number((meta as { total?: number } | null)?.total || 0)}
           page={page}
           pageSize={pageSize}
           onPageChange={setPage}

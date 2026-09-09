@@ -21,7 +21,7 @@ const buildCases = (base) => {
   const standardConsumer = (sequence) => `${base}${String(sequence).padStart(standardWidth, '0')}`;
   const longConsumer = (sequence) => `${base}${String(sequence).padStart(longWidth, '0')}`;
   const cases = [];
-  const provisionalAmounts = [100, 500, 1000, 5000, 10000, 50000, 100000];
+  const provisionalAmounts = [4999, 7500, 25000, 750000, 175000, 1500000, 5500000];
 
   let sequence = 1;
   provisionalAmounts.forEach((amount, slabIndex) => {
@@ -103,12 +103,15 @@ const main = async () => {
 
   try {
     const [tenantRows] = await connection.query(
-      'SELECT id, name, biller_code FROM tenants WHERE name = ? AND status = ? AND deleted_at IS NULL LIMIT 1',
+      'SELECT id, name, biller_code, lifecycle_stage FROM tenants WHERE name = ? AND status = ? AND deleted_at IS NULL LIMIT 1',
       [TENANT_NAME, 'active']
     );
     if (tenantRows.length !== 1) throw new Error(`Active tenant not found: ${TENANT_NAME}`);
 
     const tenant = tenantRows[0];
+    if (config.appEnvironment === 'production' && tenant.lifecycle_stage !== 'live') {
+      throw new Error('Dedicated UAT tenant is not activated for 1LINK traffic; complete the audited activation checklist first');
+    }
     const base = `${config.fintechPrefix}${tenant.biller_code}`;
     if (!/^\d+$/.test(base)) throw new Error('Prefix and biller code must both be numeric');
     cases = buildCases(base);
@@ -190,6 +193,11 @@ const main = async () => {
 
       Object.assign(testCase, { applicationId, billId, dueDate });
     }
+
+    await connection.query(
+      'UPDATE tenants SET next_consumer_sequence = GREATEST(next_consumer_sequence, 21) WHERE id = ?',
+      [tenant.id]
+    );
 
     await connection.commit();
     connection.release();

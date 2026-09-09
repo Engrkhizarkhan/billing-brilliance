@@ -9,7 +9,7 @@ const createUserValidation = [
   body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
   body('name').trim().isLength({ min: 2, max: 255 }).withMessage('Name must be 2-255 characters'),
   body('role').isIn(['admin', 'school', 'org']).withMessage('Valid role required'),
-  body('password').optional().isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  body('password').optional().isLength({ min: 12 }).withMessage('Password must be at least 12 characters'),
   body('schoolRef').optional().trim(),
   body('schoolAccessRole').optional().isIn(['admin', 'finance', 'staff', 'viewer']),
 ];
@@ -74,11 +74,16 @@ const paymentCallbackValidation = [
 
 const paginationValidation = [
   query('page').optional().isInt({ min: 1 }).toInt(),
-  query('pageSize').optional().isInt({ min: 1, max: 10000 }).toInt(),
+  query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
 ];
 
 const idParam = [
   param('id').notEmpty().withMessage('ID is required'),
+];
+
+const changePasswordValidation = [
+  body('currentPassword').isString().notEmpty().withMessage('Current password is required'),
+  body('newPassword').isLength({ min: 12, max: 128 }).withMessage('New password must be 12-128 characters'),
 ];
 
 module.exports = {
@@ -92,4 +97,5 @@ module.exports = {
   paymentCallbackValidation,
   paginationValidation,
   idParam,
+  changePasswordValidation,
 };

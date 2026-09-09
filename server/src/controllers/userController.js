@@ -1,4 +1,5 @@
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
@@ -9,6 +10,8 @@ const {
   decorateProtectedUser,
   decorateProtectedUsers,
 } = require('../services/protectedAdmin');
+
+const generateTemporaryPassword = () => `Tmp!${crypto.randomBytes(15).toString('base64url')}`;
 
 const fetchUsers = async (req, res, next) => {
   try {
@@ -83,7 +86,7 @@ const createUser = async (req, res, next) => {
     if (existing.length > 0) throw new AppError('A user with this email already exists', 409);
 
     const id = uuidv4();
-    const rawPassword = password || `ChangeMe!123-${Math.random().toString(36).slice(2, 4)}`;
+    const rawPassword = password || generateTemporaryPassword();
     const passwordHash = await bcrypt.hash(rawPassword, 12);
 
     let tenantId = bodyTenantId || req.tenantId || null;
@@ -180,8 +183,8 @@ const updateUserStatus = async (req, res, next) => {
 const resetPassword = async (req, res, next) => {
   try {
     const { newPassword } = req.body;
-    if (!newPassword || newPassword.length < 6) {
-      throw new AppError('Password must be at least 6 characters', 400);
+    if (!newPassword || newPassword.length < 12) {
+      throw new AppError('Password must be at least 12 characters', 400);
     }
 
     const [rows] = await pool.query('SELECT id FROM users WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
@@ -278,7 +281,8 @@ const createSchoolSubUser = async (req, res, next) => {
     if (existing.length > 0) throw new AppError('A user with this email already exists', 409);
 
     const id = uuidv4();
-    const passwordHash = await bcrypt.hash(password || 'ChangeMe!123', 12);
+    if (!password || password.length < 12) throw new AppError('Password must be at least 12 characters', 400);
+    const passwordHash = await bcrypt.hash(password, 12);
     const resolvedMainId = mainSchoolUserId || req.user.id;
 
     await pool.query(
@@ -310,6 +314,10 @@ const deleteSchoolUser = async (req, res, next) => {
       [id, schoolRef]
     );
     if (rows.length === 0) throw new AppError('School user not found', 404);
+    if (req.user.role !== 'admin' && (req.user.school_access_role !== 'admin' || req.user.school_ref !== schoolRef)) {
+      throw new AppError('Only school admins can delete sub-users', 403);
+    }
+    if (rows[0].id === req.user.id) throw new AppError('You cannot delete your own account', 400);
 
     if (rows[0].school_access_role === 'admin') {
       const [admins] = await pool.query(
@@ -339,6 +347,9 @@ const updateUser = async (req, res, next) => {
 
     if (req.user.role !== 'admin' && req.tenantId && rows[0].tenant_id !== req.tenantId) {
       throw new AppError('Access denied', 403);
+    }
+    if (req.user.role !== 'admin' && (req.user.school_access_role !== 'admin' || rows[0].role !== 'school')) {
+      throw new AppError('Only school admins can update school sub-users', 403);
     }
 
     if (email && email !== rows[0].email) {

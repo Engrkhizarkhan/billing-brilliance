@@ -12,7 +12,7 @@ const DEFAULT_CFG = {
   port:               Number(process.env.DB_PORT) || 3306,
   user:               process.env.DB_USER     || 'root',
   password:           process.env.DB_PASSWORD || '',
-  database:           process.env.DB_NAME     || 'payniva',
+  database:           process.env.DB_NAME     || 'Fintap',
   multipleStatements: true,
 };
 

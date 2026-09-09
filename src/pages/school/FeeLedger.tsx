@@ -11,7 +11,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { TablePagination } from '@/components/TablePagination';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatPKR } from '@/lib/formatters';
@@ -380,7 +380,7 @@ const FeeLedger = () => {
               <Button variant="outline" size="sm" className="rounded-lg">Update Bus Service</Button>
             </DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle>Bus Service for Existing Student</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Bus Service for Existing Student</DialogTitle><DialogDescription>Update this student’s transport-service dates and monthly charge.</DialogDescription></DialogHeader>
               <div className="space-y-4 pt-2">
                 <div className="flex items-center gap-2 rounded-lg border border-border p-3">
                   <Checkbox

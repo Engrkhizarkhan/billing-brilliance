@@ -48,7 +48,6 @@ const ENTITY_OPTIONS = [
   { value: 'invoice', label: 'Invoice' },
   { value: 'payment', label: 'Payment' },
   { value: 'tenant', label: 'Tenant' },
-  { value: 'bundle', label: 'Bundle' },
   { value: 'fee_plan', label: 'Fee Plan' },
   { value: 'applicant', label: 'Applicant' },
   { value: 'settings', label: 'Settings' },

@@ -10,11 +10,11 @@ import {
   LayoutDashboard, Users, CreditCard, BarChart3, Building2,
   GraduationCap, BookOpen, Award, Receipt, Wallet, History,
   LogOut, Menu, X, DollarSign, ChevronRight, Settings, Sun, Moon,
-  AlertTriangle, FileText, Shield, ClipboardList, Activity, Wifi, Package, FlaskConical, FileCode2, Webhook, Wrench,
+  AlertTriangle, FileText, Shield, ClipboardList, Activity, FlaskConical, FileCode2, Webhook,
   PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface NavItem {
   label: string;
@@ -28,16 +28,12 @@ const navItems: Record<UserRole, NavItem[]> = {
   admin: [
     { label: 'Dashboard', path: '/admin', icon: LayoutDashboard, group: 'Overview' },
     { label: 'Billers', path: '/admin/billers', icon: Building2, group: 'Management' },
-    { label: 'Bundles', path: '/admin/bundles', icon: Package, group: 'Management' },
     { label: 'Users', path: '/admin/users', icon: Users, group: 'Management' },
     { label: 'Transactions', path: '/admin/transactions', icon: CreditCard, group: 'Finance' },
+    { label: 'Verify Payment', path: '/admin/verify-payment', icon: Receipt, group: 'Finance' },
     { label: 'Cash Flow', path: '/admin/cashflow', icon: DollarSign, group: 'Finance' },
     { label: 'Reports', path: '/admin/reports', icon: BarChart3, group: 'Analytics' },
     { label: 'Audit Trail', path: '/admin/audit', icon: ClipboardList, group: 'Analytics' },
-    { label: '1LINK Sandbox', path: '/admin/onelink-sandbox', icon: Wifi, group: 'System' },
-    { label: 'FetchBundle Sandbox', path: '/admin/fetchbundle-sandbox', icon: FlaskConical, group: 'System' },
-    { label: 'API Reference', path: '/admin/api-reference', icon: FileCode2, group: 'System' },
-    { label: 'Dev Tools', path: '/admin/dev-tools', icon: Wrench, group: 'System' },
   ],
   school: [
     { label: 'Dashboard', path: '/school', icon: LayoutDashboard, group: 'Overview' },
@@ -139,7 +135,7 @@ const DashboardLayout = () => {
       {/* Session timeout warning */}
       <Dialog open={showWarning} onOpenChange={() => {}}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Session Expiring</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Session Expiring</DialogTitle><DialogDescription>Your authenticated session is nearing its inactivity timeout.</DialogDescription></DialogHeader>
           <p className="text-sm text-muted-foreground">Your session will expire in 5 minutes due to inactivity.</p>
           <div className="flex gap-2 mt-2">
             <Button onClick={dismissWarning} className="flex-1 rounded-xl">Stay Logged In</Button>
@@ -158,7 +154,7 @@ const DashboardLayout = () => {
             <Building2 className="w-4 h-4 text-primary-foreground" />
           </div>
           <div className={`flex-1 min-w-0 ${sidebarCollapsed ? 'lg:hidden' : ''}`}>
-            <span className="font-bold text-[15px] tracking-tight">FinBill</span>
+            <span className="font-bold text-[15px] tracking-tight">Fintap</span>
             <p className="text-[10px] text-sidebar-muted leading-none mt-0.5">{roleLabels[user.role]}</p>
           </div>
           <button className="lg:hidden p-1.5 hover:bg-sidebar-accent rounded-lg" onClick={() => setSidebarOpen(false)}>
@@ -222,6 +218,8 @@ const DashboardLayout = () => {
       </aside>
 
       <div className="flex-1 h-screen flex flex-col min-w-0 overflow-hidden">
+        {user.tenantStatus === 'suspended' && <div className="bg-destructive text-destructive-foreground px-4 py-2 text-sm font-medium">This biller is suspended. Historical information remains available, but all changes and payment operations are disabled.</div>}
+        {user.tenantLifecycleStage && user.tenantLifecycleStage !== 'live' && <div className="bg-amber-500 text-white px-4 py-2 text-sm font-medium">Testing phase — production collection APIs are disabled until platform activation. Use the isolated sandbox environment for test traffic.</div>}
         <header className="h-14 border-b bg-card flex items-center px-4 md:px-6 gap-3 sticky top-0 z-30 shadow-sm shadow-foreground/[0.02]">
           <button className="lg:hidden p-2 hover:bg-muted rounded-lg" onClick={() => setSidebarOpen(true)}>
             <Menu className="w-5 h-5 text-foreground" />

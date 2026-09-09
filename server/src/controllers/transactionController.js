@@ -32,7 +32,10 @@ const fetchTransactions = async (req, res, next) => {
 
 const getTransaction = async (req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM transactions WHERE id = ?', [req.params.id]);
+    let where = 'WHERE id = ?';
+    const params = [req.params.id];
+    if (req.tenantId) { where += ' AND tenant_id = ?'; params.push(req.tenantId); }
+    const [rows] = await pool.query(`SELECT * FROM transactions ${where}`, params);
     if (rows.length === 0) {
       return res.status(404).json({ message: 'Transaction not found' });
     }

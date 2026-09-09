@@ -1,5 +1,5 @@
 -- =============================================================================
--- Payniva — Consolidated Database Schema
+-- Fintap — Consolidated Database Schema
 -- Version: 1.0.0  (incorporates migrations 001–011)
 -- Charset: utf8mb4 / utf8mb4_unicode_ci
 -- Engine:  InnoDB
@@ -9,6 +9,12 @@
 -- =============================================================================
 
 SET FOREIGN_KEY_CHECKS = 0;
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version    VARCHAR(100) PRIMARY KEY,
+  checksum   CHAR(64) NOT NULL,
+  applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================================================
 -- 1. TENANTS
@@ -23,13 +29,28 @@ CREATE TABLE IF NOT EXISTS tenants (
   email        VARCHAR(255) NOT NULL,
   phone        VARCHAR(20),
   status       ENUM('active','suspended','banned') NOT NULL DEFAULT 'active',
+  lifecycle_stage ENUM('testing','ready_for_live','live','offboarding') NOT NULL DEFAULT 'testing',
+  consumer_number_length TINYINT UNSIGNED NOT NULL DEFAULT 24,
+  next_consumer_sequence BIGINT UNSIGNED NOT NULL DEFAULT 1,
+  suspension_reason VARCHAR(500) NULL,
+  suspended_at TIMESTAMP NULL,
+  suspended_by VARCHAR(36) NULL,
+  restored_at TIMESTAMP NULL,
+  activated_at TIMESTAMP NULL,
+  activated_by VARCHAR(36) NULL,
+  activation_checklist JSON NULL,
   settings     JSON         DEFAULT NULL,
   api_key      VARCHAR(64)  NULL UNIQUE,
+  api_key_hash CHAR(64) NULL UNIQUE,
+  api_key_prefix VARCHAR(24) NULL,
+  api_key_scope ENUM('live','test') NOT NULL DEFAULT 'live',
+  api_key_rotated_at TIMESTAMP NULL,
   created_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
   updated_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   deleted_at   TIMESTAMP    NULL DEFAULT NULL,
   INDEX idx_tenants_type       (type),
   INDEX idx_tenants_status     (status),
+  INDEX idx_tenants_lifecycle  (lifecycle_stage),
   INDEX idx_tenants_biller_code(biller_code),
   INDEX idx_tenants_api_key    (api_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -324,14 +345,58 @@ CREATE TABLE IF NOT EXISTS payments (
   channel         VARCHAR(50),
   receipt_number  VARCHAR(100),
   note            TEXT,
+  source          ENUM('onelink','manual','org_callback','saas_api','sandbox_simulator') NOT NULL DEFAULT 'manual',
+  status          ENUM('posted','reversed','voided') NOT NULL DEFAULT 'posted',
+  received_at     DATETIME NULL,
+  created_by_user_id VARCHAR(36) NULL,
+  idempotency_key VARCHAR(255) NULL,
+  currency        CHAR(3) NOT NULL DEFAULT 'PKR',
+  reversal_of_payment_id VARCHAR(36) NULL,
   created_at      TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_payments_tenant   (tenant_id),
   INDEX idx_payments_student  (student_id),
   INDEX idx_payments_consumer (consumer_number),
   INDEX idx_payments_reference(reference),
   UNIQUE KEY uk_payments_reference_tenant (reference, tenant_id),
+  UNIQUE KEY uk_payments_idempotency_tenant (idempotency_key, tenant_id),
+  INDEX idx_payments_received (tenant_id, received_at),
   FOREIGN KEY (tenant_id)  REFERENCES tenants(id)  ON DELETE RESTRICT,
   FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Every payment is explicitly allocated to the bill(s) it settles.
+CREATE TABLE IF NOT EXISTS payment_allocations (
+  id          VARCHAR(36) PRIMARY KEY,
+  tenant_id   VARCHAR(36) NOT NULL,
+  payment_id  VARCHAR(36) NOT NULL,
+  target_type ENUM('invoice','org_payment','ledger_charge') NOT NULL,
+  target_id   VARCHAR(36) NOT NULL,
+  amount      DECIMAL(15,2) NOT NULL,
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_payment_allocation_target (payment_id, target_type, target_id),
+  INDEX idx_allocations_tenant (tenant_id),
+  INDEX idx_allocations_target (target_type, target_id),
+  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT,
+  FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Transactional hand-off for webhooks and other retryable side effects.
+CREATE TABLE IF NOT EXISTS outbox_events (
+  id             VARCHAR(36) PRIMARY KEY,
+  tenant_id      VARCHAR(36) NULL,
+  event_type     VARCHAR(100) NOT NULL,
+  aggregate_type VARCHAR(100) NOT NULL,
+  aggregate_id   VARCHAR(100) NOT NULL,
+  payload        JSON NOT NULL,
+  status         ENUM('pending','processing','delivered','failed') NOT NULL DEFAULT 'pending',
+  attempts       INT UNSIGNED NOT NULL DEFAULT 0,
+  available_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  processing_started_at DATETIME NULL,
+  processed_at   DATETIME NULL,
+  last_error     TEXT NULL,
+  created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_outbox_delivery (status, available_at),
+  INDEX idx_outbox_tenant (tenant_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================================================
@@ -376,6 +441,7 @@ CREATE TABLE IF NOT EXISTS applicants (
   qualification      VARCHAR(100),
   consumer_number    VARCHAR(24)   NOT NULL,
   bill_id            VARCHAR(50)   NOT NULL,
+  seq_number         INT UNSIGNED  NOT NULL DEFAULT 0,
   payment_status     ENUM('paid','pending','partial') NOT NULL DEFAULT 'pending',
   application_status ENUM('submitted','fee_pending','fee_paid','roll_assigned','test_scheduled','appeared','result_pending','selected','rejected') NOT NULL DEFAULT 'submitted',
   service_id         VARCHAR(36),
@@ -393,6 +459,7 @@ CREATE TABLE IF NOT EXISTS applicants (
   INDEX idx_applicants_status  (application_status),
   INDEX idx_applicants_service (service_id),
   INDEX idx_applicants_payment (payment_status),
+  INDEX idx_applicants_seq     (tenant_id, seq_number),
   FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -555,18 +622,21 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE TABLE IF NOT EXISTS refresh_tokens (
   id         VARCHAR(36)  PRIMARY KEY,
   user_id    VARCHAR(36)  NOT NULL,
-  token      VARCHAR(500) NOT NULL,
+  token      VARCHAR(500) NULL,
+  token_hash CHAR(64) NOT NULL,
   expires_at TIMESTAMP    NOT NULL,
   created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
   revoked_at TIMESTAMP    NULL,
   INDEX idx_refresh_user  (user_id),
   INDEX idx_refresh_token (token(255)),
+  UNIQUE KEY uk_refresh_token_hash (token_hash),
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================================================
 -- 23. 1LINK BILL BUNDLES
--- FetchBundle response cache per PCID (Company UCID)
+-- Legacy bundle tables retained for one release as rollback-only data.
+-- No application route or controller reads these tables.
 -- amount / expiry_date stored as strings per 1LINK Generic REST Spec v1.5
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS bill_bundles (

@@ -8,13 +8,14 @@ import { TablePagination } from '@/components/TablePagination';
 import { EmptyState } from '@/components/EmptyState';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Receipt, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePaymentStore } from '@/store/paymentStore';
 import { formatPKR } from '@/lib/formatters';
+import { RecordPaymentDialog } from '@/components/RecordPaymentDialog';
 
 const InvoiceList = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
@@ -87,7 +88,7 @@ const InvoiceList = () => {
             <Button className="gap-2"><RefreshCw className="w-4 h-4" />Generate Invoices</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Generate Monthly Invoices</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>Generate Monthly Invoices</DialogTitle><DialogDescription>Create invoices from active student fee-plan assignments for the selected month.</DialogDescription></DialogHeader>
             <div className="space-y-4 pt-2">
               <p className="text-sm text-muted-foreground">Creates one invoice per active tuition-plan assignment and skips existing student, plan, and month combinations.</p>
               <div className="space-y-2">
@@ -131,7 +132,7 @@ const InvoiceList = () => {
             <TableHeader><TableRow>
               <TableHead>Invoice</TableHead><TableHead>Student</TableHead><TableHead>Class</TableHead>
               <TableHead>Consumer #</TableHead><TableHead>Month</TableHead><TableHead className="text-right">Amount</TableHead>
-              <TableHead>Status</TableHead><TableHead>Due date</TableHead><TableHead className="w-10" />
+              <TableHead>Status</TableHead><TableHead>Due date</TableHead><TableHead>Actions</TableHead>
             </TableRow></TableHeader>
             <TableBody>
               {invoices.map((invoice) => (
@@ -145,11 +146,7 @@ const InvoiceList = () => {
                   <TableCell><StatusBadge status={invoice.status} /></TableCell>
                   <TableCell className="text-xs text-muted-foreground">{invoice.dueDate}</TableCell>
                   <TableCell>
-                    {invoice.status === 'pending' && (
-                      <button type="button" title="Delete invoice" disabled={deletingId === invoice.id} onClick={() => handleDeleteInvoice(invoice.id, invoice.invoiceNumber)} className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-50">
-                        {deletingId === invoice.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                      </button>
-                    )}
+                    {invoice.status !== 'paid' && <div className="flex items-center gap-1"><RecordPaymentDialog targetType="invoice" targetId={invoice.id} consumerNumber={invoice.consumerNumber} payerLabel={invoice.studentName} amount={Number(invoice.amount) + (new Date(`${invoice.dueDate}T23:59:59`) < new Date() ? Number(invoice.lateFee || 0) : 0)} onSuccess={refetchInvoices} /><button type="button" title="Delete invoice" disabled={deletingId === invoice.id} onClick={() => handleDeleteInvoice(invoice.id, invoice.invoiceNumber)} className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-50">{deletingId === invoice.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}</button></div>}
                   </TableCell>
                 </TableRow>
               ))}

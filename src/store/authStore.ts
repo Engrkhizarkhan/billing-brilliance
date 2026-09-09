@@ -25,7 +25,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async (email: string, password: string) => {
     const response = await api.login(email, password);
     if (response.data) {
-      setTokens(response.data.token, response.data.refreshToken);
+      setTokens(response.data.token);
       set({
         user: response.data.user,
         isAuthenticated: true,

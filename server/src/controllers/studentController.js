@@ -1,21 +1,9 @@
 const { v4: uuidv4 } = require('uuid');
-const config = require('../config');
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const { auditLog } = require('../middleware/auditLog');
 const { createRequestNotification } = require('../services/notificationService');
-
-const FINTECH_PREFIX = config.fintechPrefix || '123456';
-
-const generateConsumerNumber = (billerCode, sequence) => {
-  const prefix = String(FINTECH_PREFIX);
-  const code = String(billerCode);
-  const sequenceWidth = 20 - prefix.length - code.length;
-  if (sequenceWidth < 1 || String(sequence).length > sequenceWidth) {
-    throw new AppError('Unable to generate a 1BILL-compatible 20-digit consumer number', 500, 'CONSUMER_NUMBER_EXHAUSTED');
-  }
-  return `${prefix}${code}${String(sequence).padStart(sequenceWidth, '0')}`;
-};
+const { allocateConsumerNumber } = require('../services/consumerNumberService');
 
 const fetchStudents = async (req, res, next) => {
   try {
@@ -156,27 +144,15 @@ const createStudent = async (req, res, next) => {
     const tenantId = req.tenantId || req.body.tenantId;
     if (!tenantId) throw new AppError('Tenant ID is required', 400);
 
-    // Get tenant for biller code
-    const [tenants] = await pool.query('SELECT biller_code FROM tenants WHERE id = ?', [tenantId]);
-    if (tenants.length === 0) throw new AppError('Tenant not found', 404);
-    const billerCode = tenants[0].biller_code;
-
-    // Get sequence — use MAX()+1 inside a transaction to avoid race conditions
+    // Allocate and insert in one transaction so concurrent requests cannot collide.
     const conn = await pool.getConnection();
     let seq, id, consumerNumber, billId;
     try {
       await conn.beginTransaction();
-      await conn.query('SELECT id FROM tenants WHERE id = ? FOR UPDATE', [tenantId]);
-      const [[seqRow]] = await conn.query(
-        'SELECT COALESCE(MAX(seq_number), 0) + 1 AS next_seq FROM students WHERE tenant_id = ?',
-        [tenantId]
-      );
-      seq = seqRow.next_seq;
-      consumerNumber = req.body.consumerNumber || generateConsumerNumber(billerCode, seq);
-      if (!/^\d{1,24}$/.test(consumerNumber) || !consumerNumber.startsWith(String(FINTECH_PREFIX))) {
-        throw new AppError(`Consumer number must be numeric, at most 24 digits, and start with ${FINTECH_PREFIX}`, 400, 'INVALID_CONSUMER_NUMBER');
-      }
-      billId = req.body.billId || `SCH-${billerCode}-${String(seq).padStart(5, '0')}`;
+      const allocated = await allocateConsumerNumber(conn, tenantId);
+      seq = allocated.sequence;
+      consumerNumber = allocated.consumerNumber;
+      billId = `SCH-${allocated.billerCode}-${String(seq).padStart(5, '0')}`;
 
       id = uuidv4();
       const {

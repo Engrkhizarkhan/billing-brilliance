@@ -114,6 +114,10 @@ const SchoolSettings = () => {
       toast.error('Name, email, and password are required');
       return;
     }
+    if (newUser.password.length < 12) {
+      toast.error('Password must be at least 12 characters');
+      return;
+    }
 
     try {
       const response = await api.createSchoolSubUser({
@@ -299,7 +303,7 @@ const SchoolSettings = () => {
               </div>
               <div className="space-y-2">
                 <Label>Password</Label>
-                <Input type="password" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder="••••••••" />
+                <Input type="password" minLength={12} value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder="At least 12 characters" />
               </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">

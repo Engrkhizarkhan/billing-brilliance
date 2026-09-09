@@ -20,7 +20,7 @@ type EndpointDoc = {
 
 const endpoints: EndpointDoc[] = [
   {
-    id: 'health', method: 'GET', path: '/api/health', title: 'Service health', audience: 'Public',
+    id: 'health', method: 'GET', path: '/api/payments/health', title: 'Organization payment service health', audience: 'Public',
     description: 'Confirms that the organization payment API process is reachable.',
     response: { data: { status: 'ok', service: 'org-payment-controller', timestamp: '2026-09-05T08:00:00.000Z' } },
     notes: ['No request body or API key is required.', 'Use /api/ready for infrastructure readiness checks, including database connectivity.'],
@@ -42,22 +42,22 @@ const endpoints: EndpointDoc[] = [
     id: 'bill-inquiry', method: 'POST', path: '/api/1.0/Payments/BillInquiry', title: '1BILL balance inquiry', audience: '1LINK network',
     description: 'Allows 1LINK to validate a consumer number and retrieve the payable amount.',
     request: { consumer_number: '10517220010000000001', bank_mnemonic: 'UBL', reserved: '' },
-    response: { response_Code: '00', consumer_detail: 'EXAMPLE APPLICANT             ', bill_status: 'U', due_date: '20260910', amount_within_dueDate: '+0000000250000', amount_after_dueDate: '+0000000250000', billing_month: '202609', date_paid: '', amount_paid: '', tran_auth_Id: '', reserved: '' },
+    response: { response_Code: '00', consumer_detail: 'EXAMPLE APPLICANT             ', bill_status: 'U', due_date: '20260910', amount_within_dueDate: '+0000000250000', amount_after_dueDate: '+0000000250000', billing_month: '2609', date_paid: '', amount_paid: '', tran_auth_Id: '', reserved: '' },
     notes: ['Uses the dedicated 1LINK username/password and network allowlist, not the organization X-API-Key.', 'Consumer identifiers are numeric and may be up to 24 digits for the agreed UAT edge case.'],
   },
   {
     id: 'bill-payment', method: 'POST', path: '/api/1.0/Payments/BillPayment', title: '1BILL payment notification', audience: '1LINK network',
     description: 'Posts the successful payment transaction against the invoice with duplicate protection.',
-    request: { consumer_number: '10517220010000000001', tran_auth_id: 'A1B2C3', transaction_amount: '000000250000', tran_date: '20260905', tran_time: '131240', bank_mnemonic: 'UBL', reserved: '' },
+    request: { consumer_number: '10517220010000000001', tran_auth_id: '698243', transaction_amount: '000000250000', tran_date: '20260905', tran_time: '131240', bank_mnemonic: 'UBL', reserved: '' },
     response: { response_Code: '00', Identification_parameter: 'A1B2C3' },
     notes: ['The transaction amount must exactly match the amount currently due.', 'Repeating the same transaction is handled idempotently and does not create a second ledger posting.'],
   },
   {
     id: 'webhook', method: 'POST', path: 'Your configured HTTPS webhook URL', title: 'Payment-status webhook', audience: 'Your organization endpoint',
-    description: 'FinBill pushes a signed notification to your system after the payment state changes.',
-    request: { application_id: 'FORM-2026-00041', status: 'paid', transaction_id: '1LK9A2B3', paid_at: '2026-09-05 08:12:40' },
+    description: 'Fintap pushes a signed notification to your system after the payment state changes.',
+    request: { event_id: '60dfe530-8b37-4b59-80df-a5524b735993', event_type: 'payment.posted', created_at: '2026-09-05T08:12:41.000Z', data: { paymentId: '2b624b2e-54ca-4a58-a8e9-57e194f34d4d', consumerNumber: '10517220010000000001', amount: 2500, currency: 'PKR', reference: '1LK9A2B3' } },
     response: { acknowledged: true },
-    notes: ['Verify X-Webhook-Signature using HMAC-SHA256 before processing the body.', 'Return a 2xx response quickly and deduplicate events by transactionId/applicationId. Configure and test the URL under Webhook Config.'],
+    notes: ['Verify X-Webhook-Signature using HMAC-SHA256 over the exact raw JSON body before processing it.', 'Return a 2xx response quickly and deduplicate events by X-Fintap-Event-Id/event_id. Delivery is retried with backoff. Configure and test the URL under Webhook Config.'],
   },
 ];
 
@@ -92,13 +92,13 @@ const OrgApiIntegration = () => (
     <div>
       <div className="mb-2 flex items-center gap-2"><Code2 className="h-5 w-5 text-primary" /><Badge variant="outline">API v1</Badge></div>
       <h1 className="page-header">API Integration</h1>
-      <p className="page-description max-w-3xl">Implementation reference for connecting your organization system to FinBill and the 1BILL invoice-payment flow.</p>
+      <p className="page-description max-w-3xl">Implementation reference for connecting your organization system to Fintap and the 1BILL invoice-payment flow.</p>
     </div>
 
     <div className="grid gap-4 lg:grid-cols-3">
       <Card><CardHeader><KeyRound className="h-5 w-5 text-primary" /><CardTitle className="text-base">Authentication</CardTitle><CardDescription>Send <code className="font-mono text-foreground">X-API-Key: YOUR_KEY</code> from server-side code only. Never expose the key in a browser or mobile bundle.</CardDescription></CardHeader></Card>
       <Card><CardHeader><LockKeyhole className="h-5 w-5 text-primary" /><CardTitle className="text-base">Transport security</CardTitle><CardDescription>Production calls require HTTPS. Configure approved source IPs and rotate credentials through Security settings.</CardDescription></CardHeader></Card>
-      <Card><CardHeader><Network className="h-5 w-5 text-primary" /><CardTitle className="text-base">Base URL</CardTitle><CardDescription><code className="font-mono text-foreground">https://app.fintap.com</code><br />Use the separately supplied UAT host during certification.</CardDescription></CardHeader></Card>
+      <Card><CardHeader><Network className="h-5 w-5 text-primary" /><CardTitle className="text-base">Base URL</CardTitle><CardDescription><code className="font-mono text-foreground">https://app.fintap.pk</code><br />Use the separately supplied sandbox host during certification; never send test traffic to production.</CardDescription></CardHeader></Card>
     </div>
 
     <Card>

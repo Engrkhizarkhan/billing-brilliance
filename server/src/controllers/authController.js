@@ -8,6 +8,8 @@ const { AppError } = require('../middleware/errorHandler');
 const { auditLog } = require('../middleware/auditLog');
 const { createNotification } = require('../services/notificationService');
 const { isProtectedAdminUser } = require('../services/protectedAdmin');
+const crypto = require('crypto');
+const hashToken = (token) => crypto.createHash('sha256').update(String(token)).digest('hex');
 
 // Parse a JWT duration string (e.g. "7d", "24h", "3600s") into milliseconds.
 const parseDurationMs = (str) => {
@@ -18,6 +20,20 @@ const parseDurationMs = (str) => {
   const units = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
   return n * units[match[2]];
 };
+
+const REFRESH_COOKIE = 'fintap_refresh';
+const readCookie = (req, name) => {
+  const item = String(req.headers.cookie || '').split(';').map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`));
+  return item ? decodeURIComponent(item.slice(name.length + 1)) : null;
+};
+const setRefreshCookie = (res, token) => res.cookie(REFRESH_COOKIE, token, {
+  httpOnly: true,
+  secure: config.nodeEnv === 'production',
+  sameSite: 'strict',
+  path: '/api/auth',
+  maxAge: parseDurationMs(config.jwt.refreshExpiresIn),
+});
 
 const generateTokens = (user) => {
   const accessToken = jwt.sign(
@@ -60,6 +76,14 @@ const login = async (req, res, next) => {
     if (user.status !== 'active') {
       throw new AppError('Account is not active', 403, 'ACCOUNT_INACTIVE');
     }
+    if (user.tenant_id) {
+      const [tenantState] = await pool.query(
+        'SELECT status FROM tenants WHERE id = ? AND deleted_at IS NULL LIMIT 1', [user.tenant_id]
+      );
+      if (!tenantState.length || tenantState[0].status === 'banned') {
+        throw new AppError('Tenant account is unavailable', 403, 'TENANT_INACTIVE');
+      }
+    }
 
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
     if (!isValidPassword) {
@@ -71,9 +95,11 @@ const login = async (req, res, next) => {
     // Store refresh token
     const expiresAt = new Date(Date.now() + parseDurationMs(config.jwt.refreshExpiresIn));
     await pool.query(
-      'INSERT INTO refresh_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)',
-      [uuidv4(), user.id, refreshToken, expiresAt]
+      'INSERT INTO refresh_tokens (id, user_id, token, token_hash, expires_at) VALUES (?, ?, NULL, ?, ?)',
+      [uuidv4(), user.id, hashToken(refreshToken), expiresAt]
     );
+
+    setRefreshCookie(res, refreshToken);
 
     // Update last login
     await pool.query('UPDATE users SET last_login_at = NOW() WHERE id = ?', [user.id]);
@@ -94,19 +120,21 @@ const login = async (req, res, next) => {
     // Normalize legacy 'etea' role to 'org'
     if (safeUser.role === 'etea') safeUser.role = 'org';
 
-    // Attach tenant API key so dashboard can display it in settings
+    // API key secrets are never returned after their one-time creation/rotation response.
     if (user.tenant_id) {
       const [tenantRows] = await pool.query(
-        'SELECT api_key FROM tenants WHERE id = ? AND deleted_at IS NULL',
+        'SELECT api_key_prefix, status, lifecycle_stage, consumer_number_length FROM tenants WHERE id = ? AND deleted_at IS NULL',
         [user.tenant_id]
       );
-      safeUser.tenantApiKey = tenantRows[0]?.api_key || null;
+      safeUser.tenantApiKeyPrefix = tenantRows[0]?.api_key_prefix || null;
+      safeUser.tenantStatus = tenantRows[0]?.status || null;
+      safeUser.tenantLifecycleStage = tenantRows[0]?.lifecycle_stage || null;
+      safeUser.consumerNumberLength = Number(tenantRows[0]?.consumer_number_length) || null;
     }
 
     res.json({
       data: {
         token: accessToken,
-        refreshToken,
         user: safeUser,
       },
       message: 'Login successful',
@@ -118,7 +146,7 @@ const login = async (req, res, next) => {
 
 const refreshToken = async (req, res, next) => {
   try {
-    const { refreshToken: token } = req.body;
+    const token = readCookie(req, REFRESH_COOKIE) || req.body.refreshToken;
     if (!token) {
       throw new AppError('Refresh token required', 400);
     }
@@ -126,8 +154,8 @@ const refreshToken = async (req, res, next) => {
     const decoded = jwt.verify(token, config.jwt.refreshSecret);
 
     const [rows] = await pool.query(
-      'SELECT * FROM refresh_tokens WHERE token = ? AND user_id = ? AND revoked_at IS NULL AND expires_at > NOW()',
-      [token, decoded.userId]
+      'SELECT * FROM refresh_tokens WHERE token_hash = ? AND user_id = ? AND revoked_at IS NULL AND expires_at > NOW()',
+      [hashToken(token), decoded.userId]
     );
 
     if (rows.length === 0) {
@@ -145,7 +173,7 @@ const refreshToken = async (req, res, next) => {
     }
 
     // Revoke old token
-    await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE token = ?', [token]);
+    await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE token_hash = ?', [hashToken(token)]);
 
     const user = userRows[0];
     const tokens = generateTokens(user);
@@ -153,14 +181,14 @@ const refreshToken = async (req, res, next) => {
     // Store new refresh token
     const expiresAt = new Date(Date.now() + parseDurationMs(config.jwt.refreshExpiresIn));
     await pool.query(
-      'INSERT INTO refresh_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)',
-      [uuidv4(), user.id, tokens.refreshToken, expiresAt]
+      'INSERT INTO refresh_tokens (id, user_id, token, token_hash, expires_at) VALUES (?, ?, NULL, ?, ?)',
+      [uuidv4(), user.id, hashToken(tokens.refreshToken), expiresAt]
     );
 
+    setRefreshCookie(res, tokens.refreshToken);
     res.json({
       data: {
         token: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
       },
     });
   } catch (err) {
@@ -173,10 +201,13 @@ const refreshToken = async (req, res, next) => {
 
 const logout = async (req, res, next) => {
   try {
-    const { refreshToken: token } = req.body;
+    const token = readCookie(req, REFRESH_COOKIE) || req.body.refreshToken;
     if (token) {
-      await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE token = ?', [token]);
+      await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE token_hash = ?', [hashToken(token)]);
     }
+    res.clearCookie(REFRESH_COOKIE, {
+      httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'strict', path: '/api/auth',
+    });
     await auditLog(req, 'logout', 'user', req.user?.id, 'User logged out');
     res.json({ message: 'Logged out successfully' });
   } catch (err) {
@@ -190,10 +221,13 @@ const getProfile = async (req, res, next) => {
   void password_hash;
   if (req.user.tenant_id) {
     const [tenantRows] = await pool.query(
-      'SELECT api_key FROM tenants WHERE id = ? AND deleted_at IS NULL',
+      'SELECT api_key_prefix, status, lifecycle_stage, consumer_number_length FROM tenants WHERE id = ? AND deleted_at IS NULL',
       [req.user.tenant_id]
     );
-    safeUser.tenantApiKey = tenantRows[0]?.api_key || null;
+    safeUser.tenantApiKeyPrefix = tenantRows[0]?.api_key_prefix || null;
+    safeUser.tenantStatus = tenantRows[0]?.status || null;
+    safeUser.tenantLifecycleStage = tenantRows[0]?.lifecycle_stage || null;
+    safeUser.consumerNumberLength = Number(tenantRows[0]?.consumer_number_length) || null;
   }
   res.set('Cache-Control', 'no-store');
   res.json({ data: safeUser });
@@ -286,16 +320,6 @@ const impersonate = async (req, res, next) => {
       { expiresIn: '30m' }
     );
 
-    // Attach tenant API key so tenant pages work
-    let tenantApiKey = null;
-    if (target.tenant_id) {
-      const [tenantRows] = await pool.query(
-        'SELECT api_key FROM tenants WHERE id = ? AND deleted_at IS NULL',
-        [target.tenant_id]
-      );
-      tenantApiKey = tenantRows[0]?.api_key || null;
-    }
-
     // Audit the admin action — NOT the target user's login
     await auditLog(
       req,
@@ -313,7 +337,7 @@ const impersonate = async (req, res, next) => {
     return res.json({
       data: {
         token: impersonationToken,
-        user: { ...safeTarget, tenantApiKey },
+        user: safeTarget,
       },
       message: 'Impersonation session started',
     });

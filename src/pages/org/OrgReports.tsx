@@ -1,16 +1,14 @@
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, LineChart, Line,
 } from 'recharts';
 import { formatPKR } from '@/lib/formatters';
-import { resolvePostingById, setOrgFinanceCache } from '@/lib/orgFinance';
 import { usePaymentStore } from '@/store/paymentStore';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
-import { OrgPaymentRecord, OrgPosting } from '@/types';
 import { Loader2, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -23,71 +21,31 @@ const STATUS_COLORS: Record<string, string> = {
 const OrgReports = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
 
-  const { data: paymentsData, loading } = useApiQuery(() => api.listOrgPayments(), [paymentVersion]);
-  const paymentRecords = useMemo(() => (paymentsData || []) as OrgPaymentRecord[], [paymentsData]);
-
-  const { data: postingsData } = useApiQuery(() => api.fetchPostings(), []);
-  useEffect(() => {
-    if (postingsData) setOrgFinanceCache(postingsData as OrgPosting[], []);
-  }, [postingsData]);
+  const { data: statsData, loading } = useApiQuery(() => api.getOrgStats(), [paymentVersion]);
 
   // ── Monthly collections (bar + line combined) ─────────────────────────────
-  const monthlyCollections = useMemo(() => {
-    const byMonth = new Map<string, { collected: number; requests: number; failed: number }>();
-    paymentRecords.forEach((p) => {
-      const key = (p.paidAt || p.createdAt).slice(0, 7);
-      const current = byMonth.get(key) || { collected: 0, requests: 0, failed: 0 };
-      current.requests += 1;
-      if (p.status === 'paid') current.collected += Number(p.amount);
-      if (p.status === 'failed' || p.status === 'expired') current.failed += 1;
-      byMonth.set(key, current);
-    });
-    return Array.from(byMonth.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, data]) => {
-        const [year, monthNum] = key.split('-').map(Number);
-        return {
-          month: new Date(year, monthNum - 1, 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
-          collected: data.collected,
-          requests: data.requests,
-          failed: data.failed,
-        };
-      });
-  }, [paymentRecords]);
+  const monthlyCollections = useMemo(() => (statsData?.collectionTrend || []).map((row) => ({
+    month: row.month, collected: Number(row.revenue), requests: Number(row.requests), failed: Number(row.failed),
+  })), [statsData]);
 
   // ── Status distribution (pie) ─────────────────────────────────────────────
   const statusDistribution = useMemo(() => {
-    const counts: Record<string, number> = { paid: 0, pending: 0, failed: 0, expired: 0 };
-    paymentRecords.forEach((p) => { counts[p.status] = (counts[p.status] || 0) + 1; });
+    const counts: Record<string, number> = statsData?.statusDistribution || {};
     return Object.entries(counts).filter(([, v]) => v > 0).map(([name, value]) => ({ name, value }));
-  }, [paymentRecords]);
+  }, [statsData]);
 
   // ── Per-posting revenue (table + bar) ─────────────────────────────────────
-  const postingRevenue = useMemo(() => {
-    const postingMap = new Map<string, { posting: string; totalRequests: number; paidRequests: number; pendingRequests: number; failedRequests: number; collected: number; avgAmount: number }>();
-    paymentRecords.forEach((p) => {
-      const posting = resolvePostingById(p.postingId);
-      const key = posting.id;
-      const current = postingMap.get(key) || { posting: posting.title, totalRequests: 0, paidRequests: 0, pendingRequests: 0, failedRequests: 0, collected: 0, avgAmount: 0 };
-      current.totalRequests += 1;
-      if (p.status === 'paid') { current.paidRequests += 1; current.collected += Number(p.amount); }
-      if (p.status === 'pending') current.pendingRequests += 1;
-      if (p.status === 'failed' || p.status === 'expired') current.failedRequests += 1;
-      postingMap.set(key, current);
-    });
-    return Array.from(postingMap.values())
-      .map((r) => ({ ...r, avgAmount: r.paidRequests > 0 ? r.collected / r.paidRequests : 0 }))
-      .sort((a, b) => b.collected - a.collected);
-  }, [paymentRecords]);
+  const postingRevenue = useMemo(() => statsData?.postingRevenue || [], [statsData]);
 
   // ── Top-line stats ────────────────────────────────────────────────────────
-  const totalCollected = postingRevenue.reduce((sum, r) => sum + r.collected, 0);
-  const paidCount = paymentRecords.filter((p) => p.status === 'paid').length;
-  const pendingCount = paymentRecords.filter((p) => p.status === 'pending').length;
-  const failedExpiredCount = paymentRecords.filter((p) => p.status === 'failed' || p.status === 'expired').length;
-  const collectionRate = paymentRecords.length > 0 ? Math.round((paidCount / paymentRecords.length) * 100) : 0;
-  const verifiedTransactions = paymentRecords.filter((p) => p.status === 'paid' && p.transactionId).length;
-  const pendingValue = paymentRecords.filter((p) => p.status === 'pending').reduce((sum, p) => sum + Number(p.amount), 0);
+  const totalCollected = Number(statsData?.feeCollected || 0);
+  const paidCount = Number(statsData?.paid || 0);
+  const pendingCount = Number(statsData?.pending || 0);
+  const failedExpiredCount = Number(statsData?.failed || 0) + Number(statsData?.expired || 0);
+  const totalRequests = Number(statsData?.totalRequests || 0);
+  const collectionRate = totalRequests > 0 ? Math.round((paidCount / totalRequests) * 100) : 0;
+  const verifiedTransactions = Number(statsData?.verifiedTransactions || 0);
+  const pendingValue = Number(statsData?.pendingValue || 0);
   const avgPayment = paidCount > 0 ? totalCollected / paidCount : 0;
 
   // ── Month-over-month growth ───────────────────────────────────────────────
@@ -198,7 +156,7 @@ const OrgReports = () => {
             </div>
             <div className="rounded-lg border bg-blue-500/5 p-3 text-center">
               <p className="text-xs text-muted-foreground">Total Requests</p>
-              <p className="text-2xl font-bold">{paymentRecords.length}</p>
+              <p className="text-2xl font-bold">{totalRequests}</p>
             </div>
             <div className="rounded-lg border bg-warning/5 p-3 text-center">
               <p className="text-xs text-muted-foreground">Pending</p>

@@ -13,16 +13,12 @@ import NotFound from "./pages/NotFound";
 
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const BillerManagement = lazy(() => import("./pages/admin/BillerManagement"));
-const BundleManagement = lazy(() => import("./pages/admin/BundleManagement"));
 const UserManagement = lazy(() => import("./pages/admin/UserManagement"));
 const TransactionList = lazy(() => import("./pages/admin/TransactionList"));
+const AdminPaymentVerification = lazy(() => import("./pages/admin/AdminPaymentVerification"));
 const CashFlow = lazy(() => import("./pages/admin/CashFlow"));
 const Reports = lazy(() => import("./pages/admin/Reports"));
 const AuditTrail = lazy(() => import("./pages/admin/AuditTrail"));
-const OneLinkSandbox = lazy(() => import("./pages/admin/OneLinkSandbox"));
-const FetchBundleSandbox = lazy(() => import("./pages/admin/FetchBundleSandbox"));
-const ApiReference = lazy(() => import("./pages/admin/ApiReference"));
-const DevTools = lazy(() => import("./pages/admin/DevTools"));
 const SchoolDashboard = lazy(() => import("./pages/school/SchoolDashboard"));
 const StudentList = lazy(() => import("./pages/school/StudentList"));
 const FeePlans = lazy(() => import("./pages/school/FeePlans"));
@@ -85,16 +81,12 @@ const AppRoutes = () => {
           <Route path="/admin" element={<ProtectedRoute requiredRole="admin" />}>
             <Route index element={<AdminDashboard />} />
             <Route path="billers" element={<BillerManagement />} />
-            <Route path="bundles" element={<BundleManagement />} />
             <Route path="users" element={<UserManagement />} />
             <Route path="transactions" element={<TransactionList />} />
+            <Route path="verify-payment" element={<AdminPaymentVerification />} />
             <Route path="cashflow" element={<CashFlow />} />
             <Route path="reports" element={<Reports />} />
             <Route path="audit" element={<AuditTrail />} />
-            <Route path="onelink-sandbox" element={<OneLinkSandbox />} />
-            <Route path="fetchbundle-sandbox" element={<FetchBundleSandbox />} />
-            <Route path="api-reference" element={<ApiReference />} />
-            <Route path="dev-tools" element={<DevTools />} />
           </Route>
 
           <Route path="/school" element={<ProtectedRoute requiredRole="school" />}>

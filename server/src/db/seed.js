@@ -38,6 +38,12 @@ async function seed() {
         [t.id, t.name, t.type, t.biller_code, t.email, t.phone]
       );
     }
+    const [persistedTenants] = await connection.query(
+      'SELECT id, biller_code FROM tenants WHERE biller_code IN (?)',
+      [tenants.map((tenant) => tenant.biller_code)]
+    );
+    const tenantIdsByCode = new Map(persistedTenants.map((tenant) => [tenant.biller_code, tenant.id]));
+    tenants.forEach((tenant) => { tenant.id = tenantIdsByCode.get(tenant.biller_code); });
     logger.info(`Seeded ${tenants.length} tenants`);
 
     // ---- 2. Roles ----
@@ -169,6 +175,12 @@ async function seed() {
         [u.id, u.tenant_id, u.email, passwordHash, u.name, u.role, u.school_access_role, u.school_ref, u.main_school_user_id, status, u.verified]
       );
     }
+    const [persistedUsers] = await connection.query(
+      'SELECT id, email FROM users WHERE email IN (?)',
+      [users.map((user) => user.email)]
+    );
+    const userIdsByEmail = new Map(persistedUsers.map((user) => [user.email, user.id]));
+    users.forEach((user) => { user.id = userIdsByEmail.get(user.email); });
     logger.info(`Seeded ${users.length} users`);
 
     // ---- 5. Students (50 students for Beacon House + City Grammar) ----
@@ -368,7 +380,11 @@ async function seed() {
     // ---- 12. Invoices ----
     const invoiceMonths = ['Jan 2025', 'Feb 2025', 'Mar 2025'];
     const invoiceAmounts = [15000, 18000, 20000, 25000, 12000];
-    const invoiceStatuses = ['pending', 'paid', 'overdue'];
+    // Seed fixtures must not claim that money was collected without the
+    // canonical payment/allocation/ledger evidence created by postPayment().
+    // Keep sample invoices unpaid; payment-state examples belong in the
+    // integration fixtures that exercise the real posting service.
+    const invoiceStatuses = ['pending', 'pending', 'overdue'];
 
     // We need student consumer numbers for linking
     const [studentRows] = await connection.query(
@@ -395,7 +411,9 @@ async function seed() {
     logger.info('Seeded 30 invoices');
 
     // ---- 13. Transactions ----
-    const txnStatuses = ['completed', 'pending', 'failed'];
+    // A completed transaction is accounting evidence and must have a matching
+    // payment event. These standalone UI fixtures therefore model attempts only.
+    const txnStatuses = ['pending', 'failed'];
     for (let i = 0; i < 20; i++) {
       const student = studentRows[i % studentRows.length];
       const tenant = tenants[i % tenants.length];
@@ -408,7 +426,7 @@ async function seed() {
           `TXN-${String(100001 + i)}`,
           student.consumer_number,
           invoiceAmounts[i % 5],
-          txnStatuses[i % 3],
+          txnStatuses[i % txnStatuses.length],
           `2025-03-${String(Math.max(1, 28 - i)).padStart(2, '0')}`,
           tenant.name,
         ]

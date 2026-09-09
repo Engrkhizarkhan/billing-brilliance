@@ -1,4 +1,4 @@
-# Payniva — Database Schema Reference
+# Fintap — Database Schema Reference
 
 > **Single source of truth:** `server/src/db/schema.sql`  
 > Run migrations with `node server/src/db/migrate.js`  
@@ -44,9 +44,12 @@ Primary keys are **UUID v4** strings (`VARCHAR(36)`).
 | 24 | `notifications` | In-app notifications per user/tenant |
 | 25 | `settings` | Key-value config store per tenant |
 | 26 | `refresh_tokens` | JWT refresh token store |
-| 27 | `bill_bundles` | Tenant-scoped 1LINK bill bundles |
-| 28 | `bundles` | 1LINK FetchBundle cache per PCID |
-| 29 | `bundle_pcids` | 1LINK per-PCID API keys |
+| 27 | `bill_bundles` | Legacy bundle data retained for rollback only |
+| 28 | `bundles` | Legacy FetchBundle cache retained for rollback only |
+| 29 | `bundle_pcids` | Legacy PCID credentials retained for rollback only |
+| 30 | `payment_allocations` | Immutable link between a payment and its invoice/org target |
+| 31 | `outbox_events` | Durable signed webhook delivery queue |
+| 32 | `schema_migrations` | Applied migration/checksum ledger |
 
 ---
 
@@ -65,7 +68,12 @@ Root record for every biller on the platform.
 | `phone` | VARCHAR(20) | |
 | `status` | ENUM | `active` \| `suspended` \| `banned` |
 | `settings` | JSON | Tenant-level config blob |
-| `api_key` | VARCHAR(64) UNIQUE | External integration key (1BILL, SaaS gateway) |
+| `api_key_hash` | CHAR(64) | SHA-256 digest of the tenant integration key; the secret is never stored |
+| `api_key_prefix` | VARCHAR(32) | Non-secret display identifier |
+| `api_key_scope` | ENUM | `live` or `test`, bound to the runtime environment |
+| `lifecycle_stage` | ENUM | `testing`, `ready_for_live`, `live`, or `offboarding` |
+| `consumer_number_length` | SMALLINT | New identifier policy: 14 or 24 digits |
+| `consumer_sequence` | BIGINT | Transaction-locked allocator sequence |
 
 ---
 
@@ -144,9 +152,9 @@ One payment request per applicant per posting.
 
 ---
 
-### `bundles` + `bundle_pcids`
-1LINK FetchBundle cache and PCID API-key store.  
-`bundle_pcids.biller_id` optionally links a PCID to a tenant so the SaaS gateway scopes consumer queries correctly.
+### Legacy bundle tables
+
+`bill_bundles`, `bundles`, and `bundle_pcids` are retained for one rollback release only. There are no active application routes or readers for FetchBundle. Removal requires written 1LINK invoice-only scope confirmation, a verified backup, and a later forward migration.
 
 ---
 

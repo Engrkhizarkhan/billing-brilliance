@@ -2,12 +2,12 @@ const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const config = require('../config');
 
-const FINTECH_PREFIX = config.fintechPrefix || '123456';
 const { pool } = require('../config/database');
 const logger = require('../config/logger');
 const { AppError } = require('../middleware/errorHandler');
 const { auditLog } = require('../middleware/auditLog');
-const { assertSafePublicHttpsUrl } = require('../services/urlSafety');
+const { allocateConsumerNumber } = require('../services/consumerNumberService');
+const { postPayment } = require('../services/paymentPostingService');
 
 const CALLBACK_URL = config.org.callbackUrl;
 const WEBHOOK_SECRET = config.org.webhookSecret;
@@ -67,7 +67,9 @@ const assertSecurity = async (req, options = {}) => {
       );
       let setting = {};
       if (settingRows.length > 0) {
-        try { setting = JSON.parse(settingRows[0].value); } catch { /* handled below */ }
+        const rawValue = settingRows[0].value;
+        if (rawValue && typeof rawValue === 'object') setting = rawValue;
+        else try { setting = JSON.parse(rawValue); } catch { /* handled below */ }
       }
       const rawIps = setting.sourceIp;
       const allowedIps = (Array.isArray(rawIps) ? rawIps : String(rawIps || '').split(','))
@@ -111,16 +113,20 @@ const toMySQLDatetime = (value) => {
 };
 
 // ---- Expire stale payment ----
-const ensurePaymentNotStale = async (payment) => {
+const ensurePaymentNotStale = async (payment, executor = pool) => {
   if (payment.status !== 'pending') return payment;
   if (parseDbDate(payment.expiry_date).getTime() > Date.now()) return payment;
 
-  await pool.query('UPDATE org_payment_records SET status = ? WHERE id = ?', ['expired', payment.id]);
+  await executor.query(
+    'UPDATE org_payment_records SET status = ? WHERE id = ? AND tenant_id = ?',
+    ['expired', payment.id, payment.tenant_id]
+  );
   return { ...payment, status: 'expired' };
 };
 
 // ---- POST /api/payments/create ----
 const createPayment = async (req, res, next) => {
+  let connection;
   try {
     await assertSecurity(req);
 
@@ -132,14 +138,28 @@ const createPayment = async (req, res, next) => {
     if (!normalized.postingId) throw new AppError('posting_id is required', 400);
     if (!normalized.amount || normalized.amount <= 0) throw new AppError('Amount must be > 0', 400);
 
-    // Check for existing payment (idempotent)
-    const [existingRows] = await pool.query(
-      'SELECT * FROM org_payment_records WHERE application_id = ? AND tenant_id = ?',
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    // Tenant lock also serializes consumer-number allocation and lifecycle changes.
+    const [tenantRows] = await connection.query(
+      `SELECT id, status, lifecycle_stage FROM tenants
+       WHERE id = ? AND deleted_at IS NULL FOR UPDATE`, [tenantId]
+    );
+    if (!tenantRows.length) throw new AppError('Tenant not found', 404, 'TENANT_NOT_FOUND');
+    if (tenantRows[0].status !== 'active') throw new AppError('Tenant is suspended', 403, 'TENANT_SUSPENDED');
+    if (config.appEnvironment === 'production' && tenantRows[0].lifecycle_stage !== 'live') {
+      throw new AppError('Tenant has not been activated for production', 403, 'TENANT_NOT_LIVE');
+    }
+
+    const [existingRows] = await connection.query(
+      'SELECT * FROM org_payment_records WHERE application_id = ? AND tenant_id = ? FOR UPDATE',
       [normalized.applicationId, tenantId]
     );
 
     if (existingRows.length > 0) {
-      const existing = await ensurePaymentNotStale(existingRows[0]);
+      const existing = await ensurePaymentNotStale(existingRows[0], connection);
+      await connection.commit();
       return res.json({
         data: {
           paymentId: existing.id,
@@ -155,7 +175,11 @@ const createPayment = async (req, res, next) => {
     // Resolve posting
     let description = normalized.description;
     if (!description) {
-      const [postingRows] = await pool.query('SELECT title FROM org_postings WHERE id = ? AND deleted_at IS NULL', [normalized.postingId]);
+      const [postingRows] = await connection.query(
+        'SELECT title FROM org_postings WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL',
+        [normalized.postingId, tenantId]
+      );
+      if (!postingRows.length) throw new AppError('Posting not found', 404, 'POSTING_NOT_FOUND');
       description = postingRows.length > 0
         ? `${postingRows[0].title} application fee`
         : `Payment for application ${normalized.applicationId}`;
@@ -179,34 +203,25 @@ const createPayment = async (req, res, next) => {
     if (!expiryDate || !createdAtDb) throw new AppError('Invalid expiry date', 400, 'INVALID_EXPIRY_DATE');
     const billId = `ORG-${id.split('-')[0].toUpperCase()}`;
 
-    // Standard production identifiers are 20 digits: assigned prefix + biller code + CSPRNG suffix.
-    // A custom 24-digit identifier can still be provisioned separately for the required UAT edge case.
-    const [tenantRows] = await pool.query('SELECT biller_code FROM tenants WHERE id = ?', [tenantId]);
-    if (!tenantRows.length) throw new AppError('Tenant not found', 404);
-    const billerCode = tenantRows[0].biller_code;
-    const suffixWidth = 20 - String(FINTECH_PREFIX).length - String(billerCode).length;
-    if (suffixWidth < 1 || !/^\d+$/.test(`${FINTECH_PREFIX}${billerCode}`)) {
-      throw new AppError('Tenant biller code cannot produce a numeric 20-digit 1BILL consumer number', 500, 'INVALID_BILLER_CODE');
-    }
-    const consumerNumber = `${FINTECH_PREFIX}${billerCode}${crypto.randomInt(0, 10 ** suffixWidth).toString().padStart(suffixWidth, '0')}`;
+    const { consumerNumber } = await allocateConsumerNumber(connection, tenantId);
 
-    await pool.query(
+    await connection.query(
       `INSERT INTO org_payment_records (id, tenant_id, application_id, applicant_id, posting_id, bill_id, consumer_number, amount, status, due_date, expiry_date, created_at, description, callback_url)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
       [id, tenantId, normalized.applicationId, normalized.applicantId, normalized.postingId, billId, consumerNumber,
         normalized.amount, dueDate, expiryDate, createdAtDb, description, CALLBACK_URL]
     );
 
-    const [rows] = await pool.query('SELECT * FROM org_payment_records WHERE id = ?', [id]);
-    const payment = rows[0];
-
-    await auditLog(req, 'create', 'org_payment', id, `Payment created for app ${normalized.applicationId}`);
-
-    // Record notification
-    await pool.query(
+    await connection.query(
       'INSERT INTO org_payment_notifications (id, tenant_id, application_id, payment_id, bill_id, status) VALUES (?, ?, ?, ?, ?, ?)',
       [uuidv4(), tenantId, normalized.applicationId, id, billId, 'pending']
     );
+    const [rows] = await connection.query('SELECT * FROM org_payment_records WHERE id = ? AND tenant_id = ?', [id, tenantId]);
+    const payment = rows[0];
+
+    await connection.commit();
+
+    await auditLog(req, 'create', 'org_payment', id, `Payment created for app ${normalized.applicationId}`);
 
     res.status(201).json({
       data: {
@@ -219,7 +234,10 @@ const createPayment = async (req, res, next) => {
       },
     });
   } catch (err) {
+    if (connection) await connection.rollback();
     next(err);
+  } finally {
+    if (connection) connection.release();
   }
 };
 
@@ -231,8 +249,8 @@ const getPaymentStatus = async (req, res, next) => {
     const { applicationId } = req.params;
 
     const [rows] = await pool.query(
-      'SELECT * FROM org_payment_records WHERE application_id = ?',
-      [applicationId]
+      'SELECT * FROM org_payment_records WHERE application_id = ? AND tenant_id = ?',
+      [applicationId, req.tenantId]
     );
 
     if (rows.length === 0) {
@@ -247,178 +265,6 @@ const getPaymentStatus = async (req, res, next) => {
         payment,
       },
     });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// ---- POST /api/payment/callback ----
-const processPaymentCallback = async (req, res, next) => {
-  try {
-    const callback = req.body;
-    await assertSecurity(req, { requireWebhookSignature: true, callback });
-
-    const idempotencyKey = (req.headers['x-idempotency-key'] || '').trim();
-
-    // Idempotency check
-    if (idempotencyKey) {
-      const [idemRows] = await pool.query(
-        'SELECT response FROM callback_idempotency_log WHERE idempotency_key = ?',
-        [idempotencyKey]
-      );
-      if (idemRows.length > 0) {
-        return res.json(JSON.parse(idemRows[0].response));
-      }
-    }
-
-    const storeIdempotency = async (response) => {
-      if (idempotencyKey) {
-        try {
-          await pool.query(
-            'INSERT INTO callback_idempotency_log (idempotency_key, tenant_id, response) VALUES (?, ?, ?)',
-            [idempotencyKey, req.tenantId || '', JSON.stringify(response)]
-          );
-        } catch (e) {
-          // Duplicate key - race condition, ignore
-        }
-      }
-    };
-
-    // Find payment by bill ID
-    const [payRows] = await pool.query(
-      'SELECT * FROM org_payment_records WHERE bill_id = ?',
-      [callback.billId]
-    );
-
-    if (payRows.length === 0) {
-      const response = { data: { acknowledged: false, message: `Bill ID ${callback.billId} not found` } };
-      await storeIdempotency(response);
-      return res.json(response);
-    }
-
-    const payment = await ensurePaymentNotStale(payRows[0]);
-
-    // Duplicate transaction ID check
-    if (callback.transactionId) {
-      const [dupRows] = await pool.query(
-        'SELECT id FROM org_payment_records WHERE transaction_id = ? AND bill_id != ?',
-        [callback.transactionId, callback.billId]
-      );
-      if (dupRows.length > 0) {
-        const response = {
-          data: {
-            acknowledged: false,
-            payment,
-            message: `Transaction ID ${callback.transactionId} already used for another bill`,
-          },
-        };
-        await storeIdempotency(response);
-        return res.json(response);
-      }
-    }
-
-    // Duplicate paid callback
-    if (payment.status === 'paid' && callback.status === 'paid') {
-      const response = {
-        data: {
-          acknowledged: true,
-          payment,
-          message: 'Duplicate callback ignored; payment already marked paid',
-        },
-      };
-      await storeIdempotency(response);
-      return res.json(response);
-    }
-
-    // Apply update
-    const updates = { status: callback.status, transaction_id: callback.transactionId };
-    if (callback.status === 'paid') {
-      updates.paid_at = toMySQLDatetime(callback.paidAt || new Date());
-    }
-
-    await pool.query(
-      'UPDATE org_payment_records SET status = ?, transaction_id = ?, paid_at = ? WHERE id = ?',
-      [updates.status, updates.transaction_id, updates.paid_at || null, payment.id]
-    );
-
-    // Record transaction in main transactions table
-    if (callback.transactionId) {
-      try {
-        await pool.query(
-          `INSERT INTO transactions (id, tenant_id, transaction_id, consumer_number, amount, status, date, biller_name, channel)
-           VALUES (?, ?, ?, ?, ?, ?, CURDATE(), 'Org KPK', 'online')`,
-          [uuidv4(), payment.tenant_id, callback.transactionId, payment.bill_id, payment.amount,
-            callback.status === 'paid' ? 'completed' : callback.status === 'failed' ? 'failed' : 'pending']
-        );
-      } catch (e) {
-        // Duplicate transaction - ignore
-      }
-    }
-
-    const [updatedRows] = await pool.query('SELECT * FROM org_payment_records WHERE id = ?', [payment.id]);
-    const updated = updatedRows[0];
-
-    // Look up per-tenant webhook config from tenants.settings (falls back to global env constants)
-    const [tenantRows] = await pool.query(
-      'SELECT settings FROM tenants WHERE id = ? AND deleted_at IS NULL',
-      [payment.tenant_id]
-    );
-    const rawSettings = tenantRows[0]?.settings;
-    const tenantSettings = rawSettings
-      ? (typeof rawSettings === 'object' ? rawSettings : (() => { try { return JSON.parse(rawSettings); } catch { return {}; } })())
-      : {};
-    const orgWebhookUrl = tenantSettings.notification_url || '';
-    const outboundSecret = tenantSettings.webhook_secret || WEBHOOK_SECRET;
-
-    // Revalidate before every outbound request because DNS may change after save time.
-    if (orgWebhookUrl) {
-      const notificationPayload = {
-        application_id: updated.application_id,
-        status: updated.status,
-        transaction_id: updated.transaction_id || null,
-        paid_at: updated.paid_at || null,
-      };
-      const outboundSig = crypto
-        .createHmac('sha256', outboundSecret)
-        .update(JSON.stringify(notificationPayload))
-        .digest('hex');
-      try {
-        const safeWebhookUrl = await assertSafePublicHttpsUrl(orgWebhookUrl);
-        fetch(safeWebhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Webhook-Signature': outboundSig },
-          body: JSON.stringify(notificationPayload),
-          signal: AbortSignal.timeout(8000),
-        })
-          .then((res) => {
-            logger.info(`Org webhook push status=${res.status} | application_id=${updated.application_id}`);
-          })
-          .catch((err) => {
-            logger.warn(`Org webhook push failed | application_id=${updated.application_id} | ${err.message}`);
-          });
-      } catch (err) {
-        logger.warn(`Org webhook blocked by URL safety policy | application_id=${updated.application_id} | ${err.message}`);
-      }
-    }
-
-    // Record notification log
-    await pool.query(
-      'INSERT INTO org_payment_notifications (id, tenant_id, application_id, payment_id, bill_id, status) VALUES (?, ?, ?, ?, ?, ?)',
-      [uuidv4(), payment.tenant_id, payment.application_id, payment.id, payment.bill_id, callback.status]
-    );
-
-    await auditLog(req, 'callback', 'org_payment', payment.id, `Callback: ${callback.status} via TXN ${callback.transactionId}`);
-
-    const response = {
-      data: {
-        acknowledged: true,
-        payment: updated,
-        message: `Callback processed. Payment marked ${updated.status}`,
-      },
-    };
-    await storeIdempotency(response);
-
-    res.json(response);
   } catch (err) {
     next(err);
   }
@@ -441,13 +287,15 @@ const expireOverduePayments = async (req, res, next) => {
     // Fetch records about to be expired so we can log notifications
     const [toExpire] = await pool.query(
       `SELECT id, tenant_id, application_id, bill_id FROM org_payment_records
-       WHERE status = 'pending' AND expiry_date <= UTC_TIMESTAMP()`
+       WHERE tenant_id = ? AND status = 'pending' AND expiry_date <= UTC_TIMESTAMP()`,
+      [req.tenantId]
     );
 
     if (toExpire.length > 0) {
       await pool.query(
         `UPDATE org_payment_records SET status = 'expired'
-         WHERE status = 'pending' AND expiry_date <= UTC_TIMESTAMP()`
+         WHERE tenant_id = ? AND status = 'pending' AND expiry_date <= UTC_TIMESTAMP()`,
+        [req.tenantId]
       );
 
       // Insert a notification row for each expired record
@@ -497,13 +345,16 @@ const getStats = async (req, res, next) => {
     );
     const verifiedTransactions = Number(vRows[0].cnt);
 
-    // Monthly collection trend (last 12 months)
+    // Monthly request/collection trend (last 12 months), aggregated in SQL so
+    // dashboards never download an unbounded payment history.
     const trendParams = [...params];
     const [trendRows] = await pool.query(
-      `SELECT DATE_FORMAT(paid_at, '%Y-%m') AS month, SUM(amount) AS revenue
+      `SELECT DATE_FORMAT(COALESCE(paid_at, created_at), '%Y-%m') AS month,
+              COUNT(*) AS requests,
+              COALESCE(SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END), 0) AS revenue,
+              SUM(status IN ('failed','expired')) AS failed
        FROM org_payment_records
-       ${where} AND status = 'paid' AND paid_at IS NOT NULL
-         AND paid_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+       ${where} AND COALESCE(paid_at, created_at) >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 12 MONTH)
        GROUP BY month ORDER BY month ASC`,
       trendParams
     );
@@ -511,19 +362,56 @@ const getStats = async (req, res, next) => {
     const collectionTrend = trendRows.map((r) => {
       const [year, mo] = (r.month || '').split('-').map(Number);
       const label = new Date(year, mo - 1, 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-      return { month: label, revenue: parseFloat(r.revenue) };
+      return { month: label, revenue: parseFloat(r.revenue), requests: Number(r.requests), failed: Number(r.failed) };
     });
+
+    const [postingRows] = await pool.query(
+      `SELECT opr.posting_id, COALESCE(op.title, opr.posting_id) AS posting,
+              COUNT(*) AS total_requests,
+              SUM(opr.status = 'paid') AS paid_requests,
+              SUM(opr.status = 'pending') AS pending_requests,
+              SUM(opr.status IN ('failed','expired')) AS failed_requests,
+              COALESCE(SUM(CASE WHEN opr.status = 'paid' THEN opr.amount ELSE 0 END), 0) AS collected
+       FROM org_payment_records opr
+       LEFT JOIN org_postings op ON op.id = opr.posting_id AND op.tenant_id = opr.tenant_id
+       ${where.replaceAll('tenant_id', 'opr.tenant_id')}
+       GROUP BY opr.posting_id, op.title
+       ORDER BY collected DESC`,
+      params
+    );
+    const postingRevenue = postingRows.map((row) => ({
+      postingId: row.posting_id,
+      posting: row.posting,
+      totalRequests: Number(row.total_requests),
+      paidRequests: Number(row.paid_requests),
+      pendingRequests: Number(row.pending_requests),
+      failedRequests: Number(row.failed_requests),
+      collected: Number(row.collected),
+      avgAmount: Number(row.paid_requests) > 0 ? Number(row.collected) / Number(row.paid_requests) : 0,
+    }));
+
+    const [[today]] = await pool.query(
+      `SELECT COUNT(*) AS paid_count, COALESCE(SUM(amount), 0) AS collected
+       FROM org_payment_records ${where}
+       AND status = 'paid' AND paid_at >= UTC_DATE() AND paid_at < UTC_DATE() + INTERVAL 1 DAY`,
+      params
+    );
 
     res.json({
       data: {
         totalRequests: pending.count + paid.count + expired.count + failed.count,
         pending:    pending.count,
+        pendingValue: pending.total,
         paid:       paid.count,
         expired:    expired.count,
         failed:     failed.count,
         feeCollected:          paid.total,
         verifiedTransactions,
         collectionTrend,
+        postingRevenue,
+        todayPaidCount: Number(today.paid_count),
+        todayCollected: Number(today.collected),
+        statusDistribution: Object.fromEntries(Object.entries(statusMap).map(([status, value]) => [status, value.count])),
       },
     });
   } catch (err) {
@@ -540,26 +428,40 @@ const listPayments = async (req, res, next) => {
 
     let where = 'WHERE 1=1';
     const params = [];
-    if (req.tenantId) { where += ' AND tenant_id = ?'; params.push(req.tenantId); }
-    if (req.query.status) { where += ' AND status = ?'; params.push(req.query.status); }
-    if (req.query.from)   { where += ' AND created_at >= ?'; params.push(req.query.from); }
-    if (req.query.to)     { where += ' AND created_at <= ?'; params.push(req.query.to); }
-    if (req.query.application_id) { where += ' AND application_id = ?'; params.push(req.query.application_id); }
+    if (req.tenantId) { where += ' AND opr.tenant_id = ?'; params.push(req.tenantId); }
+    if (req.query.status === 'overdue') where += " AND opr.status IN ('failed','expired')";
+    else if (req.query.status) { where += ' AND opr.status = ?'; params.push(req.query.status); }
+    if (req.query.from)   { where += ' AND opr.created_at >= ?'; params.push(req.query.from); }
+    if (req.query.to)     { where += ' AND opr.created_at <= ?'; params.push(req.query.to); }
+    if (req.query.application_id) { where += ' AND opr.application_id = ?'; params.push(req.query.application_id); }
+    if (req.query.search) {
+      where += ` AND (opr.application_id LIKE ? OR opr.applicant_id LIKE ? OR opr.posting_id LIKE ?
+                 OR opr.consumer_number LIKE ? OR opr.transaction_id LIKE ? OR opr.bill_id LIKE ?)`;
+      const search = `%${String(req.query.search).slice(0, 100)}%`;
+      params.push(search, search, search, search, search, search);
+    }
 
     const [[{ total }]] = await pool.query(
-      `SELECT COUNT(*) AS total FROM org_payment_records ${where}`, params
+      `SELECT COUNT(*) AS total FROM org_payment_records opr ${where}`, params
     );
 
     const [rows] = await pool.query(
-      `SELECT application_id, applicant_id, posting_id, consumer_number, amount, status,
-              created_at, paid_at, transaction_id, expiry_date
-       FROM org_payment_records ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      `SELECT opr.id, opr.application_id, opr.applicant_id, opr.posting_id, opr.bill_id,
+              opr.consumer_number, opr.amount, opr.status, opr.due_date, opr.expiry_date,
+              opr.created_at, opr.paid_at, opr.transaction_id, opr.description, opr.callback_url,
+              p.id AS posted_payment_id, p.source AS payment_source,
+              p.receipt_number AS payment_receipt_number
+       FROM org_payment_records opr
+       LEFT JOIN payment_allocations pa ON pa.target_type = 'org_payment' AND pa.target_id = opr.id
+       LEFT JOIN payments p ON p.id = pa.payment_id AND p.tenant_id = opr.tenant_id
+       ${where}
+       ORDER BY opr.created_at DESC LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
 
     res.json({
       data: rows,
-      meta: { total, page, limit, pages: Math.ceil(total / limit) },
+      meta: { total: Number(total), page, pageSize: limit, pages: Math.ceil(Number(total) / limit) },
     });
   } catch (err) {
     next(err);
@@ -592,7 +494,7 @@ const listNotifications = async (req, res, next) => {
 
     res.json({
       data: rows,
-      meta: { total, page, limit, pages: Math.ceil(total / limit) },
+      meta: { total: Number(total), page, pageSize: limit, pages: Math.ceil(Number(total) / limit) },
     });
   } catch (err) {
     next(err);
@@ -616,10 +518,50 @@ const buildOneBillPayload = (payment, customerName = 'Applicant') => {
   };
 };
 
+const processPaymentCallbackCanonical = async (req, res, next) => {
+  try {
+    const callback = req.body;
+    await assertSecurity(req, { requireWebhookSignature: true, callback });
+    const [rows] = await pool.query(
+      `SELECT * FROM org_payment_records WHERE bill_id = ? AND tenant_id = ? LIMIT 1`,
+      [callback.billId, req.tenantId]
+    );
+    if (!rows.length) return res.status(404).json({ data: { acknowledged: false, message: 'Bill not found' } });
+    const record = rows[0];
+    if (callback.status === 'paid') {
+      if (record.status === 'paid') {
+        return res.json({ data: { acknowledged: true, payment: record, message: 'Duplicate callback ignored' } });
+      }
+      const result = await postPayment({
+        tenantId: req.tenantId, targetType: 'org_payment', orgPaymentId: record.id,
+        consumerNumber: record.consumer_number, amount: Number(record.amount),
+        receivedAt: callback.paidAt || new Date(), channel: 'org_callback',
+        externalReference: callback.transactionId, transactionId: callback.transactionId,
+        idempotencyKey: req.headers['x-idempotency-key'] || callback.transactionId,
+        note: 'Verified organization payment callback', source: 'org_callback',
+        actorName: 'Organization callback', ipAddress: req.ip, userAgent: req.headers['user-agent'],
+      });
+      return res.json({ data: { acknowledged: true, payment: result, message: 'Callback payment posted' } });
+    }
+    if (record.status === 'paid') {
+      throw new AppError('A posted payment cannot be overwritten by a failure callback', 409, 'PAYMENT_IMMUTABLE');
+    }
+    await pool.query(
+      `UPDATE org_payment_records SET status = ?, transaction_id = ?
+       WHERE id = ? AND tenant_id = ? AND status = 'pending'`,
+      [callback.status, callback.transactionId, record.id, req.tenantId]
+    );
+    await auditLog(req, 'callback', 'org_payment', record.id, `Callback marked ${callback.status}`);
+    return res.json({ data: { acknowledged: true, message: `Callback processed: ${callback.status}` } });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   createPayment,
   getPaymentStatus,
-  processPaymentCallback,
+  processPaymentCallback: processPaymentCallbackCanonical,
   healthCheck,
   expireOverduePayments,
   getStats,
