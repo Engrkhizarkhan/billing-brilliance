@@ -65,6 +65,9 @@ This audit does not claim that the live server has been changed or that 1LINK ha
 ### Isolated sandbox
 
 - Sandbox mode requires a database whose name contains `sandbox`, `uat`, or `test` and does not expose the 1LINK routes.
+- The release includes a guarded bootstrap script, a dedicated PM2 API/worker definition, and an Nginx virtual host for `sandbox.fintap.pk`.
+- `FINTAP_ENV_FILE` makes the selected sandbox file authoritative even if the PM2 daemon inherited stale production variables. This prevents accidental reuse of the production database.
+- Health and readiness responses identify the active environment so deployment checks can prove that the two hostnames reach different runtimes.
 - Production provisions a same-ID test tenant through an authenticated internal control endpoint and returns a `fintap_test_` key.
 - Test keys are rejected by production and live keys are rejected by sandbox scope checks.
 - Demo consumers/invoices/payments remain in the sandbox database only.
@@ -113,7 +116,7 @@ The production database still requires backup, restore validation, migration reh
 | Frontend production build | Pass, 2,357 modules |
 | Frontend Vitest | 1/1 pass |
 | Server JavaScript syntax | 64 files pass |
-| Server unit tests | 31/31 pass across 9 suites |
+| Server unit tests | 32/32 pass across 10 suites |
 | Authenticated disposable-DB integration tests | 11/11 pass, including admin-only consumer-registry filtering |
 | Stateful browser security/lifecycle/payment/sandbox/registry tests | 6/6 pass in the consolidated run |
 | Route-by-route browser audit | 34 dashboard routes + 2 reference aliases pass; no page exceptions or API 5xx |
@@ -138,7 +141,7 @@ The software should not be described as live-production-ready until all of these
 
 1. Deploy a separate sandbox hostname, API process, database user/database, TLS certificate, secrets, logging, and retention policy. Do not route it through the production 1LINK VPN.
 2. Configure production `ADMIN_ACTION_PIN`, stable backed-up `API_KEY_ENCRYPTION_KEY`, `SANDBOX_BASE_URL`, and matching `SANDBOX_PURGE_SECRET`. Never print them or commit them.
-3. Rehearse migrations `008`–`010` and rollback-compatible application deployment on a current production-like restore; run reconciliation queries before and after.
+3. Rehearse migrations `008`–`011` and rollback-compatible application deployment on a current production-like restore; run reconciliation queries before and after.
 4. Configure Nginx for non-buffered SSE and verify reconnects through `https://app.fintap.pk`; keep one API instance until shared event fan-out exists.
 5. Run sustained load tests representing at least 100 tenants, realistic concurrent sessions, webhook retry pressure, and projected row growth. The 2,105-row check is a pagination proof, not capacity certification.
 6. Verify encrypted off-host backups and perform a timed restore drill.

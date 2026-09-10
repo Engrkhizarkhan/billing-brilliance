@@ -165,6 +165,43 @@ Never use `git reset --hard`, delete the production database, or run `migrate:fr
 
 Use `server/.env.sandbox.example` on a separate hostname/process/database/user. The sandbox database name must contain `sandbox`, `uat`, or `test`; otherwise startup fails. Do not route the sandbox host into the production 1LINK IPsec tunnel. Use independent API/JWT/webhook credentials and a separate retention/reset policy.
 
+The checked-in deployment components are:
+
+- `server/scripts/bootstrap-sandbox.sh` — creates `Fintap_sandbox`, its least-privilege MySQL user, unique secrets, the ignored `server/.env.sandbox`, and the shared production purge credential without printing secrets.
+- `server/ecosystem.sandbox.config.cjs` — runs the sandbox API on loopback port 3001 and a separate sandbox outbox worker using `FINTAP_ENV_FILE`.
+- `deploy/nginx/sandbox.fintap.pk.conf` — proxies only the sandbox hostname to port 3001; Certbot adds TLS after public DNS resolves.
+
+Deployment order:
+
+```bash
+cd /var/www/billing-brilliance
+chmod 700 server/scripts/bootstrap-sandbox.sh
+server/scripts/bootstrap-sandbox.sh
+FINTAP_ENV_FILE=/var/www/billing-brilliance/server/.env.sandbox npm --prefix server run migrate
+pm2 startOrReload server/ecosystem.sandbox.config.cjs --update-env
+pm2 restart Fintap-api-backend --update-env
+pm2 save
+```
+
+Install the Nginx site only after `dig +short sandbox.fintap.pk @1.1.1.1` returns `178.238.236.126`, then obtain the certificate:
+
+```bash
+cp deploy/nginx/sandbox.fintap.pk.conf /etc/nginx/sites-available/sandbox.fintap.pk
+ln -sfn /etc/nginx/sites-available/sandbox.fintap.pk /etc/nginx/sites-enabled/sandbox.fintap.pk
+nginx -t
+systemctl reload nginx
+certbot --nginx -d sandbox.fintap.pk
+```
+
+Rebuild the frontend after pulling. Production builds default to `https://sandbox.fintap.pk`; `VITE_SANDBOX_BASE_URL` can override it for a different deployment. Verify that the hosts report different environments:
+
+```bash
+curl --fail https://app.fintap.pk/api/ready
+curl --fail https://sandbox.fintap.pk/api/ready
+```
+
+The expected environment fields are `production` and `sandbox`, respectively.
+
 Before activating a tenant, prove that the production API can call the sandbox internal provision/purge endpoints, that sandbox data is absent from the production database, and that activation deletes sandbox tenant data and invalidates the old test key. Activation intentionally fails closed when purge cannot be confirmed.
 
 For the dashboard event stream, preserve `X-Accel-Buffering: no`, disable proxy buffering for `/api/payments/events`, and set a proxy read timeout longer than the server heartbeat interval. Confirm reconnect behavior through the public TLS hostname.

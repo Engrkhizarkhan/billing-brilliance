@@ -246,17 +246,20 @@ databaseDescribe('disposable-database authenticated workflows', () => {
       const baseRequest = { applicant_id: `AP-${suffix}`, application_id: `APP-${suffix}`, posting_id: `POST-${suffix}`, amount: 2500, description: 'Lifecycle QA' };
       const blocked = await request(app).post('/api/payments/create')
         .set('Authorization', `Bearer ${token}`).set('X-Tenant-Id', tenantId)
+        .set('X-Forwarded-Proto', 'https')
         .send({ ...baseRequest, customer_name: 'Lifecycle Customer' });
       expect(blocked.status).toBe(403);
       expect(blocked.body.code).toBe('TENANT_NOT_LIVE');
 
       await pool.query("UPDATE tenants SET lifecycle_stage = 'live' WHERE id = ?", [tenantId]);
       const missingName = await request(app).post('/api/payments/create')
-        .set('Authorization', `Bearer ${token}`).set('X-Tenant-Id', tenantId).send(baseRequest);
+        .set('Authorization', `Bearer ${token}`).set('X-Tenant-Id', tenantId)
+        .set('X-Forwarded-Proto', 'https').send(baseRequest);
       expect(missingName.status).toBe(400);
 
       const created = await request(app).post('/api/payments/create')
         .set('Authorization', `Bearer ${token}`).set('X-Tenant-Id', tenantId)
+        .set('X-Forwarded-Proto', 'https')
         .send({ ...baseRequest, customer_name: 'Lifecycle Customer', never_expires: true, expire_at: '2026-09-11T00:00:00.000Z' });
       expect(created.status).toBe(201);
       expect(created.body.data.oneBillRequest).toMatchObject({ customerName: 'Lifecycle Customer', neverExpires: true, expires: 'never' });

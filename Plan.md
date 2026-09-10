@@ -427,7 +427,7 @@ Do not remove school fee plans or payment-plan assignments. Those are internal b
 
 Provision a separate environment, not a flag in the production database:
 
-- separate hostname, such as `sandbox.app.fintap.pk` and `sandbox-api.fintap.pk`;
+- separate API hostname `sandbox.fintap.pk` with its own PM2 runtime and database;
 - separate API process/service account;
 - separate MySQL database and database user;
 - separate JWT, API, webhook, encryption, and signing secrets;

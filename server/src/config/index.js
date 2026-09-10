@@ -1,13 +1,19 @@
 const path = require('path');
 const dotenv = require('dotenv');
 
-const envPath = path.resolve(__dirname, '../../.env');
-const loadedEnv = dotenv.config({ path: envPath }).parsed || {};
+const defaultEnvPath = path.resolve(__dirname, '../../.env');
+const requestedEnvPath = String(process.env.FINTAP_ENV_FILE || '').trim();
+const envPath = requestedEnvPath ? path.resolve(requestedEnvPath) : defaultEnvPath;
+// A deliberately selected runtime file (for example .env.sandbox) must win
+// over variables inherited from the long-lived PM2 daemon. Otherwise a
+// sandbox process could accidentally reuse the production DB configuration.
+const loadedEnv = dotenv.config({ path: envPath, override: Boolean(requestedEnvPath) }).parsed || {};
 const fileFirst = (name) => Object.prototype.hasOwnProperty.call(loadedEnv, name)
   ? loadedEnv[name]
   : process.env[name];
 
 module.exports = {
+  envFilePath: envPath,
   port: parseInt(process.env.PORT, 10) || 5000,
   nodeEnv: process.env.NODE_ENV || 'development',
   appEnvironment: process.env.APP_ENVIRONMENT || (process.env.NODE_ENV === 'production' ? 'production' : 'development'),

@@ -1,5 +1,6 @@
 const request = require('supertest');
 const app = require('../../src/index');
+const config = require('../../src/config');
 const { pool } = require('../../src/config/database');
 
 afterAll(async () => {
@@ -11,6 +12,7 @@ describe('public service contracts', () => {
     const response = await request(app).get('/api/health');
     expect(response.status).toBe(200);
     expect(response.body.status).toBe('ok');
+    expect(response.body.environment).toBe(config.appEnvironment);
   });
 
   test('BillPayment authentication failure uses the payment response shape', async () => {

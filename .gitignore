@@ -22,6 +22,7 @@ test-results
 server/.env
 server/.env.local
 server/.env.production
+server/.env.sandbox
 
 # Editor directories and files
 .vscode/*

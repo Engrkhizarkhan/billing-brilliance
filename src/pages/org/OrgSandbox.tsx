@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuthStore } from '@/store/authStore';
 
-const sandboxUrl = (import.meta.env.VITE_SANDBOX_BASE_URL as string | undefined)?.replace(/\/$/, '');
+const configuredSandboxUrl = import.meta.env.VITE_SANDBOX_BASE_URL as string | undefined;
+const sandboxUrl = (configuredSandboxUrl || (import.meta.env.PROD ? 'https://sandbox.fintap.pk' : '')).replace(/\/$/, '');
 
 const OrgSandbox = () => {
   const lifecycle = useAuthStore((state) => state.user?.tenantLifecycleStage);

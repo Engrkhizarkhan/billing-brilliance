@@ -205,9 +205,9 @@ app.use('/api/saas/v1', saasLimiter, saasGatewayRoutes);
 app.get('/api/ready', async (req, res) => {
   try {
     await pool.query('SELECT 1');
-    res.json({ status: 'ready', service: 'fintap-api', timestamp: new Date().toISOString() });
+    res.json({ status: 'ready', service: 'fintap-api', environment: config.appEnvironment, timestamp: new Date().toISOString() });
   } catch {
-    res.status(503).json({ status: 'not_ready', service: 'fintap-api', timestamp: new Date().toISOString() });
+    res.status(503).json({ status: 'not_ready', service: 'fintap-api', environment: config.appEnvironment, timestamp: new Date().toISOString() });
   }
 });
 
@@ -216,6 +216,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'fintap-api',
+    environment: config.appEnvironment,
     timestamp: new Date().toISOString(),
   });
 });
