@@ -89,8 +89,7 @@ if (config.nodeEnv === 'production') {
     process.exit(1);
   }
   if (config.appEnvironment === 'production' && (!config.sandbox.baseUrl || !config.sandbox.purgeSecret)) {
-    console.error('FATAL: SANDBOX_BASE_URL and SANDBOX_PURGE_SECRET are required so activation can revoke test data.');
-    process.exit(1);
+    console.warn('WARNING: Isolated sandbox is not configured. Core production APIs will start, but sandbox provisioning and production activation remain blocked until SANDBOX_BASE_URL and SANDBOX_PURGE_SECRET are configured.');
   }
   if (config.appEnvironment === 'sandbox' && !config.sandbox.purgeSecret) {
     console.error('FATAL: SANDBOX_PURGE_SECRET is required so the production control plane can provision and retire sandbox tenants.');

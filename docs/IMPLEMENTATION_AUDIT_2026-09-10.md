@@ -70,6 +70,7 @@ This audit does not claim that the live server has been changed or that 1LINK ha
 - Demo consumers/invoices/payments remain in the sandbox database only.
 - Activation fails closed unless sandbox purge succeeds; after purge, the old test key no longer authenticates and the sandbox navigation is closed for the live tenant.
 - The test key is held in page memory rather than browser storage.
+- The sandbox is an optional external dependency for core API availability. If it is not configured, production starts with a warning while sandbox provisioning and tenant activation remain blocked with an explicit service error.
 
 ### Dashboard and scale work
 

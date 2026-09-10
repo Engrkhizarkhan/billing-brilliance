@@ -8,7 +8,7 @@ This runbook deploys application changes only. It does not modify the establishe
 - Recent successful encrypted database backup plus tested restore owner.
 - Production `.env` with `NODE_ENV=production`, `APP_ENVIRONMENT=production`, `DB_NAME=Fintap`, strong unique JWT/webhook secrets, `REQUIRE_HTTPS=true`, prefix `105172`, and 1LINK source IPs `10.95.8.92,10.95.8.94`.
 - A six-digit `ADMIN_ACTION_PIN` stored in the deployment secret manager and copied into the protected `server/.env` file, plus a stable `API_KEY_ENCRYPTION_KEY` generated with `openssl rand -base64 32`. The `server/.env` PIN is authoritative so a stale PM2 environment snapshot cannot override a rotation. Keep the file mode at `600` and restart the API after changing it. Losing or changing the encryption key makes existing recoverable API-key envelopes unreadable; back it up with the application secrets.
-- A separately deployed sandbox API/database/hostname. Set production `SANDBOX_BASE_URL` to that API and configure the same strong `SANDBOX_PURGE_SECRET` on both runtimes. Set frontend build variable `VITE_SANDBOX_BASE_URL` to the public sandbox API origin.
+- A separately deployed sandbox API/database/hostname. Set production `SANDBOX_BASE_URL` to that API and configure the same strong `SANDBOX_PURGE_SECRET` on both runtimes. Set frontend build variable `VITE_SANDBOX_BASE_URL` to the public sandbox API origin. Until configured, the core production API remains available, while sandbox provisioning and tenant activation fail closed with `SANDBOX_NOT_CONFIGURED`.
 - Do not print `.env`, PSK, database password, JWT secrets, API keys or certificate private keys.
 - The leaf/full-chain certificate may be shared where required; never share `privkey.pem`.
 
