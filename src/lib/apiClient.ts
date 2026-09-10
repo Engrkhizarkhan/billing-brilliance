@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 let accessToken: string | null = sessionStorage.getItem('access_token');
 
@@ -75,7 +75,7 @@ const attemptTokenRefresh = async (): Promise<string> => {
 
   isRefreshing = true;
   try {
-    const res = await fetch(`${BASE_URL}/auth/refresh`, {
+    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -118,7 +118,7 @@ export const request = async <T = unknown>(
 ): Promise<T> => {
   const { method = 'GET', body, headers = {}, skipAuth = false, skipTransform = false } = options;
 
-  const url = `${BASE_URL}${path}`;
+  const url = `${API_BASE_URL}${path}`;
   const reqHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
     ...headers,

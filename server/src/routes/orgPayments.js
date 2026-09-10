@@ -5,10 +5,12 @@ const { handleValidation } = require('../middleware/handleValidation');
 const { createPaymentValidation, paymentCallbackValidation } = require('../middleware/validate');
 const { tenantScope } = require('../middleware/auth');
 const orgPaymentController = require('../controllers/orgPaymentController');
+const paymentEventController = require('../controllers/paymentEventController');
 
 // Public organization-payment controller health check. Keep this distinct from
 // the infrastructure liveness probe at /api/health.
 router.get('/payments/health', orgPaymentController.healthCheck);
+router.get('/payments/events', authenticate, tenantScope, paymentEventController.stream);
 
 // Payment endpoints — accept both JWT (dashboard) and X-API-Key (external integrations)
 router.post('/payments/create', authenticateOrApiKey, tenantScope, requireLiveTenant, createPaymentValidation, handleValidation, orgPaymentController.createPayment);
@@ -20,8 +22,8 @@ router.post('/payment/callback', authenticateOrApiKey, tenantScope, requireLiveT
 
 // Admin endpoints
 router.get('/stats', authenticate, tenantScope, orgPaymentController.getStats);
-router.get('/payments', authenticate, tenantScope, orgPaymentController.listPayments);
-router.get('/payment-notifications', authenticate, tenantScope, orgPaymentController.listNotifications);
+router.get('/payments', authenticateOrApiKey, tenantScope, orgPaymentController.listPayments);
+router.get('/payment-notifications', authenticateOrApiKey, tenantScope, orgPaymentController.listNotifications);
 router.post('/payments/expire', authenticate, tenantScope, orgPaymentController.expireOverduePayments);
 
 module.exports = router;

@@ -3,12 +3,14 @@ const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const { auditLog } = require('../middleware/auditLog');
 const { getCapacity } = require('../services/consumerNumberService');
-const { generateApiKey } = require('../services/apiKeyService');
+const { generateApiKey, decryptApiKey } = require('../services/apiKeyService');
+const { requireAdminPin } = require('../services/privilegedActionService');
+const { provisionSandboxTenant, purgeSandboxTenant } = require('../services/sandboxLifecycleService');
 
 const sanitizeTenant = (tenant, revealedSecret) => {
   if (!tenant) return tenant;
-  const { api_key, api_key_hash, ...safe } = tenant;
-  void api_key; void api_key_hash;
+  const { api_key, api_key_hash, api_key_encrypted, ...safe } = tenant;
+  void api_key; void api_key_hash; void api_key_encrypted;
   if (revealedSecret) safe.api_key = revealedSecret;
   return safe;
 };
@@ -81,10 +83,10 @@ const createTenant = async (req, res, next) => {
     await pool.query(
       `INSERT INTO tenants
        (id, name, type, biller_code, email, phone, status, lifecycle_stage, consumer_number_length,
-        api_key, api_key_hash, api_key_prefix, api_key_scope, api_key_rotated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'active', 'testing', ?, NULL, ?, ?, ?, UTC_TIMESTAMP())`,
+        api_key, api_key_hash, api_key_encrypted, api_key_prefix, api_key_scope, api_key_rotated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'active', 'testing', ?, NULL, ?, ?, ?, ?, UTC_TIMESTAMP())`,
       [id, name.trim(), type, code, email.trim(), phone || null, Number(consumerNumberLength),
-        apiKey.hash, apiKey.prefix, apiKey.scope]
+        apiKey.hash, apiKey.encrypted, apiKey.prefix, apiKey.scope]
     );
 
     await auditLog(req, 'create', 'tenant', id, `Tenant ${name} created with code ${code}`);
@@ -167,12 +169,14 @@ const updateTenantLifecycle = async (req, res, next) => {
     const [rows] = await pool.query('SELECT * FROM tenants WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
     if (!rows.length) throw new AppError('Tenant not found', 404);
     if (lifecycleStage === 'live') {
+      await requireAdminPin(req, 'tenant_lifecycle', req.params.id, 'activate biller');
       if (confirmation !== `ACTIVATE ${req.params.id}`) {
         throw new AppError('Explicit production activation confirmation is required', 400, 'CONFIRMATION_REQUIRED');
       }
       const required = ['profileComplete', 'credentialsIssued', 'ipAllowlistConfigured', 'uatPassed', 'supportContactsRecorded'];
       const missing = required.filter((key) => checklist[key] !== true);
       if (missing.length) throw new AppError(`Activation checklist incomplete: ${missing.join(', ')}`, 400, 'CHECKLIST_INCOMPLETE');
+      await purgeSandboxTenant(req.params.id);
     }
 
     await pool.query(
@@ -191,8 +195,33 @@ const updateTenantLifecycle = async (req, res, next) => {
   }
 };
 
+const provisionTenantSandbox = async (req, res, next) => {
+  try {
+    await requireAdminPin(req, 'tenant_sandbox', req.params.id, 'provision sandbox');
+    if (req.body.confirmation !== `PROVISION ${req.params.id}`) {
+      throw new AppError('Explicit sandbox provisioning confirmation is required', 400, 'CONFIRMATION_REQUIRED');
+    }
+    const [rows] = await pool.query(
+      `SELECT id, name, type, biller_code, email, phone, lifecycle_stage, consumer_number_length
+       FROM tenants WHERE id = ? AND deleted_at IS NULL LIMIT 1`, [req.params.id]
+    );
+    if (!rows.length) throw new AppError('Tenant not found', 404, 'TENANT_NOT_FOUND');
+    if (rows[0].lifecycle_stage === 'live') throw new AppError('Live tenants cannot be provisioned in sandbox', 409, 'TENANT_ALREADY_LIVE');
+    const tenant = rows[0];
+    const result = await provisionSandboxTenant({
+      id: tenant.id, name: tenant.name, type: tenant.type, billerCode: tenant.biller_code,
+      email: tenant.email, phone: tenant.phone, consumerNumberLength: tenant.consumer_number_length,
+    });
+    if (!result) throw new AppError('Configure the isolated sandbox service before provisioning', 503, 'SANDBOX_NOT_CONFIGURED');
+    await auditLog(req, 'create', 'tenant_sandbox', tenant.id, 'Sandbox tenant provisioned; key returned through one-time response');
+    res.set('Cache-Control', 'no-store');
+    res.json({ data: result, message: 'Sandbox provisioned; deliver this test key through a secure channel' });
+  } catch (error) { next(error); }
+};
+
 const regenerateTenantApiKey = async (req, res, next) => {
   try {
+    await requireAdminPin(req, 'tenant_api_key', req.params.id, 'regenerate API key');
     if (req.body.confirmation !== `REGENERATE ${req.params.id}`) {
       throw new AppError('Explicit API key regeneration confirmation is required', 400, 'CONFIRMATION_REQUIRED');
     }
@@ -201,9 +230,9 @@ const regenerateTenantApiKey = async (req, res, next) => {
 
     const newApiKey = generateApiKey();
     await pool.query(
-      `UPDATE tenants SET api_key = NULL, api_key_hash = ?, api_key_prefix = ?,
+      `UPDATE tenants SET api_key = NULL, api_key_hash = ?, api_key_encrypted = ?, api_key_prefix = ?,
        api_key_scope = ?, api_key_rotated_at = UTC_TIMESTAMP() WHERE id = ?`,
-      [newApiKey.hash, newApiKey.prefix, newApiKey.scope, req.params.id]
+      [newApiKey.hash, newApiKey.encrypted, newApiKey.prefix, newApiKey.scope, req.params.id]
     );
     await auditLog(req, 'update', 'tenant', req.params.id, 'API key regenerated');
 
@@ -215,8 +244,31 @@ const regenerateTenantApiKey = async (req, res, next) => {
   }
 };
 
+const revealTenantApiKey = async (req, res, next) => {
+  try {
+    await requireAdminPin(req, 'tenant_api_key', req.params.id, 'reveal API key');
+    const [rows] = await pool.query(
+      `SELECT id, api_key_encrypted, api_key_prefix FROM tenants
+       WHERE id = ? AND deleted_at IS NULL LIMIT 1`, [req.params.id]
+    );
+    if (!rows.length) throw new AppError('Tenant not found', 404, 'TENANT_NOT_FOUND');
+    if (!rows[0].api_key_encrypted) {
+      throw new AppError('This legacy key cannot be recovered. Regenerate it to create a recoverable encrypted key.', 409, 'KEY_NOT_RECOVERABLE');
+    }
+    let secret;
+    try { secret = decryptApiKey(rows[0].api_key_encrypted); }
+    catch { throw new AppError('Stored API key could not be decrypted; rotate it before use', 409, 'KEY_DECRYPTION_FAILED'); }
+    await auditLog(req, 'reveal', 'tenant_api_key', req.params.id, 'API key revealed after PIN verification');
+    res.set('Cache-Control', 'no-store');
+    res.json({ data: { apiKey: secret, apiKeyPrefix: rows[0].api_key_prefix } });
+  } catch (err) {
+    next(err);
+  }
+};
+
 const offboardTenant = async (req, res, next) => {
   try {
+    await requireAdminPin(req, 'tenant', req.params.id, 'offboard biller');
     const [rows] = await pool.query(
       'SELECT id, name, status FROM tenants WHERE id = ? AND deleted_at IS NULL', [req.params.id]
     );
@@ -233,7 +285,7 @@ const offboardTenant = async (req, res, next) => {
     }
     await pool.query(
       `UPDATE tenants SET status = 'banned', lifecycle_stage = 'offboarding',
-       api_key = NULL, api_key_hash = NULL, deleted_at = UTC_TIMESTAMP()
+       api_key = NULL, api_key_hash = NULL, api_key_encrypted = NULL, deleted_at = UTC_TIMESTAMP()
        WHERE id = ? AND status != 'active'`,
       [tenant.id]
     );
@@ -248,4 +300,4 @@ const offboardTenant = async (req, res, next) => {
   }
 };
 
-module.exports = { fetchTenants, getTenant, createTenant, updateTenant, updateTenantStatus, updateTenantLifecycle, regenerateTenantApiKey, offboardTenant };
+module.exports = { fetchTenants, getTenant, createTenant, updateTenant, updateTenantStatus, updateTenantLifecycle, provisionTenantSandbox, regenerateTenantApiKey, revealTenantApiKey, offboardTenant };

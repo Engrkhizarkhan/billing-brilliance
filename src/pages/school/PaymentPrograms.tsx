@@ -1,4 +1,5 @@
-import { useState, useMemo, useDeferredValue } from 'react';
+import { useState, useMemo } from 'react';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api, type StudentDirectoryMeta } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import type { StudentDirectoryRecord, FeePlan, PaymentPlanAssignment } from '@/types';
@@ -20,7 +21,7 @@ const PaymentPrograms = () => {
   const [studentSearch, setStudentSearch] = useState('');
   const [studentClassFilter, setStudentClassFilter] = useState('all');
   const [studentSectionFilter, setStudentSectionFilter] = useState('all');
-  const deferredStudentSearch = useDeferredValue(studentSearch);
+  const deferredStudentSearch = useDebouncedValue(studentSearch.trim());
   const { data: studentsData, meta: studentMeta, loading: ls } = useApiQuery<StudentDirectoryRecord[], StudentDirectoryMeta>(
     () => api.fetchStudents({
       pageSize: 200,

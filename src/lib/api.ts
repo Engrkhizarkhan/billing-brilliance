@@ -26,6 +26,8 @@ import type {
   PaymentPlanAssignment,
   AppNotification,
   AuditLog,
+  ConsumerRegistryMeta,
+  ConsumerRegistryRecord,
 } from '@/types';
 
 export type PaginationMeta = { page: number; pageSize: number; total: number };
@@ -134,16 +136,33 @@ export const api = {
     return patch<ApiResponse<Biller | null>>(`/tenants/${id}/status`, { status, reason });
   },
 
-  async updateBillerLifecycle(id: string, lifecycleStage: Biller['lifecycleStage'], checklist: Record<string, boolean> = {}, confirmation = '', reason = ''): Promise<ApiResponse<Biller>> {
-    return patch<ApiResponse<Biller>>(`/tenants/${id}/lifecycle`, { lifecycleStage, checklist, confirmation, reason });
+  async updateBillerLifecycle(id: string, lifecycleStage: Biller['lifecycleStage'], checklist: Record<string, boolean> = {}, confirmation = '', reason = '', pin = ''): Promise<ApiResponse<Biller>> {
+    return patch<ApiResponse<Biller>>(`/tenants/${id}/lifecycle`, { lifecycleStage, checklist, confirmation, reason, pin });
   },
 
-  async regenerateBillerApiKey(id: string, confirmation: string): Promise<ApiResponse<Biller>> {
-    return post<ApiResponse<Biller>>(`/tenants/${id}/regenerate-api-key`, { confirmation });
+  async revealBillerApiKey(id: string, pin: string): Promise<ApiResponse<{ apiKey: string; apiKeyPrefix: string }>> {
+    return post<ApiResponse<{ apiKey: string; apiKeyPrefix: string }>>(`/tenants/${id}/reveal-api-key`, { pin });
   },
 
-  async offboardBiller(id: string, confirmation: string, reason: string): Promise<ApiResponse<boolean>> {
-    return post<ApiResponse<boolean>>(`/tenants/${id}/offboard`, { confirmation, reason });
+  async provisionBillerSandbox(id: string, confirmation: string, pin: string): Promise<ApiResponse<{ tenantId: string; apiKey: string; alreadyProvisioned: boolean }>> {
+    return post<ApiResponse<{ tenantId: string; apiKey: string; alreadyProvisioned: boolean }>>(`/tenants/${id}/provision-sandbox`, { confirmation, pin });
+  },
+
+  async regenerateBillerApiKey(id: string, confirmation: string, pin: string): Promise<ApiResponse<Biller>> {
+    return post<ApiResponse<Biller>>(`/tenants/${id}/regenerate-api-key`, { confirmation, pin });
+  },
+
+  async offboardBiller(id: string, confirmation: string, reason: string, pin: string): Promise<ApiResponse<boolean>> {
+    return post<ApiResponse<boolean>>(`/tenants/${id}/offboard`, { confirmation, reason, pin });
+  },
+
+  async fetchConsumerRegistry(params: {
+    page?: number; pageSize?: number; search?: string; sourceType?: string; tenantId?: string;
+    tenantType?: string; tenantStatus?: string; lifecycleStage?: string; recordStatus?: string;
+    consumerLength?: number; archiveState?: string;
+  } = {}): Promise<ApiResponse<ConsumerRegistryRecord[], ConsumerRegistryMeta>> {
+    const q = buildQuery(params);
+    return get<ApiResponse<ConsumerRegistryRecord[], ConsumerRegistryMeta>>(`/admin/consumers${q}`);
   },
 
   // ---- Students ----

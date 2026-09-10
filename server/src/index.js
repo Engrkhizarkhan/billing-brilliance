@@ -11,6 +11,7 @@ const logger = require('./config/logger');
 const { pool, testConnection } = require('./config/database');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
 const { ensureProtectedAdmin } = require('./services/protectedAdmin');
+const { assertDatabaseMigrationsCurrent } = require('./services/migrationReadinessService');
 
 // Route imports
 const authRoutes = require('./routes/auth');
@@ -30,6 +31,8 @@ const reportRoutes = require('./routes/reports');
 const oneLinkRoutes = require('./routes/onelink');
 const saasGatewayRoutes = require('./routes/saasGateway');
 const manualPaymentRoutes = require('./routes/manualPayments');
+const sandboxAdminRoutes = require('./routes/sandboxAdmin');
+const consumerRegistryRoutes = require('./routes/consumerRegistry');
 
 // ---- Startup security guards ----
 const INSECURE_DEFAULTS = ['change-me-in-production', 'change-refresh-in-production', 'your_jwt_secret_here_change_in_production', 'your_refresh_secret_here_change_in_production'];
@@ -72,6 +75,22 @@ if (config.nodeEnv === 'production') {
   }
   if (config.org.requireWebhookSignature && (!config.org.webhookSecret || config.org.webhookSecret === 'change-me')) {
     console.error('FATAL: Configure a strong ORG_WEBHOOK_SECRET when webhook signatures are enabled.');
+    process.exit(1);
+  }
+  if (!/^\d{6}$/.test(config.admin.actionPin)) {
+    console.error('FATAL: ADMIN_ACTION_PIN must be exactly six digits.');
+    process.exit(1);
+  }
+  if (!process.env.API_KEY_ENCRYPTION_KEY) {
+    console.error('FATAL: API_KEY_ENCRYPTION_KEY must be configured for recoverable tenant API-key storage.');
+    process.exit(1);
+  }
+  if (config.appEnvironment === 'production' && (!config.sandbox.baseUrl || !config.sandbox.purgeSecret)) {
+    console.error('FATAL: SANDBOX_BASE_URL and SANDBOX_PURGE_SECRET are required so activation can revoke test data.');
+    process.exit(1);
+  }
+  if (config.appEnvironment === 'sandbox' && !config.sandbox.purgeSecret) {
+    console.error('FATAL: SANDBOX_PURGE_SECRET is required so the production control plane can provision and retire sandbox tenants.');
     process.exit(1);
   }
 }
@@ -134,6 +153,10 @@ app.use(morgan(morganFormat, {
   stream: { write: (message) => logger.http(message.trim()) },
 }));
 
+if (config.appEnvironment === 'sandbox') {
+  app.use('/internal/sandbox', sandboxAdminRoutes);
+}
+
 // ---- API Routes ----
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -147,6 +170,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/audit-logs', auditRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/manual-payments', manualPaymentRoutes);
+app.use('/api/admin/consumers', consumerRegistryRoutes);
 
 // Dedicated rate limiter for 1LINK gateway endpoints — always applied (even in dev)
 // because these are externally reachable endpoints called by the payment gateway.
@@ -214,14 +238,7 @@ const startServer = async () => {
     }
     logger.info('Database connected successfully');
 
-    if (config.nodeEnv === 'production') {
-      const [migrationRows] = await pool.query(
-        "SELECT version FROM schema_migrations WHERE version = '007_production_foundation.js' LIMIT 1"
-      );
-      if (!migrationRows.length) {
-        throw new Error('Database schema is not current. Run npm run migrate before starting production.');
-      }
-    }
+    await assertDatabaseMigrationsCurrent(pool);
 
     await ensureProtectedAdmin();
 

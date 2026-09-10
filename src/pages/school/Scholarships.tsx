@@ -1,4 +1,5 @@
-import { Fragment, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api, type StudentDirectoryMeta } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import { Scholarship, StudentDirectoryRecord, StudentScholarshipAssignment } from '@/types';
@@ -49,7 +50,7 @@ const Scholarships = () => {
     section: 'all',
     effectiveFrom: new Date().toISOString().split('T')[0],
   });
-  const deferredStudentLookup = useDeferredValue(studentLookup);
+  const deferredStudentLookup = useDebouncedValue(studentLookup.trim());
   const { data: studentsData, meta: studentMeta, loading: studentsLoading } = useApiQuery<StudentDirectoryRecord[], StudentDirectoryMeta>(
     () => api.fetchStudents({
       pageSize: 120,

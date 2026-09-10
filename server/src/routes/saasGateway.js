@@ -23,7 +23,7 @@ const apiKeyAuth = async (req, res, next) => {
     if (!rows.length) return res.status(401).json({ error: 'Invalid API key', code: 'INVALID_API_KEY' });
     const tenant = rows[0];
     if (tenant.status !== 'active') return res.status(403).json({ error: 'Biller is suspended', code: 'TENANT_SUSPENDED' });
-    if (config.appEnvironment === 'production' && tenant.lifecycle_stage !== 'live') {
+    if (config.appEnvironment !== 'sandbox' && tenant.lifecycle_stage !== 'live') {
       return res.status(403).json({ error: 'Biller is not active in production', code: 'TENANT_NOT_LIVE' });
     }
     req.saasTenantId = tenant.id;

@@ -166,7 +166,6 @@ src/
 │   └── etea/                # ETEA portal pages
 ├── components/
 │   ├── DashboardLayout.tsx   # Shell: sidebar, header, session guard
-│   ├── GlobalSearch.tsx      # Command-palette search (Ctrl+K)
 │   ├── NotificationCenter.tsx
 │   ├── FilterBar.tsx
 │   ├── TablePagination.tsx
@@ -390,12 +389,24 @@ server/src/
 **FR-ADM-015** — Transaction records shall include: transaction ID, biller, consumer number, amount (PKR), status, and date.  
 *Implemented*: ✅ (`types/index.ts` — `Transaction` interface).
 
-#### 5.2.5 Cash Flow Analysis (`/admin/cashflow`)
+#### 5.2.5 Consumer Number Registry (`/admin/consumer-numbers`)
+
+**FR-ADM-023** — Admin shall be able to view consumer numbers issued across every tenant from school students, organization applicants, and organization payment requests.
+
+**FR-ADM-024** — The registry shall provide server-side search, pagination, and filters for biller, source, tenant type, tenant status, lifecycle stage, record status, consumer-number length, and current/archived state.
+
+**FR-ADM-025** — The registry shall be restricted to platform administrators and retain visibility of identifiers belonging to soft-deleted records or offboarded tenants for operational and audit purposes.
+
+**FR-ADM-026** — Invoice records shall not create duplicate registry entries when they reuse a student consumer number; the allocating source remains the canonical registry record.
+
+*Implemented*: ✅ (`ConsumerRegistry.tsx`, `consumerRegistryController.js`, and `/api/admin/consumers`).
+
+#### 5.2.6 Cash Flow Analysis (`/admin/cashflow`)
 
 **FR-ADM-016** — Admin shall access a cash flow analysis view showing inflows and trends.  
 *Implemented*: ⚠️ Route exists; component is a stub.
 
-#### 5.2.6 Reports (`/admin/reports`)
+#### 5.2.7 Reports (`/admin/reports`)
 
 **FR-ADM-017** — Admin shall access platform-level reports including:
 - Revenue by tenant/biller
@@ -404,7 +415,7 @@ server/src/
 
 *Implemented*: ⚠️ Route exists; component is a stub.
 
-#### 5.2.7 Audit Trail (`/admin/audit`)
+#### 5.2.8 Audit Trail (`/admin/audit`)
 
 **FR-ADM-018** — Admin shall be able to view the platform audit log with entries for all mutating events (create/update/delete/payment-critical actions).  
 *Implemented*: ✅ (`AuditTrail.tsx` + `auditController.js` + `/api/audit-logs` route).
@@ -415,12 +426,12 @@ server/src/
 **FR-ADM-020** — Audit log entries shall include: timestamp, actor (user ID/email), action, resource type, resource ID, and tenant.  
 *Implemented*: ✅.
 
-#### 5.2.8 API Health Sandbox
+#### 5.2.9 API Health Sandbox
 
 **FR-ADM-021** — Admin shall have access to an API sandbox to probe 1LINK inquiry, payment, and fetch-bundle endpoints and view raw request/response payloads.  
 *Implemented*: ⚠️ Referenced in PRD; backend routes exist (`/api/admin-tools`).
 
-#### 5.2.9 Settings (`/admin/settings`)
+#### 5.2.10 Settings (`/admin/settings`)
 
 **FR-ADM-022** — Admin shall have a settings page for platform configuration.  
 *Implemented*: ❌ Navigation item exists in sidebar but route/component is missing (404).
@@ -793,20 +804,9 @@ The following pages exist in source but are **not wired** in `App.tsx` routing. 
 **FR-UX-001** — All authenticated portal pages shall be rendered inside a shared shell providing:
 - Fixed sidebar with role-specific navigation groups (Overview, Management, Finance, Analytics, System)
 - Collapsible/hamburger sidebar on mobile
-- Header with breadcrumb, global search, notification bell, and dark mode toggle
+- Header with breadcrumb, notification bell, and dark mode toggle
 - User profile card in sidebar footer with logout button
 
-*Implemented*: ✅.
-
-#### 5.5.2 Global Search (`GlobalSearch.tsx`)
-
-**FR-UX-002** — A global command palette shall be accessible via `Ctrl+K` / `Cmd+K`.  
-*Implemented*: ✅.
-
-**FR-UX-003** — The global search shall support searching: students (→ `/school/students`), applicants (→ `/eta/applicants`), and transactions (→ `/admin/transactions`).  
-*Implemented*: ✅.
-
-**FR-UX-004** — Results shall appear for queries longer than 1 character; selecting a result navigates to the relevant page and closes the palette.  
 *Implemented*: ✅.
 
 #### 5.5.3 Notification Center (`NotificationCenter.tsx`)
@@ -1219,6 +1219,7 @@ Consumer numbers must comply with 1LINK maximum consumer number length constrain
 | `/admin/billers` | `BillerManagement` | admin | ✅ |
 | `/admin/users` | `UserManagement` | admin | ✅ |
 | `/admin/transactions` | `TransactionList` | admin | ✅ |
+| `/admin/consumer-numbers` | `ConsumerRegistry` | admin | ✅ |
 | `/admin/cashflow` | `CashFlow` | admin | ⚠️ Stub |
 | `/admin/reports` | `Reports` | admin | ⚠️ Stub |
 | `/admin/audit` | `AuditTrail` | admin | ✅ |
@@ -1261,6 +1262,7 @@ Consumer numbers must comply with 1LINK maximum consumer number length constrain
 | `POST /api/auth/refresh` | `auth` | Token refresh |
 | `GET/POST/PUT /api/users` | `users` | User management |
 | `GET/POST/PUT /api/tenants` | `tenants` | Tenant management |
+| `GET /api/admin/consumers` | `consumerRegistry` | Admin-only cross-tenant consumer-number registry |
 | `GET/POST/PUT/DELETE /api/students` | `students` | Student CRUD |
 | `GET/POST/PUT /api/invoices` | `invoices` | Invoice management |
 | `GET/POST /api/billing` | `billing` | Billing operations |

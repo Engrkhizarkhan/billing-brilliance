@@ -454,25 +454,6 @@ async function seed() {
     }
     logger.info('Seeded 10 audit logs');
 
-    // ---- 15. Bill Bundles ----
-    const bundlesData = [
-      { code: 'BASIC_MONTHLY', name: 'Monthly Tuition', amount: 15000, frequency: 'monthly', description: 'Standard monthly tuition with 10th due date', due_day: 10, late_fee: 500 },
-      { code: 'TRANSPORT_ADDON', name: 'Transport Fee', amount: 1500, frequency: 'monthly', description: 'Bus/van service add-on', due_day: 10, late_fee: 0 },
-      { code: 'EXAM_FEE', name: 'Exam Fee (Quarterly)', amount: 3000, frequency: 'quarterly', description: 'Quarterly exam fee', due_day: 1, late_fee: 300 },
-      { code: 'HOSTEL_MONTHLY', name: 'Hostel Fee', amount: 12000, frequency: 'monthly', description: 'Hostel accommodation monthly fee', due_day: 5, late_fee: 800 },
-      { code: 'ANNUAL_PLAN', name: 'Annual Plan', amount: 150000, frequency: 'yearly', description: 'Yearly lump sum plan with bundled discount', due_day: 15, late_fee: 5000 },
-    ];
-
-    for (const b of bundlesData) {
-      await connection.query(
-        `INSERT INTO bill_bundles (id, tenant_id, code, name, amount, frequency, description, due_day, late_fee)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE name = VALUES(name)`,
-        [uuidv4(), beaconHouse.id, b.code, b.name, b.amount, b.frequency, b.description, b.due_day, b.late_fee]
-      );
-    }
-    logger.info(`Seeded ${bundlesData.length} bill bundles`);
-
     logger.info('Database seed completed successfully!');
   } catch (err) {
     logger.error('Seed failed:', err);

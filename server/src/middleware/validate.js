@@ -63,6 +63,12 @@ const createPaymentValidation = [
   body('amount').isFloat({ gt: 0 }).withMessage('Amount must be greater than 0'),
   body('dueDate').optional().trim(),
   body('due_date').optional().trim(),
+  body().custom((value) => {
+    const customerName = String(value.customerName || value.customer_name || '').trim();
+    if (!customerName) throw new Error('customer_name is required');
+    if (customerName.length > 255) throw new Error('customer_name must not exceed 255 characters');
+    return true;
+  }),
 ];
 
 const paymentCallbackValidation = [

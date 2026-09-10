@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { StatusBadge } from '@/components/StatusBadge';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { FilterBar } from '@/components/FilterBar';
 import { TablePagination } from '@/components/TablePagination';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -9,7 +10,6 @@ import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import { OrgPaymentRecord } from '@/types';
 import { Loader2 } from 'lucide-react';
-import { RecordPaymentDialog } from '@/components/RecordPaymentDialog';
 
 const mapPaymentToInvoiceStatus = (status: 'pending' | 'paid' | 'failed' | 'expired'): 'paid' | 'pending' | 'overdue' => {
   if (status === 'paid') return 'paid';
@@ -23,11 +23,12 @@ const OrgInvoices = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const deferredSearch = useDebouncedValue(search.trim());
 
   const apiStatus = statusFilter === 'overdue' ? 'overdue' : statusFilter === 'all' ? undefined : statusFilter;
   const { data: paymentsData, meta, loading } = useApiQuery(
-    () => api.listOrgPayments({ page, pageSize, search: search || undefined, status: apiStatus }),
-    [paymentVersion, page, pageSize, search, apiStatus]
+    () => api.listOrgPayments({ page, pageSize, search: deferredSearch || undefined, status: apiStatus }),
+    [paymentVersion, page, pageSize, deferredSearch, apiStatus]
   );
   const rawPayments = useMemo(() => (paymentsData || []) as OrgPaymentRecord[], [paymentsData]);
 
@@ -103,7 +104,7 @@ const OrgInvoices = () => {
                   <TableCell className="font-mono text-sm">{formatPKR(row.amount)}</TableCell>
                   <TableCell><StatusBadge status={row.status} /></TableCell>
                   <TableCell className="text-sm text-muted-foreground">{row.dueDate}</TableCell>
-                  <TableCell>{row.status !== 'paid' && row.consumerNumber ? <RecordPaymentDialog targetType="org_payment" targetId={row.id} consumerNumber={row.consumerNumber} payerLabel={row.applicationId} amount={Number(row.amount)} onSuccess={() => usePaymentStore.getState().bump()} /> : null}</TableCell>
+                  <TableCell><span className="text-xs text-muted-foreground">Read only</span></TableCell>
                 </TableRow>
               ))
             )}
@@ -116,6 +117,7 @@ const OrgInvoices = () => {
           pageSize={pageSize}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
+          pageSizeOptions={[10, 25, 30]}
         />
       </div>
     </div>

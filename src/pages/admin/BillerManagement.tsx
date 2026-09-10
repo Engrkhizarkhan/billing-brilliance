@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { Biller } from '@/types';
 import { StatusBadge } from '@/components/StatusBadge';
 import { FilterBar } from '@/components/FilterBar';
@@ -14,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { Plus, Pencil, RefreshCcw, Copy, Eye, EyeOff, KeyRound, Ban, Rocket, Trash2 } from 'lucide-react';
+import { Plus, Pencil, RefreshCcw, Copy, Eye, EyeOff, KeyRound, Ban, Rocket, Trash2, FlaskConical } from 'lucide-react';
 import { api } from '@/lib/api';
 import { TablePagination } from '@/components/TablePagination';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -59,17 +60,27 @@ const BillerManagement = () => {
   const [visibleKeyId, setVisibleKeyId] = useState<string | null>(null);
   const [regenerateTarget, setRegenerateTarget] = useState<Biller | null>(null);
   const [regenerateConfirmation, setRegenerateConfirmation] = useState('');
+  const [regeneratePin, setRegeneratePin] = useState('');
+  const [revealTarget, setRevealTarget] = useState<Biller | null>(null);
+  const [revealPin, setRevealPin] = useState('');
+  const [sandboxTarget, setSandboxTarget] = useState<Biller | null>(null);
+  const [sandboxPin, setSandboxPin] = useState('');
+  const [sandboxConfirmation, setSandboxConfirmation] = useState('');
+  const [sandboxKey, setSandboxKey] = useState('');
   const [statusTarget, setStatusTarget] = useState<Biller | null>(null);
   const [suspensionReason, setSuspensionReason] = useState('');
   const [activationTarget, setActivationTarget] = useState<Biller | null>(null);
   const [activationConfirmation, setActivationConfirmation] = useState('');
+  const [activationPin, setActivationPin] = useState('');
   const [activationChecklist, setActivationChecklist] = useState(emptyActivationChecklist);
   const [offboardTarget, setOffboardTarget] = useState<Biller | null>(null);
   const [offboardConfirmation, setOffboardConfirmation] = useState('');
   const [offboardReason, setOffboardReason] = useState('');
+  const [offboardPin, setOffboardPin] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [total, setTotal] = useState(0);
+  const deferredSearch = useDebouncedValue(search.trim());
 
   const copyApiKey = (key: string) => {
     void navigator.clipboard.writeText(key);
@@ -77,11 +88,11 @@ const BillerManagement = () => {
   };
 
   const handleRegenerateKey = async () => {
-    if (!regenerateTarget || regenerateConfirmation !== regenerateTarget.name) return;
+    if (!regenerateTarget || regenerateConfirmation !== regenerateTarget.name || !/^\d{6}$/.test(regeneratePin)) return;
     const id = regenerateTarget.id;
     setLoading(true);
     try {
-      const res = await api.regenerateBillerApiKey(id, `REGENERATE ${id}`);
+      const res = await api.regenerateBillerApiKey(id, `REGENERATE ${id}`, regeneratePin);
       if (res.data) {
         setBillerList((prev) => prev.map((b) => (b.id === id ? res.data : b)));
         if (editBiller?.id === id) setEditBiller(res.data);
@@ -90,11 +101,40 @@ const BillerManagement = () => {
       }
       setRegenerateTarget(null);
       setRegenerateConfirmation('');
+      setRegeneratePin('');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to regenerate API key');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRevealKey = async () => {
+    if (!revealTarget || !/^\d{6}$/.test(revealPin)) return;
+    setLoading(true);
+    try {
+      const response = await api.revealBillerApiKey(revealTarget.id, revealPin);
+      setBillerList((current) => current.map((biller) => biller.id === revealTarget.id
+        ? { ...biller, apiKey: response.data.apiKey, apiKeyPrefix: response.data.apiKeyPrefix }
+        : biller));
+      setVisibleKeyId(revealTarget.id);
+      setRevealTarget(null);
+      setRevealPin('');
+      toast.success('API key revealed. Hide it as soon as the secure handoff is complete.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to reveal API key');
+    } finally { setLoading(false); }
+  };
+
+  const handleProvisionSandbox = async () => {
+    if (!sandboxTarget || !/^\d{6}$/.test(sandboxPin) || sandboxConfirmation !== sandboxTarget.name) return;
+    setLoading(true);
+    try {
+      const response = await api.provisionBillerSandbox(sandboxTarget.id, `PROVISION ${sandboxTarget.id}`, sandboxPin);
+      setSandboxKey(response.data.apiKey);
+      toast.success(response.data.alreadyProvisioned ? 'Existing sandbox credential recovered' : 'Isolated sandbox provisioned');
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'Unable to provision sandbox'); }
+    finally { setLoading(false); }
   };
 
   useEffect(() => {
@@ -103,7 +143,7 @@ const BillerManagement = () => {
       const response = await api.fetchBillers({
         page,
         pageSize,
-        search: search || undefined,
+        search: deferredSearch || undefined,
         status: statusFilter === 'all' ? undefined : statusFilter,
         type: typeFilter === 'all' ? undefined : typeFilter,
       });
@@ -112,7 +152,7 @@ const BillerManagement = () => {
       setLoading(false);
     };
     void load();
-  }, [page, pageSize, search, statusFilter, typeFilter]);
+  }, [page, pageSize, deferredSearch, statusFilter, typeFilter]);
 
   const filtered = billerList;
 
@@ -183,29 +223,30 @@ const BillerManagement = () => {
   };
 
   const activateBiller = async () => {
-    if (!activationTarget || activationConfirmation !== activationTarget.name) return;
+    if (!activationTarget || activationConfirmation !== activationTarget.name || !/^\d{6}$/.test(activationPin)) return;
     setLoading(true);
     try {
-      const updated = await api.updateBillerLifecycle(activationTarget.id, 'live', activationChecklist, `ACTIVATE ${activationTarget.id}`, 'Production activation confirmed by platform administrator');
+      const updated = await api.updateBillerLifecycle(activationTarget.id, 'live', activationChecklist, `ACTIVATE ${activationTarget.id}`, 'Production activation confirmed by platform administrator', activationPin);
       setBillerList((current) => current.map((biller) => biller.id === activationTarget.id ? updated.data : biller));
       toast.success(`${activationTarget.name} is now live`);
       setActivationTarget(null);
       setActivationConfirmation('');
       setActivationChecklist(emptyActivationChecklist());
+      setActivationPin('');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to activate biller');
     } finally { setLoading(false); }
   };
 
   const offboardBiller = async () => {
-    if (!offboardTarget || offboardConfirmation !== offboardTarget.name || offboardReason.trim().length < 5) return;
+    if (!offboardTarget || offboardConfirmation !== offboardTarget.name || offboardReason.trim().length < 5 || !/^\d{6}$/.test(offboardPin)) return;
     setLoading(true);
     try {
-      await api.offboardBiller(offboardTarget.id, offboardConfirmation, offboardReason.trim());
+      await api.offboardBiller(offboardTarget.id, offboardConfirmation, offboardReason.trim(), offboardPin);
       setBillerList((current) => current.filter((biller) => biller.id !== offboardTarget.id));
       setTotal((current) => Math.max(0, current - 1));
       toast.success(`${offboardTarget.name} was offboarded. Financial history was retained.`);
-      setOffboardTarget(null); setOffboardConfirmation(''); setOffboardReason('');
+      setOffboardTarget(null); setOffboardConfirmation(''); setOffboardReason(''); setOffboardPin('');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to offboard biller');
     } finally { setLoading(false); }
@@ -225,11 +266,11 @@ const BillerManagement = () => {
           <DialogContent>
             <DialogHeader><DialogTitle>Create New Biller</DialogTitle><DialogDescription>Create a tenant profile and choose the permanent consumer-number format.</DialogDescription></DialogHeader>
             <div className="space-y-4 pt-2">
-              <div><Label>Organization Name</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+              <div><Label htmlFor="create-biller-name">Organization Name</Label><Input id="create-biller-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
               <div>
-                <Label>Type</Label>
+                <Label htmlFor="create-biller-type">Type</Label>
                 <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v as Biller['type'] })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="create-biller-type"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="school">School</SelectItem>
                     <SelectItem value="org">Organization</SelectItem>
@@ -237,12 +278,12 @@ const BillerManagement = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Email</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-              <div><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+              <div><Label htmlFor="create-biller-email">Email</Label><Input id="create-biller-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+              <div><Label htmlFor="create-biller-phone">Phone</Label><Input id="create-biller-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
               <div className="space-y-2">
-                <Label>Consumer number length</Label>
+                <Label htmlFor="create-biller-consumer-length">Consumer number length</Label>
                 <Select value={String(form.consumerNumberLength)} onValueChange={(value) => setForm({ ...form, consumerNumberLength: Number(value) as 14 | 24 })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="create-biller-consumer-length"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="24">24 digits (recommended)</SelectItem>
                     <SelectItem value="14">14 digits (maximum 9,999 for a 4-digit biller code)</SelectItem>
@@ -272,7 +313,7 @@ const BillerManagement = () => {
                 <div>
                   <Label>Type</Label>
                   <Select value={editForm.type} onValueChange={(v) => setEditForm({ ...editForm, type: v as Biller['type'] })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="create-biller-consumer-length"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="school">School</SelectItem>
                       <SelectItem value="org">Organization</SelectItem>
@@ -310,7 +351,23 @@ const BillerManagement = () => {
           </DialogContent>
         </Dialog>
 
-        <AlertDialog open={Boolean(regenerateTarget)} onOpenChange={(open) => { if (!open && !loading) { setRegenerateTarget(null); setRegenerateConfirmation(''); } }}>
+        <AlertDialog open={Boolean(sandboxTarget)} onOpenChange={(open) => { if (!open && !loading) { setSandboxTarget(null); setSandboxPin(''); setSandboxConfirmation(''); setSandboxKey(''); } }}>
+          <AlertDialogContent>
+            <AlertDialogHeader><AlertDialogTitle>Provision isolated sandbox?</AlertDialogTitle><AlertDialogDescription>This creates or retrieves a test-only credential for <strong>{sandboxTarget?.name}</strong> in the separate sandbox database. It cannot authenticate against production.</AlertDialogDescription></AlertDialogHeader>
+            {sandboxKey ? <div className="space-y-2"><Label>Sandbox API key</Label><div className="flex gap-2"><Input readOnly className="font-mono text-xs" value={sandboxKey} /><Button type="button" variant="outline" onClick={() => copyApiKey(sandboxKey)}><Copy className="h-4 w-4" /></Button></div><p className="text-xs text-muted-foreground">Deliver this key through a secure channel. It will be purged when the biller goes live.</p></div> : <div className="space-y-3"><div className="space-y-2"><Label>Type <strong>{sandboxTarget?.name}</strong> to confirm</Label><Input value={sandboxConfirmation} onChange={(event) => setSandboxConfirmation(event.target.value)} /></div><div className="space-y-2"><Label>Six-digit administrator PIN</Label><Input type="password" inputMode="numeric" maxLength={6} autoComplete="off" value={sandboxPin} onChange={(event) => setSandboxPin(event.target.value.replace(/\D/g, '').slice(0, 6))} /></div></div>}
+            <AlertDialogFooter><AlertDialogCancel disabled={loading}>{sandboxKey ? 'Close' : 'Cancel'}</AlertDialogCancel>{!sandboxKey && <AlertDialogAction disabled={loading || sandboxConfirmation !== sandboxTarget?.name || !/^\d{6}$/.test(sandboxPin)} onClick={(event) => { event.preventDefault(); void handleProvisionSandbox(); }}><FlaskConical className="mr-2 h-4 w-4" />Provision sandbox</AlertDialogAction>}</AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={Boolean(revealTarget)} onOpenChange={(open) => { if (!open && !loading) { setRevealTarget(null); setRevealPin(''); } }}>
+          <AlertDialogContent>
+            <AlertDialogHeader><AlertDialogTitle>Reveal API key?</AlertDialogTitle><AlertDialogDescription>The full key for <strong>{revealTarget?.name}</strong> is sensitive. This action is rate-limited and written to the audit trail. Legacy hash-only keys must be regenerated once.</AlertDialogDescription></AlertDialogHeader>
+            <div className="space-y-2"><Label htmlFor="biller-reveal-pin">Six-digit administrator PIN</Label><Input id="biller-reveal-pin" type="password" inputMode="numeric" maxLength={6} autoComplete="off" value={revealPin} onChange={(event) => setRevealPin(event.target.value.replace(/\D/g, '').slice(0, 6))} /></div>
+            <AlertDialogFooter><AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel><AlertDialogAction disabled={loading || !/^\d{6}$/.test(revealPin)} onClick={(event) => { event.preventDefault(); void handleRevealKey(); }}><Eye className="mr-2 h-4 w-4" />Reveal key</AlertDialogAction></AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={Boolean(regenerateTarget)} onOpenChange={(open) => { if (!open && !loading) { setRegenerateTarget(null); setRegenerateConfirmation(''); setRegeneratePin(''); } }}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Regenerate API key?</AlertDialogTitle>
@@ -322,9 +379,10 @@ const BillerManagement = () => {
               <Label htmlFor="biller-key-confirmation">Type the organization name to continue</Label>
               <Input id="biller-key-confirmation" value={regenerateConfirmation} onChange={(event) => setRegenerateConfirmation(event.target.value)} autoComplete="off" />
             </div>
+            <div className="space-y-2"><Label htmlFor="biller-regenerate-pin">Six-digit administrator PIN</Label><Input id="biller-regenerate-pin" type="password" inputMode="numeric" maxLength={6} autoComplete="off" value={regeneratePin} onChange={(event) => setRegeneratePin(event.target.value.replace(/\D/g, '').slice(0, 6))} /></div>
             <AlertDialogFooter>
               <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
-              <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={loading || regenerateConfirmation !== regenerateTarget?.name} onClick={(event) => { event.preventDefault(); void handleRegenerateKey(); }}>
+              <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={loading || regenerateConfirmation !== regenerateTarget?.name || !/^\d{6}$/.test(regeneratePin)} onClick={(event) => { event.preventDefault(); void handleRegenerateKey(); }}>
                 {loading ? 'Regenerating…' : 'Regenerate and revoke old key'}
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -342,7 +400,7 @@ const BillerManagement = () => {
               </AlertDialogDescription>
             </AlertDialogHeader>
             {statusTarget?.status === 'active' && (
-              <div className="space-y-2"><Label>Reason (required)</Label><Input value={suspensionReason} onChange={(event) => setSuspensionReason(event.target.value)} placeholder="Operational or compliance reason" /></div>
+              <div className="space-y-2"><Label htmlFor="biller-suspension-reason">Reason (required)</Label><Input id="biller-suspension-reason" value={suspensionReason} onChange={(event) => setSuspensionReason(event.target.value)} placeholder="Operational or compliance reason" /></div>
             )}
             <AlertDialogFooter>
               <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
@@ -355,7 +413,7 @@ const BillerManagement = () => {
           </AlertDialogContent>
         </AlertDialog>
 
-        <AlertDialog open={Boolean(activationTarget)} onOpenChange={(open) => { if (!open && !loading) { setActivationTarget(null); setActivationConfirmation(''); setActivationChecklist(emptyActivationChecklist()); } }}>
+        <AlertDialog open={Boolean(activationTarget)} onOpenChange={(open) => { if (!open && !loading) { setActivationTarget(null); setActivationConfirmation(''); setActivationPin(''); setActivationChecklist(emptyActivationChecklist()); } }}>
           <AlertDialogContent>
             <AlertDialogHeader><AlertDialogTitle>Activate production access?</AlertDialogTitle><AlertDialogDescription>
               Confirm that profile, credentials, IP allowlist, UAT, and support contacts are complete. This enables real production payment traffic.
@@ -368,18 +426,19 @@ const BillerManagement = () => {
                 </label>
               ))}
               <div className="space-y-2"><Label>Type <strong>{activationTarget?.name}</strong> to confirm all checks</Label><Input value={activationConfirmation} onChange={(event) => setActivationConfirmation(event.target.value)} /></div>
+              <div className="space-y-2"><Label>Six-digit administrator PIN</Label><Input type="password" inputMode="numeric" maxLength={6} autoComplete="off" value={activationPin} onChange={(event) => setActivationPin(event.target.value.replace(/\D/g, '').slice(0, 6))} /></div>
             </div>
-            <AlertDialogFooter><AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel><AlertDialogAction disabled={loading || activationConfirmation !== activationTarget?.name || !Object.values(activationChecklist).every(Boolean)} onClick={(event) => { event.preventDefault(); void activateBiller(); }}><Rocket className="w-4 h-4 mr-2" />Activate live</AlertDialogAction></AlertDialogFooter>
+            <AlertDialogFooter><AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel><AlertDialogAction disabled={loading || activationConfirmation !== activationTarget?.name || !Object.values(activationChecklist).every(Boolean) || !/^\d{6}$/.test(activationPin)} onClick={(event) => { event.preventDefault(); void activateBiller(); }}><Rocket className="w-4 h-4 mr-2" />Activate live</AlertDialogAction></AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
 
-        <AlertDialog open={Boolean(offboardTarget)} onOpenChange={(open) => { if (!open && !loading) { setOffboardTarget(null); setOffboardConfirmation(''); setOffboardReason(''); } }}>
+        <AlertDialog open={Boolean(offboardTarget)} onOpenChange={(open) => { if (!open && !loading) { setOffboardTarget(null); setOffboardConfirmation(''); setOffboardReason(''); setOffboardPin(''); } }}>
           <AlertDialogContent>
             <AlertDialogHeader><AlertDialogTitle>Offboard this biller?</AlertDialogTitle><AlertDialogDescription>
               Access and API credentials will be revoked. Consumers, invoices, payments, ledgers, and audit records will be retained for reconciliation. This option is available only after suspension.
             </AlertDialogDescription></AlertDialogHeader>
-            <div className="space-y-3"><div className="space-y-2"><Label>Reason (required)</Label><Input value={offboardReason} onChange={(event) => setOffboardReason(event.target.value)} /></div><div className="space-y-2"><Label>Type <strong>{offboardTarget?.name}</strong> to confirm</Label><Input value={offboardConfirmation} onChange={(event) => setOffboardConfirmation(event.target.value)} /></div></div>
-            <AlertDialogFooter><AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel><AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={loading || offboardConfirmation !== offboardTarget?.name || offboardReason.trim().length < 5} onClick={(event) => { event.preventDefault(); void offboardBiller(); }}><Trash2 className="mr-2 h-4 w-4" />Offboard and revoke access</AlertDialogAction></AlertDialogFooter>
+            <div className="space-y-3"><div className="space-y-2"><Label htmlFor="biller-offboard-reason">Reason (required)</Label><Input id="biller-offboard-reason" value={offboardReason} onChange={(event) => setOffboardReason(event.target.value)} /></div><div className="space-y-2"><Label htmlFor="biller-offboard-confirmation">Type <strong>{offboardTarget?.name}</strong> to confirm</Label><Input id="biller-offboard-confirmation" value={offboardConfirmation} onChange={(event) => setOffboardConfirmation(event.target.value)} /></div><div className="space-y-2"><Label htmlFor="biller-offboard-pin">Six-digit administrator PIN</Label><Input id="biller-offboard-pin" type="password" inputMode="numeric" maxLength={6} autoComplete="off" value={offboardPin} onChange={(event) => setOffboardPin(event.target.value.replace(/\D/g, '').slice(0, 6))} /></div></div>
+            <AlertDialogFooter><AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel><AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={loading || offboardConfirmation !== offboardTarget?.name || offboardReason.trim().length < 5 || !/^\d{6}$/.test(offboardPin)} onClick={(event) => { event.preventDefault(); void offboardBiller(); }}><Trash2 className="mr-2 h-4 w-4" />Offboard and revoke access</AlertDialogAction></AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       </div>
@@ -446,20 +505,20 @@ const BillerManagement = () => {
                 <TableCell className="text-sm text-muted-foreground">{b.email}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{b.phone}</TableCell>
                 <TableCell>
-                  {b.apiKey ? (
+                  {b.apiKey && visibleKeyId === b.id ? (
                     <div className="flex items-center gap-1">
                       <span className="font-mono text-xs text-muted-foreground">
-                        {visibleKeyId === b.id ? b.apiKey : `${b.apiKey.slice(0, 8)}••••`}
+                        {b.apiKey}
                       </span>
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setVisibleKeyId(visibleKeyId === b.id ? null : b.id)}>
-                        {visibleKeyId === b.id ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setVisibleKeyId(null); setBillerList((current) => current.map((item) => item.id === b.id ? { ...item, apiKey: undefined } : item)); }}>
+                        <EyeOff className="h-3 w-3" />
                       </Button>
                       <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyApiKey(b.apiKey!)}>
                         <Copy className="h-3 w-3" />
                       </Button>
                     </div>
                   ) : (
-                    <span className="font-mono text-xs text-muted-foreground">{b.apiKeyPrefix ? `${b.apiKeyPrefix}… (hidden)` : '—'}</span>
+                    <div className="flex items-center gap-1"><span className="font-mono text-xs text-muted-foreground">{b.apiKeyPrefix ? `${b.apiKeyPrefix}… (hidden)` : 'Legacy key (hidden)'}</span><Button variant="ghost" size="icon" className="h-6 w-6" title="Reveal with PIN" onClick={() => { setRevealTarget(b); setRevealPin(''); }}><Eye className="h-3 w-3" /></Button></div>
                   )}
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">{b.createdAt}</TableCell>
@@ -475,7 +534,9 @@ const BillerManagement = () => {
                       </Button>
                     )}
                     {b.status === 'active' && <Button variant="ghost" size="sm" onClick={() => setStatusTarget(b)} disabled={loading} title="Suspend biller"><Ban className="w-4 h-4 text-destructive" /></Button>}
+                    {b.lifecycleStage !== 'live' && <Button variant="ghost" size="sm" onClick={() => { setSandboxTarget(b); setSandboxPin(''); setSandboxConfirmation(''); setSandboxKey(''); }} disabled={loading} title="Provision isolated sandbox"><FlaskConical className="w-4 h-4" /></Button>}
                     {b.lifecycleStage !== 'live' && <Button variant="ghost" size="sm" onClick={() => { setActivationChecklist(emptyActivationChecklist()); setActivationTarget(b); }} disabled={loading} title="Activate production"><Rocket className="w-4 h-4" /></Button>}
+                    <Button variant="ghost" size="sm" onClick={() => { setRegenerateTarget(b); setRegenerateConfirmation(''); setRegeneratePin(''); }} disabled={loading} title="Regenerate API key"><KeyRound className="w-4 h-4" /></Button>
                     {b.status !== 'active' && <Button variant="ghost" size="sm" onClick={() => setOffboardTarget(b)} disabled={loading} title="Offboard biller"><Trash2 className="w-4 h-4 text-destructive" /></Button>}
                   </div>
                 </TableCell>

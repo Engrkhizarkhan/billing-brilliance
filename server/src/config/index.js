@@ -1,4 +1,11 @@
-require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
+const path = require('path');
+const dotenv = require('dotenv');
+
+const envPath = path.resolve(__dirname, '../../.env');
+const loadedEnv = dotenv.config({ path: envPath }).parsed || {};
+const fileFirst = (name) => Object.prototype.hasOwnProperty.call(loadedEnv, name)
+  ? loadedEnv[name]
+  : process.env[name];
 
 module.exports = {
   port: parseInt(process.env.PORT, 10) || 5000,
@@ -12,7 +19,9 @@ module.exports = {
     port: parseInt(process.env.DB_PORT, 10) || 3306,
     database: process.env.DB_NAME || 'Fintap',
     user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
+    password: Object.prototype.hasOwnProperty.call(process.env, 'DB_PASSWORD_OVERRIDE')
+      ? (process.env.DB_PASSWORD_OVERRIDE === '__EMPTY__' ? '' : process.env.DB_PASSWORD_OVERRIDE)
+      : (process.env.DB_PASSWORD || ''),
     connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT, 10) || 20,
   },
 
@@ -27,6 +36,17 @@ module.exports = {
     email: process.env.ADMIN_EMAIL || '',
     password: process.env.ADMIN_PASSWORD || '',
     name: process.env.ADMIN_NAME || 'Platform Administrator',
+    // The local server/.env is authoritative for this operator secret. This
+    // avoids an old PM2 environment snapshot silently overriding a rotated PIN.
+    actionPin: fileFirst('ADMIN_ACTION_PIN') || (process.env.NODE_ENV === 'production' ? '' : '123456'),
+  },
+
+  apiKeyEncryptionKey: process.env.API_KEY_ENCRYPTION_KEY
+    || (process.env.NODE_ENV === 'production' ? '' : 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='),
+
+  sandbox: {
+    baseUrl: process.env.SANDBOX_BASE_URL || '',
+    purgeSecret: process.env.SANDBOX_PURGE_SECRET || '',
   },
 
   requireHttps: (process.env.REQUIRE_HTTPS || 'false').toLowerCase() !== 'false',

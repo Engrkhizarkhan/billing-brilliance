@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, Loader2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api } from '@/lib/api';
@@ -19,28 +18,18 @@ const formatTimestamp = (value?: string) => {
 
 const OrgRealtimePayments = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
-  const [autoRefresh, setAutoRefresh] = useState(true);
-  const [liveClock, setLiveClock] = useState(() => new Date());
   const [lastLiveUpdateAt, setLastLiveUpdateAt] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!autoRefresh) return;
-    const intervalId = window.setInterval(() => setLiveClock(new Date()), 5000);
-    return () => window.clearInterval(intervalId);
-  }, [autoRefresh]);
-
-  useEffect(() => {
     if (paymentVersion === 0) return;
-    const now = new Date();
-    setLiveClock(now);
-    setLastLiveUpdateAt(now.toISOString());
+    setLastLiveUpdateAt(new Date().toISOString());
   }, [paymentVersion]);
 
   const { data: paymentsData, loading } = useApiQuery(
-    () => api.listOrgPayments({ page: 1, pageSize: 100, status: 'paid' }),
-    [paymentVersion, liveClock]
+    () => api.listOrgPayments({ page: 1, pageSize: 30, status: 'paid' }),
+    [paymentVersion]
   );
-  const { data: statsData } = useApiQuery(() => api.getOrgStats(), [paymentVersion, liveClock]);
+  const { data: statsData } = useApiQuery(() => api.getOrgStats(), [paymentVersion]);
   const allPayments = useMemo(() => (paymentsData || []) as OrgPaymentRecord[], [paymentsData]);
 
   const paidPayments = useMemo(
@@ -72,11 +61,8 @@ const OrgRealtimePayments = () => {
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">
-                Last sync: {formatTimestamp(lastLiveUpdateAt || liveClock.toISOString())}
+                Last pushed event: {lastLiveUpdateAt ? formatTimestamp(lastLiveUpdateAt) : 'Waiting for a new payment'}
               </span>
-              <Button size="sm" variant="outline" className="rounded-lg" onClick={() => setAutoRefresh((v) => !v)}>
-                {autoRefresh ? 'Pause live refresh' : 'Resume live refresh'}
-              </Button>
             </div>
           </div>
 

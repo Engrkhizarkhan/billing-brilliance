@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '@/components/StatusBadge';
 import { FilterBar } from '@/components/FilterBar';
@@ -61,6 +62,7 @@ const UserManagement = () => {
   const [pageSize, setPageSize] = useState(25);
   const [total, setTotal] = useState(0);
   const [billers, setBillers] = useState<Biller[]>([]);
+  const deferredSearch = useDebouncedValue(search.trim());
   const schoolTenants = billers.filter((b) => b.type === 'school');
   const orgTenants = billers.filter((b) => b.type === 'org');
 
@@ -82,7 +84,7 @@ const UserManagement = () => {
       const response = await api.fetchUsers({
         page,
         pageSize,
-        search: search || undefined,
+        search: deferredSearch || undefined,
         role: roleFilter === 'all' ? undefined : roleFilter,
         status: statusFilter === 'all' ? undefined : statusFilter,
       });
@@ -91,7 +93,7 @@ const UserManagement = () => {
       setLoading(false);
     };
     void load();
-  }, [page, pageSize, search, roleFilter, statusFilter]);
+  }, [page, pageSize, deferredSearch, roleFilter, statusFilter]);
 
   const filtered = users;
 

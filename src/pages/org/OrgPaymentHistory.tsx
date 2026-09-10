@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { FilterBar } from '@/components/FilterBar';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { StatusBadge } from '@/components/StatusBadge';
 import { TablePagination } from '@/components/TablePagination';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -10,7 +11,6 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import { Copy, Loader2 } from 'lucide-react';
-import { ReversePaymentDialog } from '@/components/ReversePaymentDialog';
 
 const OrgPaymentHistory = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
@@ -19,10 +19,11 @@ const OrgPaymentHistory = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const deferredSearch = useDebouncedValue(search.trim());
 
   const { data: paymentsData, meta, loading: loadingPayments } = useApiQuery(
-    () => api.listOrgPayments({ page, pageSize, search: search || undefined, status: statusFilter === 'all' ? undefined : statusFilter }),
-    [paymentVersion, page, pageSize, search, statusFilter]
+    () => api.listOrgPayments({ page, pageSize, search: deferredSearch || undefined, status: statusFilter === 'all' ? undefined : statusFilter }),
+    [paymentVersion, page, pageSize, deferredSearch, statusFilter]
   );
   const paymentRecords = useMemo(() => (paymentsData || []) as OrgPaymentRecord[], [paymentsData]);
 
@@ -103,7 +104,7 @@ const OrgPaymentHistory = () => {
                   <TableCell className="text-xs text-muted-foreground">{payment.createdAt}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{payment.paidAt || '—'}</TableCell>
                   <TableCell className="font-mono text-xs">{payment.transactionId || '—'}</TableCell>
-                  <TableCell>{payment.postedPaymentId && payment.paymentSource === 'manual' && payment.paymentReceiptNumber ? <ReversePaymentDialog paymentId={payment.postedPaymentId} receiptNumber={payment.paymentReceiptNumber} onSuccess={() => usePaymentStore.getState().bump()} /> : null}</TableCell>
+                  <TableCell><span className="text-xs text-muted-foreground">Read only</span></TableCell>
                 </TableRow>
               ))
             )}
@@ -116,6 +117,7 @@ const OrgPaymentHistory = () => {
           pageSize={pageSize}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
+          pageSizeOptions={[10, 25, 30]}
         />
       </div>
     </div>

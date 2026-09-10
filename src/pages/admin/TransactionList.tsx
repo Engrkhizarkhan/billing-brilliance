@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -11,10 +12,11 @@ const TransactionList = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const deferredSearch = useDebouncedValue(search.trim());
 
   const { data: rawTransactions, loading } = useApiQuery(
-    () => api.fetchTransactions({ search: search || undefined, status: statusFilter === 'all' ? undefined : statusFilter }),
-    [paymentVersion, search, statusFilter]
+    () => api.fetchTransactions({ search: deferredSearch || undefined, status: statusFilter === 'all' ? undefined : statusFilter }),
+    [paymentVersion, deferredSearch, statusFilter]
   );
 
   const transactions = (rawTransactions || []) as Array<{ id: string; transactionId: string; consumerNumber: string; amount: number; status: string; date: string; billerName: string }>;

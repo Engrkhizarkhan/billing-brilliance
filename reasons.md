@@ -3,7 +3,9 @@
 Status: decisions implemented locally; operational validation pending
 Prepared: 7 September 2026
 
-The implementation follows these decisions. Verification evidence, deliberate deviations, and remaining production gates are recorded in `docs/FULL_APPLICATION_QA_AUDIT_2026-09-09.md` and `docs/IMPLEMENTATION_AUDIT_2026-09-08.md`.
+The follow-up security and lifecycle decisions for PIN-gated API-key recovery, admin-only manual posting, client-facing API documentation, pushed payment events, and sandbox purge at activation are recorded in `docs/ONBOARDING_SECURITY_SANDBOX_CHANGE_PLAN_2026-09-10.md`.
+
+The implementation follows these decisions. Current verification evidence, deliberate safety limits, and remaining production gates are recorded in `docs/IMPLEMENTATION_AUDIT_2026-09-10.md`.
 
 The decisions below are retained as the architectural record. Where the original text uses future tense, the corresponding local code is now implemented; external infrastructure, production-data rehearsal, performance evidence, and 1LINK sign-off remain pending.
 

@@ -206,7 +206,7 @@ const requireLiveTenant = async (req, res, next) => {
       return res.status(403).json({ error: 'Tenant is suspended', code: 'TENANT_SUSPENDED' });
     }
     const lifecycle = tenant.lifecycleStage || tenant.lifecycle_stage;
-    if (config.appEnvironment === 'production' && lifecycle !== 'live') {
+    if (config.appEnvironment !== 'sandbox' && lifecycle !== 'live') {
       return res.status(403).json({ error: 'Tenant is still in testing and is not enabled for production payments', code: 'TENANT_NOT_LIVE' });
     }
     next();

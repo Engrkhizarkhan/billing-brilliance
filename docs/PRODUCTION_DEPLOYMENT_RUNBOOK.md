@@ -7,6 +7,8 @@ This runbook deploys application changes only. It does not modify the establishe
 - Approved release commit/tag and maintenance window.
 - Recent successful encrypted database backup plus tested restore owner.
 - Production `.env` with `NODE_ENV=production`, `APP_ENVIRONMENT=production`, `DB_NAME=Fintap`, strong unique JWT/webhook secrets, `REQUIRE_HTTPS=true`, prefix `105172`, and 1LINK source IPs `10.95.8.92,10.95.8.94`.
+- A six-digit `ADMIN_ACTION_PIN` stored in the deployment secret manager and copied into the protected `server/.env` file, plus a stable `API_KEY_ENCRYPTION_KEY` generated with `openssl rand -base64 32`. The `server/.env` PIN is authoritative so a stale PM2 environment snapshot cannot override a rotation. Keep the file mode at `600` and restart the API after changing it. Losing or changing the encryption key makes existing recoverable API-key envelopes unreadable; back it up with the application secrets.
+- A separately deployed sandbox API/database/hostname. Set production `SANDBOX_BASE_URL` to that API and configure the same strong `SANDBOX_PURGE_SECRET` on both runtimes. Set frontend build variable `VITE_SANDBOX_BASE_URL` to the public sandbox API origin.
 - Do not print `.env`, PSK, database password, JWT secrets, API keys or certificate private keys.
 - The leaf/full-chain certificate may be shared where required; never share `privkey.pem`.
 
@@ -50,7 +52,7 @@ npm --prefix server ci
 npm --prefix server run migrate
 ```
 
-Migration `007_production_foundation.js` is additive, checksum-tracked, and required by production startup. Never edit it after it has been applied; create a new numbered migration.
+Migrations `007_production_foundation.js` through `011_consumer_registry_indexes.js` are additive, checksum-tracked, and required. Never edit an applied migration; create a new numbered migration. The API now verifies the complete JavaScript migration set during startup and refuses to accept traffic when any required migration is missing.
 
 ## 4. Start API and worker
 
@@ -66,6 +68,8 @@ Expected processes:
 - `Fintap-outbox-worker`
 
 The API binds to `127.0.0.1:3000`; Nginx remains the TLS/public/private-VPN listener on port 443.
+
+Keep the production API at one PM2 application process while realtime payment events use the current in-process event bus. Before increasing API instances, add shared Redis/pub-sub or durable fan-out so an event accepted by one worker reaches clients connected to another. The durable outbox worker remains the source for server-to-server webhook delivery.
 
 ## 5. Post-deployment checks
 
@@ -127,3 +131,7 @@ Never use `git reset --hard`, delete the production database, or run `migrate:fr
 ## 8. Sandbox deployment
 
 Use `server/.env.sandbox.example` on a separate hostname/process/database/user. The sandbox database name must contain `sandbox`, `uat`, or `test`; otherwise startup fails. Do not route the sandbox host into the production 1LINK IPsec tunnel. Use independent API/JWT/webhook credentials and a separate retention/reset policy.
+
+Before activating a tenant, prove that the production API can call the sandbox internal provision/purge endpoints, that sandbox data is absent from the production database, and that activation deletes sandbox tenant data and invalidates the old test key. Activation intentionally fails closed when purge cannot be confirmed.
+
+For the dashboard event stream, preserve `X-Accel-Buffering: no`, disable proxy buffering for `/api/payments/events`, and set a proxy read timeout longer than the server heartbeat interval. Confirm reconnect behavior through the public TLS hostname.

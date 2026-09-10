@@ -1,4 +1,5 @@
-import { useDeferredValue, useState } from 'react';
+import { useState } from 'react';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import type { StudentDirectoryRecord } from '@/types';
@@ -16,7 +17,7 @@ const Defaulters = () => {
   const [riskFilter, setRiskFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const deferredSearch = useDeferredValue(search);
+  const deferredSearch = useDebouncedValue(search.trim());
 
   const { data, meta, loading } = useApiQuery(
     () => api.fetchStudents({

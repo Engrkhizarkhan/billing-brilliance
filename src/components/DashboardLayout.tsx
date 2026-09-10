@@ -2,16 +2,16 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { UserRole } from '@/types';
 import { Button } from '@/components/ui/button';
-import { GlobalSearch } from '@/components/GlobalSearch';
 import { NotificationCenter } from '@/components/NotificationCenter';
 import { useSessionTimeout } from '@/hooks/useSessionTimeout';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { usePaymentEvents } from '@/hooks/usePaymentEvents';
 import {
   LayoutDashboard, Users, CreditCard, BarChart3, Building2,
   GraduationCap, BookOpen, Award, Receipt, Wallet, History,
   LogOut, Menu, X, DollarSign, ChevronRight, Settings, Sun, Moon,
   AlertTriangle, FileText, Shield, ClipboardList, Activity, FlaskConical, FileCode2, Webhook,
-  PanelLeftClose, PanelLeftOpen
+  PanelLeftClose, PanelLeftOpen, Hash
 } from 'lucide-react';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -30,6 +30,7 @@ const navItems: Record<UserRole, NavItem[]> = {
     { label: 'Billers', path: '/admin/billers', icon: Building2, group: 'Management' },
     { label: 'Users', path: '/admin/users', icon: Users, group: 'Management' },
     { label: 'Transactions', path: '/admin/transactions', icon: CreditCard, group: 'Finance' },
+    { label: 'Consumer Numbers', path: '/admin/consumer-numbers', icon: Hash, group: 'Finance' },
     { label: 'Verify Payment', path: '/admin/verify-payment', icon: Receipt, group: 'Finance' },
     { label: 'Cash Flow', path: '/admin/cashflow', icon: DollarSign, group: 'Finance' },
     { label: 'Reports', path: '/admin/reports', icon: BarChart3, group: 'Analytics' },
@@ -80,6 +81,7 @@ const DashboardLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebar_collapsed') === 'true');
   const { isDark, toggle: toggleDark } = useDarkMode();
+  usePaymentEvents(Boolean(user && user.role !== 'admin'));
 
   const handleLogout = () => { logout(); navigate('/login'); };
   const toggleSidebarCollapsed = () => {
@@ -93,7 +95,7 @@ const DashboardLayout = () => {
 
   if (!user) { navigate('/login'); return null; }
 
-  const items = navItems[user.role];
+  const items = navItems[user.role].filter((item) => !(item.path === '/org/sandbox' && user.tenantLifecycleStage === 'live'));
   const roleRootPath = ROLE_PATHS[user.role];
 
   const isActive = (path: string) => {
@@ -219,7 +221,7 @@ const DashboardLayout = () => {
 
       <div className="flex-1 h-screen flex flex-col min-w-0 overflow-hidden">
         {user.tenantStatus === 'suspended' && <div className="bg-destructive text-destructive-foreground px-4 py-2 text-sm font-medium">This biller is suspended. Historical information remains available, but all changes and payment operations are disabled.</div>}
-        {user.tenantLifecycleStage && user.tenantLifecycleStage !== 'live' && <div className="bg-amber-500 text-white px-4 py-2 text-sm font-medium">Testing phase — production collection APIs are disabled until platform activation. Use the isolated sandbox environment for test traffic.</div>}
+        {user.tenantLifecycleStage && user.tenantLifecycleStage !== 'live' && <div className="bg-amber-500 text-white px-4 py-2 text-sm font-medium">Testing phase — you may prepare people and settings, but production invoices and payment requests are disabled. Complete sandbox UAT and onboarding before activation.</div>}
         <header className="h-14 border-b bg-card flex items-center px-4 md:px-6 gap-3 sticky top-0 z-30 shadow-sm shadow-foreground/[0.02]">
           <button className="lg:hidden p-2 hover:bg-muted rounded-lg" onClick={() => setSidebarOpen(true)}>
             <Menu className="w-5 h-5 text-foreground" />
@@ -238,7 +240,6 @@ const DashboardLayout = () => {
 
           <div className="flex-1" />
 
-          <GlobalSearch />
           <NotificationCenter />
           <button onClick={toggleDark} className="p-2 hover:bg-muted rounded-lg transition-colors">
             {isDark ? <Sun className="w-[18px] h-[18px] text-muted-foreground" /> : <Moon className="w-[18px] h-[18px] text-muted-foreground" />}
@@ -248,7 +249,7 @@ const DashboardLayout = () => {
             {user.name.charAt(0)}
           </div>
         </header>
-        <main className="thin-scrollbar flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto">
+        <main className="thin-scrollbar flex-1 min-w-0 overflow-y-auto p-4 pb-12 md:p-6 md:pb-14 lg:p-8 lg:pb-16">
           <Outlet />
         </main>
       </div>

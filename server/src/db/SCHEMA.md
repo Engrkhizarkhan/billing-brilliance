@@ -68,12 +68,13 @@ Root record for every biller on the platform.
 | `phone` | VARCHAR(20) | |
 | `status` | ENUM | `active` \| `suspended` \| `banned` |
 | `settings` | JSON | Tenant-level config blob |
-| `api_key_hash` | CHAR(64) | SHA-256 digest of the tenant integration key; the secret is never stored |
+| `api_key_hash` | CHAR(64) | SHA-256 digest used for request authentication |
+| `api_key_encrypted` | TEXT | AES-256-GCM recovery envelope for PIN-gated administrator reveal; never returned in ordinary tenant/profile responses |
 | `api_key_prefix` | VARCHAR(32) | Non-secret display identifier |
 | `api_key_scope` | ENUM | `live` or `test`, bound to the runtime environment |
 | `lifecycle_stage` | ENUM | `testing`, `ready_for_live`, `live`, or `offboarding` |
 | `consumer_number_length` | SMALLINT | New identifier policy: 14 or 24 digits |
-| `consumer_sequence` | BIGINT | Transaction-locked allocator sequence |
+| `next_consumer_sequence` | BIGINT | Transaction-locked allocator sequence |
 
 ---
 
@@ -146,9 +147,10 @@ One payment request per applicant per posting.
 | Column | Type | Notes |
 |--------|------|-------|
 | `bill_id` | VARCHAR(100) UNIQUE | `ORG-MDCAT25-00001` format |
+| `customer_name` | VARCHAR(255) | Required by the create-payment contract for payer identification |
 | `consumer_number` | VARCHAR(24) UNIQUE | 1LINK BillInquiry/BillPayment lookup key |
 | `status` | ENUM | `pending` \| `paid` \| `failed` \| `expired` |
-| `expiry_date` | DATETIME | Auto-expired by `expireOverduePayments` job |
+| `expiry_date` | DATETIME | Auto-expired by the worker; year 9999 is the persisted never-expire sentinel |
 
 ---
 
@@ -226,5 +228,12 @@ tenants ─┬─< users
 | 010 | `010_add_biller_id_to_bundle_pcids.sql` | Added `biller_id` to `bundle_pcids` |
 | 011 | `011_rename_etea_to_org.sql` | Renamed `etea_*` tables → `org_*`; updated ENUMs |
 
-All changes from migrations 001–011 are baked into `schema.sql`.  
-Individual migration files are kept in `migrations/archive/` for historical reference.
+The active checksum-tracked JavaScript migrations are:
+
+- `007_production_foundation.js` — lifecycle, scoped API-key hash/prefix, canonical payment allocation/outbox foundation.
+- `008_api_key_recovery.js` — encrypted API-key recovery envelope.
+- `009_org_customer_name.js` — organization payment customer name.
+- `010_tenant_list_indexes.js` — composite tenant/time indexes for high-volume dashboard lists.
+- `011_consumer_registry_indexes.js` — organization-applicant tenant/time index for the cross-tenant consumer registry.
+
+The older SQL migration history is consolidated into `schema.sql`; archived files remain historical references only.

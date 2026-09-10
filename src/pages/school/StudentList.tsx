@@ -1,4 +1,5 @@
-import { useState, useRef, useMemo, useEffect, useDeferredValue } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api, StudentDirectoryMeta } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import { Student, StudentDirectoryRecord, StudentFinancialSnapshot } from '@/types';
@@ -101,7 +102,7 @@ const StudentList = () => {
   const [bulkImporting, setBulkImporting] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const deferredSearch = useDeferredValue(search.trim());
+  const deferredSearch = useDebouncedValue(search.trim());
   const { data: studentsData, meta: studentsMeta, loading: studentsLoading, refetch } = useApiQuery<StudentDirectoryRecord[], StudentDirectoryMeta>(
     () => api.fetchStudents({
       page,

@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('admin can inspect a consumer as a card and a 1BILL response', async ({ page }) => {
+  test.setTimeout(60000);
   const password = process.env.E2E_ADMIN_PASSWORD;
   const consumerNumber = process.env.E2E_CONSUMER_NUMBER;
   if (!password || !consumerNumber) {

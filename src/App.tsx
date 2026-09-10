@@ -15,6 +15,7 @@ const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const BillerManagement = lazy(() => import("./pages/admin/BillerManagement"));
 const UserManagement = lazy(() => import("./pages/admin/UserManagement"));
 const TransactionList = lazy(() => import("./pages/admin/TransactionList"));
+const ConsumerRegistry = lazy(() => import("./pages/admin/ConsumerRegistry"));
 const AdminPaymentVerification = lazy(() => import("./pages/admin/AdminPaymentVerification"));
 const CashFlow = lazy(() => import("./pages/admin/CashFlow"));
 const Reports = lazy(() => import("./pages/admin/Reports"));
@@ -83,6 +84,7 @@ const AppRoutes = () => {
             <Route path="billers" element={<BillerManagement />} />
             <Route path="users" element={<UserManagement />} />
             <Route path="transactions" element={<TransactionList />} />
+            <Route path="consumer-numbers" element={<ConsumerRegistry />} />
             <Route path="verify-payment" element={<AdminPaymentVerification />} />
             <Route path="cashflow" element={<CashFlow />} />
             <Route path="reports" element={<Reports />} />

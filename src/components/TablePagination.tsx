@@ -8,9 +8,10 @@ interface TablePaginationProps {
   pageSize: number;
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
+  pageSizeOptions?: number[];
 }
 
-export const TablePagination = ({ total, page, pageSize, onPageChange, onPageSizeChange }: TablePaginationProps) => {
+export const TablePagination = ({ total, page, pageSize, onPageChange, onPageSizeChange, pageSizeOptions = [10, 25, 50, 100] }: TablePaginationProps) => {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
@@ -20,7 +21,7 @@ export const TablePagination = ({ total, page, pageSize, onPageChange, onPageSiz
         <Select value={String(pageSize)} onValueChange={(v) => { onPageSizeChange(Number(v)); onPageChange(1); }}>
           <SelectTrigger className="h-7 w-[70px] text-xs rounded-lg"><SelectValue /></SelectTrigger>
           <SelectContent>
-            {[10, 25, 50, 100].map(s => <SelectItem key={s} value={String(s)}>{s}</SelectItem>)}
+            {pageSizeOptions.map(s => <SelectItem key={s} value={String(s)}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
         <span>per page</span>

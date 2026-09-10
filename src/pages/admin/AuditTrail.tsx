@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api } from '@/lib/api';
 import { FilterBar } from '@/components/FilterBar';
 import { ExportButton } from '@/components/ExportButton';
@@ -63,6 +64,7 @@ const AuditTrail = () => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const deferredSearch = useDebouncedValue(search.trim());
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
@@ -70,7 +72,7 @@ const AuditTrail = () => {
       const res = await api.fetchAuditLogs({
         page,
         pageSize,
-        search: search || undefined,
+        search: deferredSearch || undefined,
         action: actionFilter !== 'all' ? actionFilter : undefined,
         entity: entityFilter !== 'all' ? entityFilter : undefined,
       });
@@ -79,7 +81,7 @@ const AuditTrail = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, search, actionFilter, entityFilter]);
+  }, [page, pageSize, deferredSearch, actionFilter, entityFilter]);
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 

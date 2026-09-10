@@ -1,4 +1,5 @@
-import { useDeferredValue, useState } from 'react';
+import { useState } from 'react';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import type { Invoice } from '@/types';
@@ -15,7 +16,6 @@ import { Receipt, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePaymentStore } from '@/store/paymentStore';
 import { formatPKR } from '@/lib/formatters';
-import { RecordPaymentDialog } from '@/components/RecordPaymentDialog';
 
 const InvoiceList = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
@@ -28,7 +28,7 @@ const InvoiceList = () => {
   const [genDialogOpen, setGenDialogOpen] = useState(false);
   const [genMonth, setGenMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const deferredSearch = useDeferredValue(search);
+  const deferredSearch = useDebouncedValue(search.trim());
 
   const { data, meta, loading, refetch: refetchInvoices } = useApiQuery(
     () => api.fetchInvoices({
@@ -146,7 +146,7 @@ const InvoiceList = () => {
                   <TableCell><StatusBadge status={invoice.status} /></TableCell>
                   <TableCell className="text-xs text-muted-foreground">{invoice.dueDate}</TableCell>
                   <TableCell>
-                    {invoice.status !== 'paid' && <div className="flex items-center gap-1"><RecordPaymentDialog targetType="invoice" targetId={invoice.id} consumerNumber={invoice.consumerNumber} payerLabel={invoice.studentName} amount={Number(invoice.amount) + (new Date(`${invoice.dueDate}T23:59:59`) < new Date() ? Number(invoice.lateFee || 0) : 0)} onSuccess={refetchInvoices} /><button type="button" title="Delete invoice" disabled={deletingId === invoice.id} onClick={() => handleDeleteInvoice(invoice.id, invoice.invoiceNumber)} className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-50">{deletingId === invoice.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}</button></div>}
+                    {invoice.status !== 'paid' && <button type="button" title="Delete invoice" disabled={deletingId === invoice.id} onClick={() => handleDeleteInvoice(invoice.id, invoice.invoiceNumber)} className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-50">{deletingId === invoice.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}</button>}
                   </TableCell>
                 </TableRow>
               ))}

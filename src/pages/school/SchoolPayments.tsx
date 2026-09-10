@@ -1,5 +1,6 @@
 ﻿import { useMemo, useState } from 'react';
 import { api } from '@/lib/api';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import { usePaymentStore } from '@/store/paymentStore';
 import type { StudentDirectoryRecord } from '@/types';
@@ -11,7 +12,6 @@ import { ExportButton } from '@/components/ExportButton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { CreditCard } from 'lucide-react';
 import { formatPKR } from '@/lib/formatters';
-import { ReversePaymentDialog } from '@/components/ReversePaymentDialog';
 
 const CHANNELS: Record<string, string> = {
   bank_app: 'Bank App',
@@ -56,6 +56,7 @@ const SchoolPayments = () => {
   const [monthFilter, setMonthFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const deferredSearch = useDebouncedValue(search.trim());
 
   // Request one row only; the server returns class facets independently of the
   // page so filters do not require downloading the entire student directory.
@@ -68,12 +69,12 @@ const SchoolPayments = () => {
     () => api.fetchPaymentHistory({
       page,
       pageSize,
-      search: search || undefined,
+      search: deferredSearch || undefined,
       className: classFilter !== 'all' ? classFilter : undefined,
       channel: channelFilter !== 'all' ? channelFilter : undefined,
       month: monthFilter !== 'all' ? monthFilter : undefined,
     }),
-    [paymentVersion, page, pageSize, search, classFilter, channelFilter, monthFilter]
+    [paymentVersion, page, pageSize, deferredSearch, classFilter, channelFilter, monthFilter]
   );
 
   const payments = useMemo(() => (historyRaw || []) as PaymentRecord[], [historyRaw]);
@@ -172,7 +173,7 @@ const SchoolPayments = () => {
                   <TableCell className="font-mono text-xs text-muted-foreground">{p.receiptNumber || '---'}</TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">{p.reference || '---'}</TableCell>
                   <TableCell className="font-mono text-sm font-semibold text-success text-right">{formatPKR(p.amount)}</TableCell>
-                  <TableCell>{p.source === 'manual' && p.status === 'posted' && !p.reversalOfPaymentId && p.receiptNumber ? <ReversePaymentDialog paymentId={p.id} receiptNumber={p.receiptNumber} onSuccess={() => usePaymentStore.getState().bump()} /> : null}</TableCell>
+                  <TableCell><span className="text-xs text-muted-foreground">Read only</span></TableCell>
                 </TableRow>
               ))}
             </TableBody>

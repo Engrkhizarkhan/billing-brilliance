@@ -372,6 +372,46 @@ export interface BillingPolicySetting {
 
 export type BillStatus = 'paid' | 'unpaid' | 'partial' | 'overdue';
 
+export type ConsumerRegistrySource = 'school_student' | 'organization_applicant' | 'payment_request';
+
+export interface ConsumerRegistryRecord {
+  consumerNumber: string;
+  sourceType: ConsumerRegistrySource;
+  sourceId: string;
+  tenantId: string;
+  tenantName: string;
+  tenantType: 'school' | 'org' | 'private_agency';
+  billerCode: string;
+  tenantStatus: 'active' | 'suspended' | 'banned';
+  lifecycleStage: 'testing' | 'ready_for_live' | 'live' | 'offboarding';
+  ownerName: string;
+  billId: string;
+  externalReference?: string | null;
+  recordStatus: string;
+  secondaryStatus?: string | null;
+  amount?: number | null;
+  createdAt: string;
+  recordArchived: number;
+  tenantArchived: number;
+}
+
+export interface ConsumerRegistryTenantOption {
+  id: string;
+  name: string;
+  type: 'school' | 'org' | 'private_agency';
+  status: 'active' | 'suspended' | 'banned';
+  lifecycleStage: 'testing' | 'ready_for_live' | 'live' | 'offboarding';
+}
+
+export interface ConsumerRegistryMeta {
+  page: number;
+  pageSize: number;
+  total: number;
+  pages: number;
+  bySource: { schoolStudent: number; organizationApplicant: number; paymentRequest: number };
+  tenants: ConsumerRegistryTenantOption[];
+}
+
 export interface OneLinkInquiryReservedFields {
   cnic?: string;
   accountId?: string;
@@ -446,6 +486,7 @@ export interface OrgPaymentRecord {
   id: string;
   applicationId: string;
   applicantId: string;
+  customerName?: string;
   postingId: string;
   billId: string;
   consumerNumber?: string;
@@ -475,7 +516,7 @@ export interface OrgCreatePaymentRequest {
   application_id?: string;
   posting_id?: string;
   due_date?: string;
-  customerName?: string;
+  customerName: string;
   customer_name?: string;
 }
 

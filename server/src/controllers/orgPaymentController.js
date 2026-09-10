@@ -28,15 +28,17 @@ const addHours = (date, hours) => {
   return d.toISOString();
 };
 
+const parseBoolean = (value) => value === true || value === 1 || String(value).toLowerCase() === 'true';
+
 const normalizeCreateRequest = (body) => ({
   applicantId: (body.applicantId || body.applicant_id || '').trim(),
   applicationId: (body.applicationId || body.application_id || '').trim(),
   postingId: (body.postingId || body.posting_id || '').trim(),
   dueDate: (body.dueDate || body.due_date || '').trim(),
   expireAt: body.expireAt || body.expire_at || null,
-  neverExpires: Boolean(body.neverExpires || body.never_expires),
+  neverExpires: parseBoolean(body.neverExpires ?? body.never_expires),
   description: body.description?.trim(),
-  customerName: (body.customerName || body.customer_name || body.applicantId || body.applicant_id || 'Applicant').trim(),
+  customerName: (body.customerName || body.customer_name || '').trim(),
   amount: body.amount,
 });
 
@@ -136,6 +138,7 @@ const createPayment = async (req, res, next) => {
     if (!normalized.applicantId) throw new AppError('applicant_id is required', 400);
     if (!normalized.applicationId) throw new AppError('application_id is required', 400);
     if (!normalized.postingId) throw new AppError('posting_id is required', 400);
+    if (!normalized.customerName) throw new AppError('customer_name is required', 400, 'CUSTOMER_NAME_REQUIRED');
     if (!normalized.amount || normalized.amount <= 0) throw new AppError('Amount must be > 0', 400);
 
     connection = await pool.getConnection();
@@ -148,7 +151,7 @@ const createPayment = async (req, res, next) => {
     );
     if (!tenantRows.length) throw new AppError('Tenant not found', 404, 'TENANT_NOT_FOUND');
     if (tenantRows[0].status !== 'active') throw new AppError('Tenant is suspended', 403, 'TENANT_SUSPENDED');
-    if (config.appEnvironment === 'production' && tenantRows[0].lifecycle_stage !== 'live') {
+    if (config.appEnvironment !== 'sandbox' && tenantRows[0].lifecycle_stage !== 'live') {
       throw new AppError('Tenant has not been activated for production', 403, 'TENANT_NOT_LIVE');
     }
 
@@ -206,9 +209,9 @@ const createPayment = async (req, res, next) => {
     const { consumerNumber } = await allocateConsumerNumber(connection, tenantId);
 
     await connection.query(
-      `INSERT INTO org_payment_records (id, tenant_id, application_id, applicant_id, posting_id, bill_id, consumer_number, amount, status, due_date, expiry_date, created_at, description, callback_url)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
-      [id, tenantId, normalized.applicationId, normalized.applicantId, normalized.postingId, billId, consumerNumber,
+      `INSERT INTO org_payment_records (id, tenant_id, application_id, applicant_id, customer_name, posting_id, bill_id, consumer_number, amount, status, due_date, expiry_date, created_at, description, callback_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
+      [id, tenantId, normalized.applicationId, normalized.applicantId, normalized.customerName, normalized.postingId, billId, consumerNumber,
         normalized.amount, dueDate, expiryDate, createdAtDb, description, CALLBACK_URL]
     );
 
@@ -422,7 +425,7 @@ const getStats = async (req, res, next) => {
 // ---- List all payments & notifications ----
 const listPayments = async (req, res, next) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const limit = Math.min(Math.max(parseInt(req.query.limit || req.query.pageSize, 10) || 30, 1), 30);
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const offset = (page - 1) * limit;
 
@@ -446,7 +449,7 @@ const listPayments = async (req, res, next) => {
     );
 
     const [rows] = await pool.query(
-      `SELECT opr.id, opr.application_id, opr.applicant_id, opr.posting_id, opr.bill_id,
+      `SELECT opr.id, opr.application_id, opr.applicant_id, opr.customer_name, opr.posting_id, opr.bill_id,
               opr.consumer_number, opr.amount, opr.status, opr.due_date, opr.expiry_date,
               opr.created_at, opr.paid_at, opr.transaction_id, opr.description, opr.callback_url,
               p.id AS posted_payment_id, p.source AS payment_source,
@@ -470,7 +473,7 @@ const listPayments = async (req, res, next) => {
 
 const listNotifications = async (req, res, next) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const limit = Math.min(Math.max(parseInt(req.query.limit || req.query.pageSize, 10) || 30, 1), 30);
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const offset = (page - 1) * limit;
 
@@ -502,7 +505,7 @@ const listNotifications = async (req, res, next) => {
 };
 
 // ---- Helper ----
-const buildOneBillPayload = (payment, customerName = 'Applicant') => {
+const buildOneBillPayload = (payment, customerName = payment.customer_name || 'Applicant') => {
   const expiryIso = payment.expiry_date
     ? String(payment.expiry_date).replace(' ', 'T') + (String(payment.expiry_date).includes('Z') ? '' : 'Z')
     : null;

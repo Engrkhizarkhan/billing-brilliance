@@ -1,4 +1,4 @@
-const { generateApiKey, hashApiKey } = require('../../src/services/apiKeyService');
+const { generateApiKey, hashApiKey, decryptApiKey } = require('../../src/services/apiKeyService');
 const config = require('../../src/config');
 
 describe('API key storage', () => {
@@ -10,5 +10,12 @@ describe('API key storage', () => {
     expect(key.hash).toMatch(/^[a-f0-9]{64}$/);
     expect(hashApiKey(key.secret)).toBe(key.hash);
     expect(key.prefix).not.toBe(key.secret);
+    expect(key.encrypted).not.toContain(key.secret);
+    expect(decryptApiKey(key.encrypted)).toBe(key.secret);
+  });
+
+  test('rejects tampered encrypted API-key material', () => {
+    const key = generateApiKey();
+    expect(() => decryptApiKey(`${key.encrypted.slice(0, -1)}x`)).toThrow();
   });
 });

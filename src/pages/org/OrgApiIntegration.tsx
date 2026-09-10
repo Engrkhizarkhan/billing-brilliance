@@ -20,12 +20,6 @@ type EndpointDoc = {
 
 const endpoints: EndpointDoc[] = [
   {
-    id: 'health', method: 'GET', path: '/api/payments/health', title: 'Organization payment service health', audience: 'Public',
-    description: 'Confirms that the organization payment API process is reachable.',
-    response: { data: { status: 'ok', service: 'org-payment-controller', timestamp: '2026-09-05T08:00:00.000Z' } },
-    notes: ['No request body or API key is required.', 'Use /api/ready for infrastructure readiness checks, including database connectivity.'],
-  },
-  {
     id: 'create-payment', method: 'POST', path: '/api/payments/create', title: 'Create payment request', audience: 'Organization system',
     description: 'Creates an idempotent invoice-based payment request and returns the 1BILL consumer number.',
     request: { applicant_id: 'APP-10025', application_id: 'FORM-2026-00041', posting_id: 'POST-2026-09', amount: 2500, due_date: '2026-09-10', customer_name: 'Example Applicant', description: 'Application processing fee' },
@@ -39,18 +33,16 @@ const endpoints: EndpointDoc[] = [
     notes: ['Replace {application_id} with a URL-encoded identifier.', 'A missing record returns status: not_found in the data envelope.'],
   },
   {
-    id: 'bill-inquiry', method: 'POST', path: '/api/1.0/Payments/BillInquiry', title: '1BILL balance inquiry', audience: '1LINK network',
-    description: 'Allows 1LINK to validate a consumer number and retrieve the payable amount.',
-    request: { consumer_number: '10517220010000000001', bank_mnemonic: 'UBL', reserved: '' },
-    response: { response_Code: '00', consumer_detail: 'EXAMPLE APPLICANT             ', bill_status: 'U', due_date: '20260910', amount_within_dueDate: '+0000000250000', amount_after_dueDate: '+0000000250000', billing_month: '2609', date_paid: '', amount_paid: '', tran_auth_Id: '', reserved: '' },
-    notes: ['Uses the dedicated 1LINK username/password and network allowlist, not the organization X-API-Key.', 'Consumer identifiers are numeric and may be up to 24 digits for the agreed UAT edge case.'],
+    id: 'list-payments', method: 'GET', path: '/api/payments?page=1&limit=30', title: 'List payment requests', audience: 'Organization system',
+    description: 'Returns tenant-scoped payment requests in newest-first order.',
+    response: { data: [{ application_id: 'FORM-2026-00041', customer_name: 'Example Applicant', consumer_number: '10517220010000000001', amount: 2500, status: 'paid', transaction_id: '1LK9A2B3' }], meta: { page: 1, pageSize: 30, total: 1, pages: 1 } },
+    notes: ['page starts at 1.', 'limit accepts 1 through 30; larger values are safely capped at 30.', 'Optional filters include status, from, to, application_id, and search.'],
   },
   {
-    id: 'bill-payment', method: 'POST', path: '/api/1.0/Payments/BillPayment', title: '1BILL payment notification', audience: '1LINK network',
-    description: 'Posts the successful payment transaction against the invoice with duplicate protection.',
-    request: { consumer_number: '10517220010000000001', tran_auth_id: '698243', transaction_amount: '000000250000', tran_date: '20260905', tran_time: '131240', bank_mnemonic: 'UBL', reserved: '' },
-    response: { response_Code: '00', Identification_parameter: 'A1B2C3' },
-    notes: ['The transaction amount must exactly match the amount currently due.', 'Repeating the same transaction is handled idempotently and does not create a second ledger posting.'],
+    id: 'list-notifications', method: 'GET', path: '/api/payment-notifications?page=1&limit=30', title: 'List payment notifications', audience: 'Organization system',
+    description: 'Returns the tenant-scoped payment-notification history for reconciliation and support.',
+    response: { data: [{ application_id: 'FORM-2026-00041', status: 'paid', sent_at: '2026-09-05T08:12:41.000Z' }], meta: { page: 1, pageSize: 30, total: 1, pages: 1 } },
+    notes: ['page starts at 1.', 'limit accepts 1 through 30 and is capped at 30.', 'Optional filters include status, from, to, and application_id.'],
   },
   {
     id: 'webhook', method: 'POST', path: 'Your configured HTTPS webhook URL', title: 'Payment-status webhook', audience: 'Your organization endpoint',
@@ -102,7 +94,7 @@ const OrgApiIntegration = () => (
     </div>
 
     <Card>
-      <CardHeader><CardTitle className="text-base">Required headers</CardTitle><CardDescription>Organization endpoints and 1LINK network endpoints use separate credentials.</CardDescription></CardHeader>
+      <CardHeader><CardTitle className="text-base">Required headers</CardTitle><CardDescription>These client-facing endpoints use your organization credential. Bank-facing 1LINK endpoints are operated only by Fintap and are intentionally not exposed here.</CardDescription></CardHeader>
       <CardContent className="grid gap-3 text-sm md:grid-cols-2">
         <div className="rounded-lg border p-4"><p className="mb-2 font-semibold">Organization request</p><code className="block text-xs text-muted-foreground">Content-Type: application/json</code><code className="block text-xs text-muted-foreground">X-API-Key: YOUR_ORGANIZATION_KEY</code></div>
         <div className="rounded-lg border p-4"><p className="mb-2 font-semibold">Webhook receiver</p><code className="block text-xs text-muted-foreground">Content-Type: application/json</code><code className="block text-xs text-muted-foreground">X-Webhook-Signature: HMAC_SHA256_HEX</code></div>

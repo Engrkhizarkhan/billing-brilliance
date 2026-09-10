@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,6 @@ import { useOrgSecurityStore } from '@/store/orgSecurityStore';
 import { useAuthStore } from '@/store/authStore';
 import {
   OrgCreatePaymentResponse,
-  OrgHealthResponse,
   OrgPaymentStatusResponse,
   OrgPaymentNotification,
   OrgPaymentRecord,
@@ -25,14 +24,7 @@ import { Copy, Loader2, Infinity as InfinityIcon } from 'lucide-react';
 const OrgPayments = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
 
-  const [notifTick, setNotifTick] = useState(0);
-  const notifIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => {
-    notifIntervalRef.current = setInterval(() => setNotifTick((t) => t + 1), 5000);
-    return () => { if (notifIntervalRef.current) clearInterval(notifIntervalRef.current); };
-  }, []);
-
-  const { data: notificationsData } = useApiQuery(() => api.listOrgPaymentNotifications(), [paymentVersion, notifTick]);
+  const { data: notificationsData } = useApiQuery(() => api.listOrgPaymentNotifications(), [paymentVersion]);
   const notifications = (notificationsData || []) as OrgPaymentNotification[];
   const [searchParams] = useSearchParams();
 
@@ -56,7 +48,6 @@ const OrgPayments = () => {
   const [createResult, setCreateResult] = useState<OrgCreatePaymentResponse | null>(null);
   const [lookupResult, setLookupResult] = useState<OrgPaymentStatusResponse | null>(null);
   const [allPaymentsResult, setAllPaymentsResult] = useState<OrgPaymentRecord[] | null>(null);
-  const [health, setHealth] = useState<OrgHealthResponse | null>(null);
 
   useEffect(() => {
     if (!queryApplicationId) return;
@@ -64,25 +55,11 @@ const OrgPayments = () => {
     setLookupApplicationId(queryApplicationId);
   }, [queryApplicationId]);
 
-  useEffect(() => {
-    const doExpire = async () => {
-      try {
-        const res = await api.expireOverduePayments();
-        const expired = (res.data as { expired: number })?.expired || 0;
-        if (expired > 0) {
-          toast.info(`${expired} pending payment record(s) expired`);
-          refetchPayments();
-        }
-      } catch { /* ignore */ }
-    };
-    void doExpire();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paymentVersion]);
-
   const handleCreatePayment = async () => {
     if (!createForm.applicant_id.trim()) { toast.error('applicant_id is required'); return; }
     if (!createForm.application_id.trim()) { toast.error('application_id is required'); return; }
     if (!createForm.posting_id.trim()) { toast.error('posting_id is required'); return; }
+    if (!createForm.customer_name.trim()) { toast.error('customer_name is required'); return; }
     if (createForm.amount <= 0) { toast.error('amount must be greater than zero'); return; }
     try {
       const res = await api.createOrgPayment({
@@ -95,7 +72,7 @@ const OrgPayments = () => {
           ? new Date(Date.now() + createForm.expires_in_minutes * 60 * 1000).toISOString()
           : undefined,
         description: createForm.description || undefined,
-        customerName: createForm.customer_name || createForm.applicant_id,
+        customerName: createForm.customer_name,
       });
       const created = res.data as OrgCreatePaymentResponse;
       setCreateResult(created);
@@ -121,15 +98,6 @@ const OrgPayments = () => {
     }
   };
 
-  const handleHealthCheck = async () => {
-    try {
-      const res = await api.orgHealthCheck();
-      setHealth(res.data as OrgHealthResponse);
-      toast.success('Health check passed');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Health check failed');
-    }
-  };
 
   const handleFetchAllPayments = async () => {
     try {
@@ -139,8 +107,6 @@ const OrgPayments = () => {
       toast.error(error instanceof Error ? error.message : 'Failed to fetch payments');
     }
   };
-
-  const refetchPayments = () => { void handleFetchAllPayments(); };
 
   const payloadDisplay = createResult
     ? {
@@ -172,7 +138,7 @@ const OrgPayments = () => {
       <div>
         <h1 className="page-header">Payment Controller</h1>
         <p className="page-description">
-          Create payment requests, check status, and monitor callbacks. Your system generates a 1BILL consumer number; the applicant pays via ATM or mobile banking.
+          Create and inspect organization payment requests. Payment confirmation is read-only here and arrives through the verified 1BILL flow.
         </p>
       </div>
 
@@ -202,10 +168,6 @@ const OrgPayments = () => {
           <TabsTrigger value="all">
             <span className="text-xs font-bold px-1 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400 font-mono mr-1.5">GET</span>
             All Payments
-          </TabsTrigger>
-          <TabsTrigger value="health">
-            <span className="text-xs font-bold px-1 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400 font-mono mr-1.5">GET</span>
-            Health
           </TabsTrigger>
         </TabsList>
 
@@ -237,13 +199,13 @@ const OrgPayments = () => {
                   <Input type="number" value={createForm.amount} onChange={(e) => setCreateForm({ ...createForm, amount: Number(e.target.value) || 0 })} className="rounded-lg" placeholder="1200" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">expires_in_minutes (0 = 48 hours)</Label>
+                  <Label className="text-xs">expires_in_minutes (0 = default 48 hours)</Label>
                   <Input type="number" min={0} disabled={createForm.never_expires} value={createForm.expires_in_minutes} onChange={(e) => setCreateForm({ ...createForm, expires_in_minutes: Number(e.target.value) || 0 })} className="rounded-lg" placeholder="e.g. 30" />
                 </div>
                 <div className="flex items-center gap-2 pt-4">
                   <Checkbox id="never_expires" checked={createForm.never_expires} onCheckedChange={(checked) => setCreateForm({ ...createForm, never_expires: Boolean(checked), expires_in_minutes: 0 })} />
                   <Label htmlFor="never_expires" className="text-xs cursor-pointer flex items-center gap-1">
-                    <InfinityIcon className="w-3.5 h-3.5" /> Never expires
+                    <InfinityIcon className="w-3.5 h-3.5" /> Never expires (overrides expiry minutes)
                   </Label>
                 </div>
                 <div className="space-y-1.5">
@@ -251,7 +213,7 @@ const OrgPayments = () => {
                   <Input value={createForm.description} onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })} className="rounded-lg" placeholder="Application fee" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">customer_name (Company_details) (optional)</Label>
+                  <Label className="text-xs">customer_name (required)</Label>
                   <Input value={createForm.customer_name} onChange={(e) => setCreateForm({ ...createForm, customer_name: e.target.value })} className="rounded-lg" placeholder="T-Groups (Ali Khan)" />
                 </div>
               </div>
@@ -370,28 +332,6 @@ const OrgPayments = () => {
           </Card>
         </TabsContent>
 
-        {/* ── Health ─────────────────────────────────────────── */}
-        <TabsContent value="health">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400 font-mono">GET</span>
-                <span className="font-mono text-sm">/api/payments/health</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Button variant="outline" className="rounded-lg" onClick={() => void handleHealthCheck()}>Run Health Check</Button>
-              {codeBlock(
-                health
-                  ? JSON.stringify({ service: health.service, status: health.status, timestamp: health.timestamp }, null, 2)
-                  : `// Hit "Run Health Check" to see the response\n{}`,
-                health ? (
-                  <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400">200 OK</span>
-                ) : null
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
   );

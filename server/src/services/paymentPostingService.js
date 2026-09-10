@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../config/database');
 const config = require('../config');
 const { AppError } = require('../middleware/errorHandler');
+const { emitPaymentEvent } = require('./paymentEventBus');
 
 const money = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
 const mysqlDateTime = (value) => {
@@ -18,7 +19,7 @@ const assertTenantCanCollect = async (connection, tenantId, source) => {
   if (!rows.length) throw new AppError('Tenant not found', 404, 'TENANT_NOT_FOUND');
   const tenant = rows[0];
   if (tenant.status !== 'active') throw new AppError('Biller is suspended', 403, 'TENANT_SUSPENDED');
-  if (config.appEnvironment === 'production' && source !== 'sandbox_simulator' && tenant.lifecycle_stage !== 'live') {
+  if (config.appEnvironment !== 'sandbox' && source !== 'sandbox_simulator' && tenant.lifecycle_stage !== 'live') {
     throw new AppError('Biller is not activated for production collections', 403, 'TENANT_NOT_LIVE');
   }
   return tenant;
@@ -249,6 +250,14 @@ const postPayment = async (input) => {
       ? await postOrgPayment(connection, normalized, tenant, paidAt)
       : await postStudentPayment(connection, normalized, tenant, paidAt);
     await connection.commit();
+    emitPaymentEvent(input.tenantId, {
+      eventType: 'payment.posted',
+      paymentId: result.paymentId,
+      consumerNumber: result.consumerNumber,
+      amount: result.amount,
+      status: result.status,
+      timestamp: new Date().toISOString(),
+    });
     return result;
   } catch (err) {
     await connection.rollback();
@@ -365,6 +374,10 @@ const reverseManualPayment = async (input) => {
       })]
     );
     await connection.commit();
+    emitPaymentEvent(input.tenantId, {
+      eventType: 'payment.reversed', paymentId: payment.id, reversalPaymentId: reversalId,
+      amount, status: 'reversed', timestamp: new Date().toISOString(),
+    });
     return { paymentId: payment.id, reversalPaymentId: reversalId, reference, receiptNumber, amount, status: 'reversed' };
   } catch (error) {
     await connection.rollback();

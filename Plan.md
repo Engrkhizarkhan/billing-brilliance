@@ -4,7 +4,9 @@ Status: implemented locally; staged release gates remain
 Prepared: 7 September 2026  
 Implementation authorized: 8 September 2026
 
-Implementation evidence and remaining external/operational gates are recorded in `docs/FULL_APPLICATION_QA_AUDIT_2026-09-09.md`, `docs/IMPLEMENTATION_AUDIT_2026-09-08.md`, and `docs/PRODUCTION_DEPLOYMENT_RUNBOOK.md`. This plan remains the design baseline; the original safety decisions were preserved during implementation.
+The 10 September 2026 follow-up covering PIN-gated API-key recovery, stricter testing/live behavior, tenant manual-payment removal, organization API cleanup, event-driven dashboards, and sandbox retirement on activation is planned in `docs/ONBOARDING_SECURITY_SANDBOX_CHANGE_PLAN_2026-09-10.md`. Its acceptance evidence supersedes any earlier behavior that conflicts with those newer requirements.
+
+Implementation evidence and remaining external/operational gates are recorded in `docs/IMPLEMENTATION_AUDIT_2026-09-10.md` and `docs/PRODUCTION_DEPLOYMENT_RUNBOOK.md`. Earlier audits remain historical baselines. This plan remains the design baseline; the original safety decisions were preserved during implementation.
 
 ## 1. Purpose
 
