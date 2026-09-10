@@ -41,7 +41,7 @@ module.exports = {
     actionPin: fileFirst('ADMIN_ACTION_PIN') || (process.env.NODE_ENV === 'production' ? '' : '123456'),
   },
 
-  apiKeyEncryptionKey: process.env.API_KEY_ENCRYPTION_KEY
+  apiKeyEncryptionKey: fileFirst('API_KEY_ENCRYPTION_KEY')
     || (process.env.NODE_ENV === 'production' ? '' : 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='),
 
   sandbox: {

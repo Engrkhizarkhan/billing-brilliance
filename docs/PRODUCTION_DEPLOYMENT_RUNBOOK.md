@@ -12,6 +12,39 @@ This runbook deploys application changes only. It does not modify the establishe
 - Do not print `.env`, PSK, database password, JWT secrets, API keys or certificate private keys.
 - The leaf/full-chain certificate may be shared where required; never share `privkey.pem`.
 
+### First-time API-key encryption bootstrap
+
+Only use this bootstrap when `API_KEY_ENCRYPTION_KEY` has never been configured and no recoverable tenant keys have been created with an earlier key. If a real value already exists in a backup or secret manager, restore that exact value instead of generating another one.
+
+```bash
+pm2 stop Fintap-api-backend
+install -d -m 700 /root/backups/fintap-secrets
+cp -a /var/www/billing-brilliance/server/.env "/root/backups/fintap-secrets/server.env.$(date +%Y%m%d-%H%M%S)"
+
+bash <<'EOF'
+set -Eeuo pipefail
+env_file=/var/www/billing-brilliance/server/.env
+existing="$(sed -n 's/^API_KEY_ENCRYPTION_KEY=//p' "$env_file" | tail -n 1)"
+if [ -n "$existing" ] && [ "$existing" != "replace_with_32_byte_base64_key" ]; then
+  echo "A non-placeholder encryption key already exists; refusing to replace it."
+  exit 2
+fi
+new_key="$(openssl rand -base64 32 | tr -d '\n')"
+sed -i '/^API_KEY_ENCRYPTION_KEY=/d' "$env_file"
+printf '\nAPI_KEY_ENCRYPTION_KEY=%s\n' "$new_key" >> "$env_file"
+chmod 600 "$env_file"
+unset new_key
+echo "Encryption key stored without printing it."
+EOF
+
+cd /var/www/billing-brilliance/server
+node -e "require('./src/services/apiKeyService').validateApiKeyEncryptionKey(); console.log('Encryption key format: valid')"
+pm2 restart Fintap-api-backend --update-env
+pm2 save
+```
+
+Immediately copy the protected `.env` backup into the approved encrypted off-host secret store. Never rotate this key casually: doing so makes previously stored API-key envelopes unreadable.
+
 ## 1. Pre-deployment evidence
 
 Run on a CI runner or clean checkout:

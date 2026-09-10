@@ -1,4 +1,9 @@
-const { generateApiKey, hashApiKey, decryptApiKey } = require('../../src/services/apiKeyService');
+const {
+  generateApiKey,
+  hashApiKey,
+  decryptApiKey,
+  validateApiKeyEncryptionKey,
+} = require('../../src/services/apiKeyService');
 const config = require('../../src/config');
 
 describe('API key storage', () => {
@@ -17,5 +22,16 @@ describe('API key storage', () => {
   test('rejects tampered encrypted API-key material', () => {
     const key = generateApiKey();
     expect(() => decryptApiKey(`${key.encrypted.slice(0, -1)}x`)).toThrow();
+  });
+
+  test('validates the configured encryption key length before startup', () => {
+    expect(validateApiKeyEncryptionKey()).toBe(true);
+    const original = config.apiKeyEncryptionKey;
+    try {
+      config.apiKeyEncryptionKey = 'replace_with_32_byte_base64_key';
+      expect(() => validateApiKeyEncryptionKey()).toThrow('must decode to exactly 32 bytes');
+    } finally {
+      config.apiKeyEncryptionKey = original;
+    }
   });
 });

@@ -12,6 +12,7 @@ const { pool, testConnection } = require('./config/database');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
 const { ensureProtectedAdmin } = require('./services/protectedAdmin');
 const { assertDatabaseMigrationsCurrent } = require('./services/migrationReadinessService');
+const { validateApiKeyEncryptionKey } = require('./services/apiKeyService');
 
 // Route imports
 const authRoutes = require('./routes/auth');
@@ -81,8 +82,10 @@ if (config.nodeEnv === 'production') {
     console.error('FATAL: ADMIN_ACTION_PIN must be exactly six digits.');
     process.exit(1);
   }
-  if (!process.env.API_KEY_ENCRYPTION_KEY) {
-    console.error('FATAL: API_KEY_ENCRYPTION_KEY must be configured for recoverable tenant API-key storage.');
+  try {
+    validateApiKeyEncryptionKey();
+  } catch (error) {
+    console.error(`FATAL: ${error.message}`);
     process.exit(1);
   }
   if (config.appEnvironment === 'production' && (!config.sandbox.baseUrl || !config.sandbox.purgeSecret)) {

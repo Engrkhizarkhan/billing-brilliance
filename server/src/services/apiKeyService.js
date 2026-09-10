@@ -12,6 +12,11 @@ const getEncryptionKey = () => {
   return key;
 };
 
+const validateApiKeyEncryptionKey = () => {
+  getEncryptionKey();
+  return true;
+};
+
 const encryptApiKey = (secret) => {
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', getEncryptionKey(), iv);
@@ -33,4 +38,10 @@ const generateApiKey = () => {
   return { secret, hash: hashApiKey(secret), prefix: secret.slice(0, 18), scope, encrypted: encryptApiKey(secret) };
 };
 
-module.exports = { hashApiKey, generateApiKey, encryptApiKey, decryptApiKey };
+module.exports = {
+  hashApiKey,
+  generateApiKey,
+  encryptApiKey,
+  decryptApiKey,
+  validateApiKeyEncryptionKey,
+};
