@@ -186,7 +186,11 @@ const oneLinkLimiter = rateLimit({
 
 // 1LINK / 1BILL gateway endpoints — must be registered BEFORE the broad app.use('/api', ...) mounts
 // because transactionRoutes / settingsRoutes apply router.use(authenticate) which intercepts ALL /api/** requests
-if (config.appEnvironment !== 'sandbox') {
+if (config.appEnvironment === 'sandbox') {
+  // Stop the request before broad authenticated /api routers can make this
+  // disabled bank-facing namespace look like a valid protected endpoint.
+  app.use('/api/1.0/Payments', notFound);
+} else {
   app.use('/api/1.0/Payments', oneLinkLimiter, oneLinkRoutes);
 }
 

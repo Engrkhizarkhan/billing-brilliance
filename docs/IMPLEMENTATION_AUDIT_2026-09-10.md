@@ -116,7 +116,7 @@ The production database still requires backup, restore validation, migration reh
 | Frontend production build | Pass, 2,357 modules |
 | Frontend Vitest | 1/1 pass |
 | Server JavaScript syntax | 64 files pass |
-| Server unit tests | 32/32 pass across 10 suites |
+| Server unit tests | 33/33 pass across 10 suites |
 | Authenticated disposable-DB integration tests | 11/11 pass, including admin-only consumer-registry filtering |
 | Stateful browser security/lifecycle/payment/sandbox/registry tests | 6/6 pass in the consolidated run |
 | Route-by-route browser audit | 34 dashboard routes + 2 reference aliases pass; no page exceptions or API 5xx |
