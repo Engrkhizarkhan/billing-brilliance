@@ -1,6 +1,6 @@
 /**
  * Database Reset Script
- * Clears all seeded data and keeps only the admin@example.com user.
+ * Clears application/test data and keeps every platform administrator.
  * Usage:  node src/db/reset.js
  * Also exported as a function for use by:  node src/db/seed.js --fresh
  */
@@ -13,6 +13,16 @@ async function reset() {
   try {
     logger.info('Starting database reset...');
 
+    // Refuse to mutate anything unless an active, unscoped platform
+    // administrator will remain able to sign in after the reset.
+    const [adminRowsBeforeReset] = await connection.query(
+      `SELECT id, email FROM users
+       WHERE role = 'admin' AND status = 'active' AND tenant_id IS NULL AND deleted_at IS NULL`
+    );
+    if (adminRowsBeforeReset.length === 0) {
+      throw new Error('Reset refused: no active unscoped platform administrator exists');
+    }
+
     await connection.query('SET FOREIGN_KEY_CHECKS = 0');
 
     // --- Transactional / operational tables ---
@@ -20,16 +30,19 @@ async function reset() {
       'callback_idempotency_log',
       'org_payment_notifications',
       'org_payment_records',
+      'outbox_events',
       'audit_logs',
       'notifications',
       'refresh_tokens',
       'settings',
       'ledger_entries',
+      'payment_allocations',
       'payments',
       'payment_plan_assignments',
       'student_scholarship_assignments',
       'invoices',
       'transactions',
+      'bundle_pcids',
       'bill_bundles',
       'bundles',
       'applicants',
@@ -47,11 +60,11 @@ async function reset() {
       logger.info(`Truncated: ${table}`);
     }
 
-    // --- Remove all users except admin@example.com ---
+    // --- Remove tenant users; platform administrators are deliberately kept ---
     const [result] = await connection.query(
-      "DELETE FROM users WHERE email != 'admin@example.com'"
+      "DELETE FROM users WHERE role <> 'admin' OR role IS NULL"
     );
-    logger.info(`Deleted ${result.affectedRows} user(s) (kept admin@example.com)`);
+    logger.info(`Deleted ${result.affectedRows} tenant user(s); preserved platform administrators`);
 
     // --- Remove all tenants ---
     await connection.query('TRUNCATE TABLE tenants');
@@ -59,17 +72,18 @@ async function reset() {
 
     await connection.query('SET FOREIGN_KEY_CHECKS = 1');
 
-    // --- Verify admin user is intact ---
+    // --- Verify at least one usable platform administrator is intact ---
     const [adminRows] = await connection.query(
-      "SELECT id, email, name, role, status FROM users WHERE email = 'admin@example.com'"
+      `SELECT id, email, name, role, status FROM users
+       WHERE role = 'admin' AND status = 'active' AND tenant_id IS NULL AND deleted_at IS NULL`
     );
-    if (adminRows.length === 1) {
-      logger.info(`Admin user preserved: ${adminRows[0].email} (role: ${adminRows[0].role}, status: ${adminRows[0].status})`);
+    if (adminRows.length > 0) {
+      logger.info(`Preserved ${adminRows.length} active platform administrator(s)`);
     } else {
-      logger.warn('WARNING: admin@example.com was not found after reset!');
+      throw new Error('Reset verification failed: no active platform administrator remains');
     }
 
-    logger.info('Database reset complete. Only admin@example.com remains.');
+    logger.info('Database reset complete. Platform administrators and structural authorization data remain.');
   } catch (err) {
     await connection.query('SET FOREIGN_KEY_CHECKS = 1').catch(() => {});
     logger.error('Reset failed:', err.message);

@@ -15,13 +15,33 @@ describe('1LINK invoice contract', () => {
       .mockResolvedValueOnce([[{ id: 'student-1', tenant_id: 'tenant-1', name: 'Test Student', status: 'active' }]])
       .mockResolvedValueOnce([[]])
       .mockResolvedValueOnce([[{ debit: '0.00', credit: '0.00' }]])
-      .mockResolvedValueOnce([[{ amount: '5000.00', received_at: '2026-09-08 10:00:00', transaction_id: '123456' }]]);
+      .mockResolvedValueOnce([[{ amount: '5000.00', received_at: '2026-09-08 10:00:00', transaction_id: '123456' }]])
+      .mockResolvedValueOnce([[{ due_date: '2026-10-05', month: '2026-09' }]]);
     const res = response();
 
     await billInquiry1Link({ body: { consumer_number: '10517210010001', bank_mnemonic: 'UBL00001', reserved: '' } }, res);
 
-    expect(res.body).toMatchObject({ response_Code: '00', bill_status: 'P', tran_auth_Id: '123456', amount_paid: '000000500000' });
+    expect(res.body).toMatchObject({
+      response_Code: '00', bill_status: 'P', due_date: '20261005', billing_month: '2609',
+      tran_auth_Id: '123456', amount_paid: '000000500000',
+    });
     expect(pool.query.mock.calls[3][0]).toContain('voucher_number AS transaction_id');
+  });
+
+  test('uses the billed month rather than the following-month due date', async () => {
+    pool.query
+      .mockResolvedValueOnce([[{ id: 'student-1', tenant_id: 'tenant-1', name: 'Test Student', status: 'active' }]])
+      .mockResolvedValueOnce([[
+        { id: 'invoice-1', amount: '2500.00', due_date: '2026-10-05', month: '2026-09', late_fee: '0', late_fee_applied: 0 },
+      ]])
+      .mockResolvedValueOnce([[{ debit: '2500.00', credit: '0.00' }]]);
+    const res = response();
+
+    await billInquiry1Link({ body: { consumer_number: '10517210010001', bank_mnemonic: 'UBL00001', reserved: '' } }, res);
+
+    expect(res.body).toMatchObject({
+      response_Code: '00', bill_status: 'U', due_date: '20261005', billing_month: '2609',
+    });
   });
 
   test('posts the exact 1LINK amount and preserves the four-field duplicate key', async () => {

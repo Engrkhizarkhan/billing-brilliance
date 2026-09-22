@@ -70,12 +70,30 @@ const createInvoice = async (req, res, next) => {
     const tenantId = req.tenantId || req.body.tenantId;
     if (!tenantId) throw new AppError('Tenant ID is required', 400);
 
-    const { studentId, studentName, consumerNumber, month, amount, dueDate } = req.body;
+    const { studentId, month, amount, dueDate } = req.body;
+    const normalizedAmount = Number(amount);
+    if (!studentId) throw new AppError('Student is required', 400, 'STUDENT_REQUIRED');
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(month || ''))) {
+      throw new AppError('Billing month must use YYYY-MM format', 400, 'INVALID_BILLING_MONTH');
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dueDate || '')) || Number.isNaN(Date.parse(`${dueDate}T00:00:00Z`))) {
+      throw new AppError('Due date must use YYYY-MM-DD format', 400, 'INVALID_DUE_DATE');
+    }
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+      throw new AppError('Amount must be greater than zero', 400, 'INVALID_AMOUNT');
+    }
 
     connection = await pool.getConnection();
     await connection.beginTransaction();
     // Serialize numbering per tenant so concurrent manual/batch runs cannot collide.
     await connection.query('SELECT id FROM tenants WHERE id = ? FOR UPDATE', [tenantId]);
+    const [studentRows] = await connection.query(
+      `SELECT id, name, consumer_number FROM students
+       WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL LIMIT 1 FOR UPDATE`,
+      [studentId, tenantId]
+    );
+    if (!studentRows.length) throw new AppError('Student not found', 404, 'STUDENT_NOT_FOUND');
+    const student = studentRows[0];
     const [seqRows] = await connection.query(
       `SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(invoice_number, '-', -1) AS UNSIGNED)), 10000) AS max_seq
        FROM invoices WHERE tenant_id = ?`,
@@ -87,14 +105,14 @@ const createInvoice = async (req, res, next) => {
     await connection.query(
       `INSERT INTO invoices (id, tenant_id, invoice_number, student_id, student_name, consumer_number, month, amount, status, due_date)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
-      [id, tenantId, invoiceNumber, studentId || null, studentName, consumerNumber, month, amount, dueDate]
+      [id, tenantId, invoiceNumber, student.id, student.name, student.consumer_number, month, normalizedAmount, dueDate]
     );
     await connection.commit();
 
-    await auditLog(req, 'create', 'invoice', id, `Invoice ${invoiceNumber} for ${amount}`);
+    await auditLog(req, 'create', 'invoice', id, `Invoice ${invoiceNumber} for ${normalizedAmount}`);
     await createRequestNotification(req, {
       title: 'Invoice created',
-      message: `Invoice ${invoiceNumber} was generated for ${studentName}.`,
+      message: `Invoice ${invoiceNumber} was generated for ${student.name}.`,
       type: 'system',
       tenantId,
     });

@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+readonly APP_DIR="/var/www/billing-brilliance"
+readonly HEALTH_URL="https://app.fintap.pk/api/health"
+readonly LOG_FILE="/var/log/fintap-deploy.log"
+readonly REVISION_FILE="/var/lib/fintap/deployed-revision"
+
+exec 9>/var/lock/fintap-deploy.lock
+if ! /usr/bin/flock -n 9; then
+  echo "Another Fintap deployment is already running."
+  exit 1
+fi
+
+mkdir -p "$(dirname "$REVISION_FILE")"
+touch "$LOG_FILE"
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+echo "[$(date --iso-8601=seconds)] deployment started"
+cd "$APP_DIR"
+
+if [[ -n "$(/usr/bin/git status --porcelain --untracked-files=no)" ]]; then
+  echo "Deployment refused: tracked server files contain local changes."
+  /usr/bin/git status --short --untracked-files=no
+  exit 1
+fi
+
+/usr/bin/git fetch --prune origin main
+previous_revision="$(/usr/bin/git rev-parse HEAD)"
+target_revision="$(/usr/bin/git rev-parse origin/main)"
+
+if ! /usr/bin/git merge-base --is-ancestor "$previous_revision" "$target_revision"; then
+  echo "Deployment refused: origin/main is not a fast-forward of the deployed revision."
+  exit 1
+fi
+
+if [[ "$previous_revision" == "$target_revision" ]]; then
+  echo "Revision $target_revision is already deployed."
+  exit 0
+fi
+
+/usr/bin/git checkout main
+/usr/bin/git merge --ff-only "$target_revision"
+
+echo "Installing and building frontend..."
+/usr/bin/npm ci --no-audit
+/usr/bin/npm run build
+
+echo "Installing backend production dependencies..."
+cd "$APP_DIR/server"
+/usr/bin/npm ci --omit=dev --no-audit
+
+echo "Applying forward-only database migrations..."
+/usr/bin/node src/db/migrate.js
+
+echo "Reloading application processes..."
+/usr/bin/pm2 reload ecosystem.config.cjs --update-env
+
+health_ok=false
+for _ in {1..20}; do
+  if /usr/bin/curl --fail --silent --show-error "$HEALTH_URL" >/dev/null; then
+    health_ok=true
+    break
+  fi
+  sleep 2
+done
+
+if [[ "$health_ok" != true ]]; then
+  echo "Health check failed; rolling application code back to $previous_revision."
+  cd "$APP_DIR"
+  /usr/bin/git reset --hard "$previous_revision"
+  /usr/bin/npm ci --no-audit
+  /usr/bin/npm run build
+  cd "$APP_DIR/server"
+  /usr/bin/npm ci --omit=dev --no-audit
+  /usr/bin/pm2 reload ecosystem.config.cjs --update-env
+  exit 1
+fi
+
+printf '%s\n' "$target_revision" > "$REVISION_FILE"
+/usr/bin/pm2 save >/dev/null
+echo "[$(date --iso-8601=seconds)] deployed $target_revision successfully"
+

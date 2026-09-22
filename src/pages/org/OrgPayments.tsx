@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatPKR } from '@/lib/formatters';
 import { usePaymentStore } from '@/store/paymentStore';
-import { useOrgSecurityStore } from '@/store/orgSecurityStore';
 import { useAuthStore } from '@/store/authStore';
 import {
   OrgCreatePaymentResponse,
@@ -31,7 +30,6 @@ const OrgPayments = () => {
   const queryApplicationId = searchParams.get('application') || '';
 
   const user = useAuthStore((state) => state.user);
-  const sourceIp = useOrgSecurityStore((state) => state.sourceIp);
 
   const [createForm, setCreateForm] = useState({
     applicant_id: '',
@@ -147,7 +145,6 @@ const OrgPayments = () => {
         <span>
           <span className="font-medium text-foreground">API Key:</span>{' '}
           <code className="font-mono">{user?.tenantApiKeyPrefix ? `${user.tenantApiKeyPrefix}…` : 'Not issued — contact the platform administrator'}</code>
-          {sourceIp ? <span className="ml-4"><span className="font-medium text-foreground">Source IP:</span> {sourceIp}</span> : null}
         </span>
       </div>
 

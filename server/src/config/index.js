@@ -51,8 +51,11 @@ module.exports = {
     || (process.env.NODE_ENV === 'production' ? '' : 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='),
 
   sandbox: {
-    baseUrl: process.env.SANDBOX_BASE_URL || '',
-    purgeSecret: process.env.SANDBOX_PURGE_SECRET || '',
+    // The selected environment file is authoritative for lifecycle wiring.
+    // PM2 can retain older empty values across deploys, which would otherwise
+    // make production activation appear unconfigured after the file is fixed.
+    baseUrl: fileFirst('SANDBOX_BASE_URL') || '',
+    purgeSecret: fileFirst('SANDBOX_PURGE_SECRET') || '',
   },
 
   requireHttps: (process.env.REQUIRE_HTTPS || 'false').toLowerCase() !== 'false',

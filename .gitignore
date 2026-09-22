@@ -14,6 +14,16 @@ playwright-report
 test-results
 *.local
 
+# Generated reports, handover packages, previews and temporary work
+output/
+outputs/
+tmp/
+
+# Local deployment keys and runtime state
+.deploy/
+*.pem
+*.key
+
 # Environment files — never commit secrets
 .env
 .env.local

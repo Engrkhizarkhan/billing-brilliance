@@ -1,12 +1,18 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, authorize, authorizeSchoolRole } = require('../middleware/auth');
+const { authenticate, authorize, authorizeSchoolRole, authorizeTenantSetting } = require('../middleware/auth');
 const { tenantScope } = require('../middleware/auth');
 const settingsController = require('../controllers/settingsController');
 
 router.use(authenticate);
-router.use(authorize('admin', 'school'));
 router.use(tenantScope);
+
+// Organization administrators need this one settings key for their external
+// API allowlist. All other settings retain their existing school/admin policy.
+router.get('/settings/:key', authorizeTenantSetting(), settingsController.getSetting);
+router.put('/settings/:key', authorizeTenantSetting({ write: true }), settingsController.upsertSetting);
+
+router.use(authorize('admin', 'school'));
 
 router.get('/fee-plans', settingsController.fetchFeePlans);
 router.post('/fee-plans', authorizeSchoolRole('admin', 'finance'), settingsController.createFeePlan);
@@ -26,7 +32,4 @@ router.post('/payment-plan-assignments', authorizeSchoolRole('admin', 'finance')
 router.post('/payment-plan-assignments/bulk', authorizeSchoolRole('admin', 'finance'), settingsController.bulkCreatePaymentPlanAssignments);
 router.put('/payment-plan-assignments/:id', authorizeSchoolRole('admin', 'finance'), settingsController.updatePaymentPlanAssignment);
 router.delete('/payment-plan-assignments/:id', authorizeSchoolRole('admin', 'finance'), settingsController.deletePaymentPlanAssignment);
-router.get('/settings/:key', settingsController.getSetting);
-router.put('/settings/:key', authorizeSchoolRole('admin'), settingsController.upsertSetting);
-
 module.exports = router;

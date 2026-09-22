@@ -579,7 +579,9 @@ export interface OrgHealthResponse {
 
 export interface OrgRequestSecurityContext {
   apiKey?: string;
-  sourceIp?: string;
+  sourceIp?: string | string[];
+  configured?: boolean;
+  sourceIpCount?: number;
   protocol?: 'https' | 'http';
   webhookSignature?: string;
   idempotencyKey?: string;
