@@ -1,0 +1,75 @@
+{
+  "generated_at": "2026-09-22T01:25:00+05:00",
+  "environment": "production-connected UAT fixtures",
+  "credentials_redacted": true,
+  "accepted_source_ip": "10.95.8.92",
+  "bill_inquiry": {
+    "normal_unpaid": {
+      "consumer_number": "10517210010001",
+      "http_status": 200,
+      "response_Code": "00",
+      "bill_status": "U",
+      "due_date": "20261005",
+      "amount_within_dueDate": "+0000000250000",
+      "amount_after_dueDate": "+0000000250000",
+      "billing_month": "2609"
+    },
+    "after_due": {
+      "consumer_number": "10517210010015",
+      "http_status": 200,
+      "response_Code": "00",
+      "bill_status": "U",
+      "due_date": "20260920",
+      "amount_within_dueDate": "+0000550000000",
+      "amount_after_dueDate": "+0000550050000",
+      "billing_month": "2609"
+    },
+    "paid": {
+      "consumer_number": "10517210010016",
+      "http_status": 200,
+      "response_Code": "00",
+      "bill_status": "P",
+      "due_date": "20261005",
+      "amount_paid": "000000300000",
+      "date_paid": "20260921",
+      "billing_month": "2609"
+    },
+    "blocked": {
+      "consumer_number": "10517210010018",
+      "http_status": 200,
+      "response_Code": "02",
+      "bill_status": "B"
+    },
+    "twenty_four_digit": {
+      "consumer_number": "105172100200000000000001",
+      "http_status": 200,
+      "response_Code": "00",
+      "bill_status": "U",
+      "due_date": "20260923",
+      "amount_within_dueDate": "+0000600000000",
+      "billing_month": "2609"
+    },
+    "unknown": {
+      "consumer_number": "99999999999999",
+      "http_status": 200,
+      "response_Code": "01",
+      "bill_status": "B"
+    }
+  },
+  "bill_payment_non_mutating_checks": {
+    "malformed_amount": {
+      "http_status": 200,
+      "response_Code": "04"
+    },
+    "already_paid": {
+      "consumer_number": "10517210010016",
+      "http_status": 200,
+      "response_Code": "06"
+    },
+    "blocked": {
+      "consumer_number": "10517210010018",
+      "http_status": 200,
+      "response_Code": "01"
+    }
+  }
+}

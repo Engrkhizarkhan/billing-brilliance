@@ -103,6 +103,28 @@ const authorizeSchoolRole = (...schoolRoles) => {
   };
 };
 
+// Tenant settings are shared by school and organization dashboards, but the
+// permitted keys and write roles are different. Keep this policy at the route
+// boundary so organization users cannot use the generic settings endpoint to
+// read or overwrite school/application settings.
+const authorizeTenantSetting = ({ write = false } = {}) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    if (req.user.role === 'admin') return next();
+    if (req.user.role === 'org') {
+      if (req.params.key === 'org_security_context') return next();
+      return res.status(403).json({ error: 'Organization access is restricted to integration security settings' });
+    }
+    if (req.user.role === 'school') {
+      if (!write || req.user.school_access_role === 'admin') return next();
+      return res.status(403).json({ error: 'Insufficient school permissions' });
+    }
+    return res.status(403).json({ error: 'Insufficient permissions' });
+  };
+};
+
 const apiKeyAuth = async (req, res, next) => {
   try {
     const apiKey = req.headers['x-api-key'];
@@ -216,4 +238,13 @@ const requireLiveTenant = async (req, res, next) => {
   }
 };
 
-module.exports = { authenticate, authorize, authorizeSchoolRole, apiKeyAuth, authenticateOrApiKey, tenantScope, requireLiveTenant };
+module.exports = {
+  authenticate,
+  authorize,
+  authorizeSchoolRole,
+  authorizeTenantSetting,
+  apiKeyAuth,
+  authenticateOrApiKey,
+  tenantScope,
+  requireLiveTenant,
+};

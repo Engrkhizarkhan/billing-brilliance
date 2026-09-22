@@ -1,3 +1,5 @@
+process.env.FINTECH_PREFIX = '105172';
+
 const config = require('../../src/config');
 const { allocateConsumerNumber, getCapacity } = require('../../src/services/consumerNumberService');
 

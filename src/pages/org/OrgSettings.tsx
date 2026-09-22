@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useOrgSecurityStore } from '@/store/orgSecurityStore';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import { useAuthStore } from '@/store/authStore';
@@ -22,20 +21,16 @@ const OrgSettings = () => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const { user } = useAuthStore();
-  const storedSourceIp = useOrgSecurityStore((state) => state.sourceIp);
-  const setSourceIp = useOrgSecurityStore((state) => state.setSourceIp);
-  const [ipList, setIpList] = useState<string[]>(storedSourceIp ? storedSourceIp.split(',').filter(Boolean) : []);
+  const [ipList, setIpList] = useState<string[]>([]);
   const [ipInput, setIpInput] = useState('');
+  const [configuredIpCount, setConfiguredIpCount] = useState(0);
   const [savingSecurityContext, setSavingSecurityContext] = useState(false);
   const { data: securityContextData } = useApiQuery(() => api.fetchSetting<OrgRequestSecurityContext>('org_security_context'), []);
 
   useEffect(() => {
     const securityContext = securityContextData as OrgRequestSecurityContext | null;
-    if (!securityContext?.sourceIp) return;
-    const next = securityContext.sourceIp.split(',').map((item) => item.trim()).filter(Boolean);
-    setIpList(next);
-    setSourceIp(next.join(','));
-  }, [securityContextData, setSourceIp]);
+    setConfiguredIpCount(Number(securityContext?.sourceIpCount || 0));
+  }, [securityContextData]);
 
   const handleUpdatePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) return toast.error('All password fields are required');
@@ -62,10 +57,11 @@ const OrgSettings = () => {
     if (ipList.length === 0) return toast.error('Add at least one production source IP');
     setSavingSecurityContext(true);
     try {
-      const sourceIp = ipList.join(',');
-      await api.saveSetting('org_security_context', { sourceIp });
-      setSourceIp(sourceIp);
-      toast.success('API source IP allowlist saved');
+      await api.saveSetting('org_security_context', { sourceIp: ipList });
+      setConfiguredIpCount(ipList.length);
+      setIpList([]);
+      setIpInput('');
+      toast.success('API source IP allowlist replaced and hidden');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to save source IPs');
     } finally {
@@ -86,14 +82,20 @@ const OrgSettings = () => {
       </Card>
 
       <Card className="max-w-3xl">
-        <CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5" /> Source IP allowlist</CardTitle><CardDescription>Only requests from these public egress IP addresses can use your organization API key.</CardDescription></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5" /> Source IP allowlist</CardTitle><CardDescription>Stored addresses are write-only and are never displayed in the organization dashboard.</CardDescription></CardHeader>
         <CardContent className="space-y-4">
+          <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+            {configuredIpCount > 0
+              ? `An allowlist containing ${configuredIpCount} address${configuredIpCount === 1 ? '' : 'es'} is configured. Values are hidden.`
+              : 'No source IP allowlist is configured.'}
+          </div>
+          <p className="text-xs text-muted-foreground">Enter the complete replacement list below. Saving replaces all currently stored addresses.</p>
           <div className="flex min-h-11 flex-wrap gap-2 rounded-lg border p-2">
-            {ipList.length === 0 && <span className="p-1 text-xs text-destructive">No source IPs configured</span>}
+            {ipList.length === 0 && <span className="p-1 text-xs text-muted-foreground">No replacement addresses entered</span>}
             {ipList.map((ip) => <span key={ip} className="flex items-center gap-1 rounded border bg-muted px-2 py-1 font-mono text-xs">{ip}<button type="button" aria-label={`Remove ${ip}`} onClick={() => setIpList((current) => current.filter((item) => item !== ip))}><X className="h-3 w-3" /></button></span>)}
           </div>
           <div className="flex gap-2"><Input value={ipInput} onChange={(event) => setIpInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addIp(); } }} placeholder="203.0.113.10" className="font-mono" /><Button type="button" variant="outline" onClick={addIp}><Plus className="h-4 w-4" /></Button></div>
-          <Button onClick={() => void saveSecurityContext()} disabled={savingSecurityContext}>{savingSecurityContext ? 'Saving…' : 'Save allowlist'}</Button>
+          <Button onClick={() => void saveSecurityContext()} disabled={savingSecurityContext}>{savingSecurityContext ? 'Saving…' : 'Replace allowlist'}</Button>
         </CardContent>
       </Card>
 

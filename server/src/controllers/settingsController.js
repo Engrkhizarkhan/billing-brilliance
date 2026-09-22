@@ -19,6 +19,17 @@ const parseJsonValue = (value) => {
   }
 };
 
+const orgSecuritySummary = (value) => {
+  const parsed = value && typeof value === 'object' ? value : {};
+  const rawSourceIps = parsed.sourceIp;
+  const sourceIps = (Array.isArray(rawSourceIps)
+    ? rawSourceIps
+    : String(rawSourceIps || '').split(','))
+    .map((ip) => String(ip).trim())
+    .filter(Boolean);
+  return { configured: sourceIps.length > 0, sourceIpCount: sourceIps.length };
+};
+
 const clampDateToMonth = (year, monthIndex, day) => {
   const lastDay = new Date(year, monthIndex + 1, 0).getDate();
   return new Date(year, monthIndex, Math.min(Math.max(day, 1), lastDay));
@@ -859,7 +870,12 @@ const getSetting = async (req, res, next) => {
       [tenantId, req.params.key]
     );
 
-    res.json({ data: rows.length > 0 ? parseJsonValue(rows[0].value) : null });
+    const value = rows.length > 0 ? parseJsonValue(rows[0].value) : null;
+    if (req.user?.role === 'org' && req.params.key === 'org_security_context') {
+      return res.json({ data: orgSecuritySummary(value) });
+    }
+
+    res.json({ data: value });
   } catch (err) {
     next(err);
   }
@@ -872,14 +888,19 @@ const upsertSetting = async (req, res, next) => {
 
     const value = req.body.value;
     if (req.params.key === 'org_security_context') {
-      const sourceIps = value?.sourceIp;
-      if (!Array.isArray(sourceIps) || sourceIps.length === 0 || sourceIps.length > 50) {
+      const rawSourceIps = value?.sourceIp;
+      const sourceIps = (Array.isArray(rawSourceIps)
+        ? rawSourceIps
+        : String(rawSourceIps || '').split(','))
+        .map((ip) => String(ip).trim())
+        .filter(Boolean);
+      if (sourceIps.length === 0 || sourceIps.length > 50) {
         throw new AppError('Configure between 1 and 50 source IP addresses', 400);
       }
-      if (sourceIps.some((ip) => typeof ip !== 'string' || net.isIP(ip.trim()) === 0)) {
+      if (sourceIps.some((ip) => net.isIP(ip) === 0)) {
         throw new AppError('Every source IP must be a valid IPv4 or IPv6 address', 400);
       }
-      value.sourceIp = [...new Set(sourceIps.map((ip) => ip.trim()))];
+      value.sourceIp = [...new Set(sourceIps)];
     }
     await pool.query(
       `INSERT INTO settings (id, tenant_id, \`key\`, value)
@@ -889,7 +910,10 @@ const upsertSetting = async (req, res, next) => {
     );
 
     await auditLog(req, 'update', 'setting', req.params.key, `Setting ${req.params.key} saved`);
-    res.json({ data: value, message: 'Setting saved' });
+    const responseValue = req.user?.role === 'org' && req.params.key === 'org_security_context'
+      ? orgSecuritySummary(value)
+      : value;
+    res.json({ data: responseValue, message: 'Setting saved' });
   } catch (err) {
     next(err);
   }

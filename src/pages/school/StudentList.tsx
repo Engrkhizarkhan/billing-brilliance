@@ -52,6 +52,7 @@ type StudentFormState = {
   usesBusService: boolean;
   busServiceStartMonth: string;
   busMonthlyFee: string;
+  status: Student['status'];
 };
 
 const currentMonthKey = () => new Date().toISOString().slice(0, 7);
@@ -70,6 +71,7 @@ const emptyStudentForm: StudentFormState = {
   usesBusService: false,
   busServiceStartMonth: currentMonthKey(),
   busMonthlyFee: '1500',
+  status: 'active',
 };
 
 const toStudentForm = (student: Student): StudentFormState => ({
@@ -86,6 +88,7 @@ const toStudentForm = (student: Student): StudentFormState => ({
   usesBusService: student.usesBusService,
   busServiceStartMonth: student.busServiceStartMonth || currentMonthKey(),
   busMonthlyFee: String(student.busMonthlyFee > 0 ? student.busMonthlyFee : 1500),
+  status: student.status,
 });
 
 const StudentList = () => {
@@ -290,6 +293,7 @@ const StudentList = () => {
         busServiceStartMonth: nowUsesBus ? editForm.busServiceStartMonth : studentBeingEdited.busServiceStartMonth,
         busServiceEndMonth: nowUsesBus ? null : (wasUsingBus ? (studentBeingEdited.busServiceEndMonth || currentMonthKey()) : studentBeingEdited.busServiceEndMonth),
         busMonthlyFee: nowUsesBus ? Number(editForm.busMonthlyFee) : studentBeingEdited.busMonthlyFee,
+        status: editForm.status,
       });
       if (updateResult.data) {
         setStudentList((prev) => prev.map((s) => s.id === studentBeingEdited.id ? { ...s, ...updateResult.data } as StudentDirectoryRecord : s));
@@ -605,6 +609,16 @@ const StudentList = () => {
                     </Select>
                   </div>
                   <div className="space-y-2"><Label className="text-xs font-semibold">Date of Birth</Label><Input type="date" className="h-10 rounded-xl" value={editForm.dateOfBirth} onChange={(e) => setEditForm({ ...editForm, dateOfBirth: e.target.value })} /></div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold">Consumer Status</Label>
+                  <Select value={editForm.status} onValueChange={(value: Student['status']) => setEditForm({ ...editForm, status: value })}>
+                    <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active — payable</SelectItem>
+                      <SelectItem value="inactive">Blocked — payments rejected</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="flex items-center gap-2 rounded-lg border border-border p-3">
                   <Checkbox

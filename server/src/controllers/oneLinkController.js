@@ -19,6 +19,9 @@ const fmtDate = (value) => {
   return `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, '0')}${String(date.getUTCDate()).padStart(2, '0')}`;
 };
 const fmtBillingMonth = (value) => {
+  const monthText = String(value || '').trim();
+  const monthMatch = /^(\d{4})-(\d{2})$/.exec(monthText);
+  if (monthMatch) return `${monthMatch[1].slice(-2)}${monthMatch[2]}`;
   const date = asDate(value || new Date());
   return `${String(date.getUTCFullYear()).slice(-2)}${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
 };
@@ -43,14 +46,14 @@ const inquiryError = (code) => ({
   reserved: '',
 });
 const paymentError = (code) => ({ response_Code: code, Identification_parameter: '', reserved: '' });
-const paidInquiry = (detail, dueDate, payment) => ({
+const paidInquiry = (detail, dueDate, billingMonth, payment) => ({
   response_Code: '00',
   consumer_detail: padRight(detail, 30),
   bill_status: 'P',
   due_date: dueDate ? fmtDate(dueDate) : '',
   amount_within_dueDate: '+0000000000000',
   amount_after_dueDate: '+0000000000000',
-  billing_month: dueDate ? fmtBillingMonth(dueDate) : fmtBillingMonth(new Date()),
+  billing_month: fmtBillingMonth(billingMonth || dueDate || new Date()),
   date_paid: payment?.received_at || payment?.date ? fmtDate(payment.received_at || payment.date) : '',
   amount_paid: payment ? fmtAmountPaid(payment.amount) : '',
   tran_auth_Id: payment && /^\d{6}$/.test(String(payment.transaction_id || ''))
@@ -79,7 +82,7 @@ const billInquiry1Link = async (req, res) => {
       const student = students[0];
       if (student.status !== 'active') return res.json(inquiryError('02'));
       const [invoices] = await pool.query(
-        `SELECT id, invoice_number, amount, due_date, late_fee, late_fee_applied
+        `SELECT id, invoice_number, amount, due_date, month, late_fee, late_fee_applied
          FROM invoices WHERE tenant_id = ? AND consumer_number = ?
            AND status != 'paid' AND deleted_at IS NULL ORDER BY due_date ASC`,
         [student.tenant_id, consumerNumber]
@@ -99,7 +102,18 @@ const billInquiry1Link = async (req, res) => {
            ORDER BY received_at DESC, created_at DESC LIMIT 1`,
           [student.tenant_id, consumerNumber]
         );
-        return res.json(paidInquiry(student.name, null, payments[0]));
+        const [paidInvoices] = await pool.query(
+          `SELECT due_date, month FROM invoices
+           WHERE tenant_id = ? AND consumer_number = ? AND status = 'paid' AND deleted_at IS NULL
+           ORDER BY paid_at DESC, due_date DESC LIMIT 1`,
+          [student.tenant_id, consumerNumber]
+        );
+        return res.json(paidInquiry(
+          student.name,
+          paidInvoices[0]?.due_date || null,
+          paidInvoices[0]?.month || null,
+          payments[0]
+        ));
       }
       const now = new Date();
       const oldest = invoices[0] || null;
@@ -114,7 +128,7 @@ const billInquiry1Link = async (req, res) => {
         due_date: oldest?.due_date ? fmtDate(oldest.due_date) : '',
         amount_within_dueDate: fmtAmountInquiry(baseDue),
         amount_after_dueDate: fmtAmountInquiry(baseDue + lateFees),
-        billing_month: oldest?.due_date ? fmtBillingMonth(oldest.due_date) : fmtBillingMonth(new Date()),
+        billing_month: fmtBillingMonth(oldest?.month || oldest?.due_date || new Date()),
         date_paid: '', amount_paid: '', tran_auth_Id: '', reserved: '',
       });
     }
@@ -129,7 +143,7 @@ const billInquiry1Link = async (req, res) => {
     if (!records.length) return res.json(inquiryError('01'));
     const record = records[0];
     if (record.status === 'paid') {
-      return res.json(paidInquiry(record.description || record.application_id, record.due_date, {
+      return res.json(paidInquiry(record.description || record.application_id, record.due_date, null, {
         amount: record.amount, received_at: record.paid_at, transaction_id: record.transaction_id,
       }));
     }
