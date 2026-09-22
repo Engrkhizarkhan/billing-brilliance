@@ -64,7 +64,7 @@ const createPosting = async (req, res, next) => {
 
 const updatePosting = async (req, res, next) => {
   try {
-    const { title, type, department, totalSeats, applicationFee, startDate, endDate, testDate, status } = req.body;
+    const { title } = req.body;
 
     let where = 'WHERE id = ? AND deleted_at IS NULL';
     const params = [req.params.id];

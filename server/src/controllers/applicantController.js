@@ -112,7 +112,7 @@ const createApplicant = async (req, res, next) => {
 
 const assignRoll = async (req, res, next) => {
   try {
-    const { rollNumber, center, slot } = req.body;
+    const { rollNumber, center } = req.body;
 
     let where = 'WHERE id = ? AND deleted_at IS NULL';
     const params = [req.params.id];

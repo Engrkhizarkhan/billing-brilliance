@@ -116,7 +116,8 @@ const login = async (req, res, next) => {
       type: 'system',
     });
 
-    const { password_hash, ...safeUser } = user;
+    const safeUser = { ...user };
+    delete safeUser.password_hash;
     // Normalize legacy 'etea' role to 'org'
     if (safeUser.role === 'etea') safeUser.role = 'org';
 
