@@ -47,9 +47,6 @@ jobs:
     name: Backend checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: server
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -59,19 +56,24 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: server/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
 
-      - name: Install dependencies
+      - name: Install lint tooling
         run: npm ci
 
+      - name: Install backend dependencies
+        run: npm ci --prefix server
+
       - name: Run tests
-        run: npm test -- --runInBand
+        run: npm test --prefix server -- --runInBand
 
       - name: Run lint
-        run: npm run lint
+        run: npx eslint server/src/
 
       - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=high
+        run: npm audit --prefix server --omit=dev --audit-level=high
 
   deploy:
     name: Deploy production
