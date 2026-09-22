@@ -1,3 +1,5 @@
+> Historical/reference documentation. For current implementation and operating rules, use [the current guide](../README.md). Examples and readiness statements below must not be treated as current deployment verification.
+
 # Fintap server
 
 Express 5 and MySQL 8 backend for the Fintap multi-tenant invoice and payment platform. The active product roles are platform administrator, school tenant, and organization/private-agency tenant.

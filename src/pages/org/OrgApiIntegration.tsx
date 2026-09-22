@@ -47,7 +47,7 @@ const endpoints: EndpointDoc[] = [
   {
     id: 'webhook', method: 'POST', path: 'Your configured HTTPS webhook URL', title: 'Payment-status webhook', audience: 'Your organization endpoint',
     description: 'Fintap pushes a signed notification to your system after the payment state changes.',
-    request: { event_id: '60dfe530-8b37-4b59-80df-a5524b735993', event_type: 'payment.posted', created_at: '2026-09-05T08:12:41.000Z', data: { paymentId: '2b624b2e-54ca-4a58-a8e9-57e194f34d4d', consumerNumber: '10517220010000000001', amount: 2500, currency: 'PKR', reference: '1LK9A2B3' } },
+    request: { schema_version: 1, event_id: '60dfe530-8b37-4b59-80df-a5524b735993', event_type: 'payment.posted', created_at: '2026-09-05T08:12:41.000Z', data: { paymentId: '2b624b2e-54ca-4a58-a8e9-57e194f34d4d', consumerNumber: '10517220010000000001', amount: 2500, currency: 'PKR', reference: '1LK9A2B3', applicationId: 'FORM-2026-00041', billId: 'ORG-2B624B2E', targetType: 'org_payment' } },
     response: { acknowledged: true },
     notes: ['Verify X-Webhook-Signature using HMAC-SHA256 over the exact raw JSON body before processing it.', 'Return a 2xx response quickly and deduplicate events by X-Fintap-Event-Id/event_id. Delivery is retried with backoff. Configure and test the URL under Webhook Config.'],
   },

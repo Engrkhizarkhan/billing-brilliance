@@ -1,3 +1,5 @@
+import { TablePagination } from '@/components/TablePagination';
+import { QueryError } from '@/components/QueryError';
 import { useState, useMemo } from 'react';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api, type StudentDirectoryMeta } from '@/lib/api';
@@ -15,25 +17,29 @@ import { FilterBar } from '@/components/FilterBar';
 import { toast } from 'sonner';
 import { Plus, GraduationCap, CheckCircle2, Search, Pencil, Trash2, Loader2 } from 'lucide-react';
 
-const allClasses = ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
+
 
 const PaymentPrograms = () => {
   const [studentSearch, setStudentSearch] = useState('');
   const [studentClassFilter, setStudentClassFilter] = useState('all');
   const [studentSectionFilter, setStudentSectionFilter] = useState('all');
   const deferredStudentSearch = useDebouncedValue(studentSearch.trim());
-  const { data: studentsData, meta: studentMeta, loading: ls } = useApiQuery<StudentDirectoryRecord[], StudentDirectoryMeta>(
+  const studentCriteria = `${deferredStudentSearch}|${studentClassFilter}|${studentSectionFilter}`;
+  const [studentPaging, setStudentPaging] = useState({ criteria: '', page: 1 });
+  const studentPage = studentPaging.criteria === studentCriteria ? studentPaging.page : 1;
+  const { data: studentsData, meta: studentMeta, loading: ls, error: queryError0 } = useApiQuery<StudentDirectoryRecord[], StudentDirectoryMeta>(
     () => api.fetchStudents({
-      pageSize: 200,
+      page: studentPage, pageSize: 50,
       search: deferredStudentSearch || undefined,
       className: studentClassFilter !== 'all' ? studentClassFilter : undefined,
       section: studentSectionFilter !== 'all' ? studentSectionFilter : undefined,
       status: 'active',
     }),
-    [deferredStudentSearch, studentClassFilter, studentSectionFilter]
+    [deferredStudentSearch, studentClassFilter, studentSectionFilter, studentPage]
   );
-  const { data: feePlansData, loading: lf } = useApiQuery(() => api.fetchFeePlans(), []);
-  const { data: assignmentsData, loading: la, refetch: refetchAssignments } = useApiQuery(() => api.fetchPaymentPlanAssignments(), []);
+  const { data: feePlansData, loading: lf, error: queryError1 } = useApiQuery(() => api.fetchFeePlans(), []);
+  const { data: assignmentsData, loading: la, refetch: refetchAssignments, error: queryError2 } = useApiQuery(() => api.fetchPaymentPlanAssignments(), []);
+  const allClasses = (studentMeta?.facets.classes || []).map(item => item.name);
   const students = useMemo(() => (studentsData || []) as StudentDirectoryRecord[], [studentsData]);
   const feePlans = (feePlansData || []) as FeePlan[];
   const assignments = useMemo(() => (assignmentsData || []) as PaymentPlanAssignment[], [assignmentsData]);
@@ -251,6 +257,8 @@ const PaymentPrograms = () => {
     }
   };
 
+  if (queryError0 || queryError1 || queryError2) return <QueryError message={queryError0 || queryError1 || queryError2} />;
+
   return (
     <div className="space-y-6 animate-fade-in">
       {pageLoading && <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin" /></div>}
@@ -383,6 +391,9 @@ const PaymentPrograms = () => {
                   </div>
                 </div>
 
+                <TablePagination total={studentMeta?.total || 0} page={studentPage} pageSize={50}
+                    onPageChange={(page) => setStudentPaging({ criteria: studentCriteria, page })}
+                    onPageSizeChange={() => {}} pageSizeOptions={[50]} />
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold">Search Students</Label>
                   <div className="relative">

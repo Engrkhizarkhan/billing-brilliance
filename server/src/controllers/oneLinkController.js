@@ -1,3 +1,4 @@
+const { payableQuote } = require('../services/billingRules');
 /** 1LINK / 1BILL Generic REST invoice endpoints. */
 const { pool } = require('../config/database');
 const logger = require('../config/logger');
@@ -92,9 +93,8 @@ const billInquiry1Link = async (req, res) => {
          FROM ledger_entries WHERE tenant_id = ? AND student_id = ?`,
         [student.tenant_id, student.id]
       );
-      const invoiceDue = invoices.reduce((sum, invoice) => sum + Number(invoice.amount), 0);
-      const ledgerDue = Math.max(0, Number(ledger.debit) - Number(ledger.credit));
-      const baseDue = Math.max(invoiceDue, ledgerDue);
+      const { baseDue, lateFees, invoiceDue, ledgerDue } = payableQuote(invoices, ledger);
+      if (ledgerDue < invoiceDue) return res.json(inquiryError('01'));
       if (baseDue === 0) {
         const [payments] = await pool.query(
           `SELECT amount, received_at, date, voucher_number AS transaction_id, reference FROM payments
@@ -115,12 +115,8 @@ const billInquiry1Link = async (req, res) => {
           payments[0]
         ));
       }
-      const now = new Date();
       const oldest = invoices[0] || null;
-      const lateFees = invoices.reduce((sum, invoice) => {
-        const overdue = invoice.due_date && asDate(`${invoice.due_date} 23:59:59`) < now;
-        return sum + (overdue && !invoice.late_fee_applied ? Number(invoice.late_fee || 0) : 0);
-      }, 0);
+
       return res.json({
         response_Code: '00',
         consumer_detail: padRight(student.name, 30),
@@ -182,7 +178,10 @@ const billPayment1Link = async (req, res) => {
     }
     const amount = parsePaymentAmount(req.body.transaction_amount);
     const receivedAt = parseTranDateTime(tranDate, tranTime);
-    if (!Number.isFinite(amount) || amount <= 0 || Number.isNaN(receivedAt.getTime())) return res.json(paymentError('04'));
+    if (!Number.isFinite(amount) || amount <= 0 || Number.isNaN(receivedAt.getTime())
+      || receivedAt.toISOString().slice(0, 19).replace(/[-T:]/g, '') !== `${tranDate}${tranTime}`) {
+      return res.json(paymentError('04'));
+    }
 
     // A completed bill may no longer appear in the payable-target query. Detect
     // an exact 1LINK replay first so the gateway receives the duplicate code

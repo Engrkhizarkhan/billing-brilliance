@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/QueryError';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,7 +24,7 @@ import { Copy, Loader2, Infinity as InfinityIcon } from 'lucide-react';
 const OrgPayments = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
 
-  const { data: notificationsData } = useApiQuery(() => api.listOrgPaymentNotifications(), [paymentVersion]);
+  const { data: notificationsData, error: queryError0 } = useApiQuery(() => api.listOrgPaymentNotifications(), [paymentVersion]);
   const notifications = (notificationsData || []) as OrgPaymentNotification[];
   const [searchParams] = useSearchParams();
 
@@ -130,6 +131,8 @@ const OrgPayments = () => {
       </pre>
     </div>
   );
+
+  if (queryError0) return <QueryError message={queryError0} />;
 
   return (
     <div className="space-y-4 animate-fade-in">

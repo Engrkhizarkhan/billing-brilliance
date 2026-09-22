@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/QueryError';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -29,7 +30,7 @@ const OrgWebhookConfig = () => {
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [instructionsOpen, setInstructionsOpen] = useState(true);
 
-  const { data } = useApiQuery(() => api.fetchWebhookConfig(), []);
+  const { data, error: queryError0 } = useApiQuery(() => api.fetchWebhookConfig(), []);
 
   useEffect(() => {
     if (!data) return;
@@ -78,6 +79,8 @@ const OrgWebhookConfig = () => {
       setTesting(false);
     }
   };
+
+  if (queryError0) return <QueryError message={queryError0} />;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -174,7 +177,7 @@ const OrgWebhookConfig = () => {
           <p className="text-xs text-muted-foreground">
             This sends a dummy{' '}
             <code className="bg-muted rounded px-1 py-0.5">
-              {'{ status: "test", application_id: "TEST-0000" }'}
+              {'{ schema_version: 1, event_type: "webhook.test", data: { status: "test" } }'}
             </code>{' '}
             payload to your configured URL to verify it's reachable. The{' '}
             <code className="bg-muted rounded px-1 py-0.5">X-Webhook-Signature</code> header will be included.
@@ -245,7 +248,7 @@ const OrgWebhookConfig = () => {
                 <p className="text-sm font-medium">What is this?</p>
                 <p className="text-sm text-muted-foreground">
                   When an applicant pays their fee through 1BILL (ATM / mobile banking), this platform
-                  immediately notifies your system at the URL above so you can mark the application as
+                  queues a signed notification for your system at the URL above so you can mark the application as
                   paid in your own database.
                 </p>
               </div>
@@ -265,8 +268,9 @@ const OrgWebhookConfig = () => {
                 <pre className="rounded-lg bg-muted p-4 text-xs font-mono overflow-x-auto leading-relaxed">
 {`const crypto = require('crypto');
 const sig = crypto.createHmac('sha256', YOUR_WEBHOOK_SECRET)
-  .update(JSON.stringify(req.body)).digest('hex');
-if (sig !== req.headers['x-webhook-signature']) {
+  .update(req.rawBody).digest(); // preserve raw request bytes
+const provided = Buffer.from(req.headers['x-webhook-signature'] || '', 'hex');
+if (provided.length !== sig.length || !crypto.timingSafeEqual(sig, provided)) {
   return res.status(401).send('Invalid signature');
 }`}
                 </pre>
@@ -277,10 +281,18 @@ if (sig !== req.headers['x-webhook-signature']) {
                 <p className="text-sm text-muted-foreground">Your endpoint will receive a POST request with this JSON body:</p>
                 <pre className="rounded-lg bg-muted p-4 text-xs font-mono overflow-x-auto leading-relaxed">
 {`{
-  "application_id": "APP-44521",
-  "status": "paid",
-  "transaction_id": "TXN-XXXXXXXX",
-  "paid_at": "2026-04-18T10:32:00.000Z"
+  "schema_version": 1,
+  "event_id": "stable-event-uuid",
+  "event_type": "payment.posted",
+  "created_at": "2026-09-23 10:32:00",
+  "data": {
+    "paymentId": "payment-uuid",
+    "applicationId": "APP-44521",
+    "amount": 2500,
+    "currency": "PKR",
+    "reference": "TXN-XXXXXXXX",
+    "receivedAt": "2026-09-23 10:32:00"
+  }
 }`}
                 </pre>
               </div>
@@ -288,8 +300,8 @@ if (sig !== req.headers['x-webhook-signature']) {
               <div className="space-y-1">
                 <p className="text-sm font-medium">Your server must respond</p>
                 <p className="text-sm text-muted-foreground">
-                  with HTTP <strong>200</strong> within <strong>8 seconds</strong> or the delivery is logged as failed.
-                  Non-200 responses and timeouts are recorded in the notification log.
+                  with HTTP <strong>2xx</strong> within <strong>8 seconds</strong> or the delivery is logged as failed.
+                  Non-2xx responses and timeouts are retried with backoff. Deduplicate by event_id and commit your update before acknowledging.
                 </p>
               </div>
 

@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/QueryError';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
@@ -26,10 +27,9 @@ const formatTs = (value: string) => {
 
 const RealTimePayments = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
-  const [liveClock, setLiveClock] = useState(() => new Date());
   const [lastSyncAt, setLastSyncAt] = useState<Date>(() => new Date());
 
-  const { data: txnData, refetch: refetchTxns } = useApiQuery(
+  const { data: txnData, refetch: refetchTxns, error: queryError0 } = useApiQuery(
     () => api.fetchTransactions({ pageSize: 50, status: 'completed' } as Parameters<typeof api.fetchTransactions>[0]),
     [paymentVersion]
   );
@@ -40,14 +40,12 @@ const RealTimePayments = () => {
 
   useEffect(() => {
     if (paymentVersion === 0) return;
-    setLiveClock(new Date());
     setLastSyncAt(new Date());
   }, [paymentVersion]);
 
-  const todayKey = liveClock.toISOString().slice(0, 10);
-
-  const todayTxns = useMemo(() => transactions.filter((t) => String(t.date).slice(0, 10) === todayKey), [transactions, todayKey]);
-  const todayAmount = todayTxns.reduce((s, t) => s + Number(t.amount), 0);
+  const { data: stats, error: statsError, refetch: refetchStats } = useApiQuery(() => api.getDashboardStats(), [paymentVersion]);
+  const todayAmount = stats?.todayAmount || 0;
+  if (queryError0 || statsError) return <QueryError message={queryError0 || statsError} />;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -60,7 +58,7 @@ const RealTimePayments = () => {
           variant="outline"
           size="sm"
           className="rounded-lg gap-1.5"
-          onClick={() => void refetchTxns()}
+          onClick={() => { void refetchTxns(); void refetchStats(); }}
         >
           <RefreshCw className="w-3.5 h-3.5" />
           Refresh now
@@ -71,11 +69,11 @@ const RealTimePayments = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="dashboard-card flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center"><TrendingUp className="w-5 h-5 text-success" /></div>
-          <div><p className="stat-label">Collected Today</p><p className="text-lg font-bold text-success">{formatPKR(todayAmount)}</p></div>
+          <div><p className="stat-label">Collected Today (UTC)</p><p className="text-lg font-bold text-success">{formatPKR(todayAmount)}</p></div>
         </div>
         <div className="dashboard-card flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><CreditCard className="w-5 h-5 text-primary" /></div>
-          <div><p className="stat-label">Transactions Today</p><p className="text-lg font-bold">{todayTxns.length}</p></div>
+          <div><p className="stat-label">Transactions Today</p><p className="text-lg font-bold">{stats?.todayPayments || 0}</p></div>
         </div>
         <div className="dashboard-card flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center"><Activity className="w-5 h-5 text-muted-foreground" /></div>
@@ -94,7 +92,7 @@ const RealTimePayments = () => {
             Live Transaction Feed
             <span className="text-muted-foreground font-normal text-xs ml-1">({transactions.length} recent)</span>
           </p>
-          <Button variant="ghost" size="sm" className="rounded-lg gap-1.5 text-xs" onClick={() => void refetchTxns()}>
+          <Button variant="ghost" size="sm" className="rounded-lg gap-1.5 text-xs" onClick={() => { void refetchTxns(); void refetchStats(); }}>
             <RefreshCw className="w-3 h-3" />Refresh
           </Button>
         </div>

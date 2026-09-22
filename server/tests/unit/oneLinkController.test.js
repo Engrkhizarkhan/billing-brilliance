@@ -84,3 +84,11 @@ describe('1LINK invoice contract', () => {
     expect(postPayment).not.toHaveBeenCalled();
   });
 });
+
+test.each([['20260230','101112'],['20260908','240000'],['20261301','101112']])('rejects impossible provider date/time %s %s before touching the database', async (tran_date,tran_time) => {
+  jest.clearAllMocks();
+  const res=response();
+  await billPayment1Link({body:{consumer_number:'10517210010001',tran_auth_id:'123456',transaction_amount:'000000500000',tran_date,tran_time,bank_mnemonic:'UBL'}},res);
+  expect(res.body.response_Code).toBe('04');
+  expect(pool.query).not.toHaveBeenCalled();
+});

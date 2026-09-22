@@ -60,8 +60,6 @@ const emptyNewUserForm: NewUserForm = {
 
 const schoolRoleOptions: SchoolAccessRole[] = ['admin', 'finance', 'staff', 'viewer'];
 
-type FeeGenerationMode = 'auto' | 'manual' | 'hybrid';
-type SchedulerHealth = 'healthy' | 'warning' | 'failed';
 
 const SchoolSettings = () => {
   const authUser = useAuthStore((state) => state.user);
@@ -76,12 +74,8 @@ const SchoolSettings = () => {
   const [userBeingDeleted, setUserBeingDeleted] = useState<SchoolUser | null>(null);
   const [adminPassword, setAdminPassword] = useState({ previous: '', next: '' });
   const [loadingUsers, setLoadingUsers] = useState(false);
-  const [feeGenerationMode, setFeeGenerationMode] = useState<FeeGenerationMode>('hybrid');
-  const [schedulerHealth] = useState<SchedulerHealth>('healthy');
-  const [schedulerLastRun, setSchedulerLastRun] = useState('2026-04-02 02:00');
   const [alertOnSchedulerFailure, setAlertOnSchedulerFailure] = useState(true);
   const [autoApplyLateFee, setAutoApplyLateFee] = useState(true);
-  const [lastManualRunAt, setLastManualRunAt] = useState<string | null>(null);
 
   const loadSchoolUsers = useCallback(async () => {
     if (!schoolRef) {
@@ -130,7 +124,8 @@ const SchoolSettings = () => {
         verified: newUser.verified,
       });
       if (response.data.role === 'school') {
-        setUsers((prev) => [...prev, response.data]);
+        const schoolUser: SchoolUser = { ...response.data, role: 'school' };
+        setUsers((prev) => [...prev, schoolUser]);
       }
       toast.success('Sub-user linked to school reference');      setNewUser(emptyNewUserForm);
     } catch (error) {
@@ -142,7 +137,8 @@ const SchoolSettings = () => {
     try {
       const updated = await api.updateUser(id, { verified: true });
       if (updated.data && updated.data.role === 'school') {
-        setUsers((prev) => prev.map((u) => (u.id === id ? updated.data : u)));
+        const schoolUser: SchoolUser = { ...updated.data, role: 'school' };
+        setUsers((prev) => prev.map((u) => (u.id === id ? schoolUser : u)));
       }
       toast.success('Email marked verified');
     } catch (error) {
@@ -174,6 +170,7 @@ const SchoolSettings = () => {
         email: editUser.email.trim(),
         schoolAccessRole: editUser.schoolAccessRole,
         verified: editUser.verified,
+        newPassword: editUser.nextPassword.trim() || undefined,
       });
 
       if (!updated.data || updated.data.role !== 'school') {
@@ -181,15 +178,13 @@ const SchoolSettings = () => {
         return;
       }
 
-      if (editUser.nextPassword.trim()) {
-        await api.resetPassword(editUser.id, editUser.nextPassword.trim());
-      }
-
-      setUsers((prev) => prev.map((u) => (u.id === editUser.id ? updated.data : u)));
+      const schoolUser: SchoolUser = { ...updated.data, role: 'school' };
+      setUsers((prev) => prev.map((u) => (u.id === editUser.id ? schoolUser : u)));
       toast.success('User updated');
       setEditDialogOpen(false);
       setEditUser(emptyEditUserForm);
     } catch (error) {
+      await loadSchoolUsers();
       toast.error(error instanceof Error ? error.message : 'Unable to update user');
     }
   };
@@ -236,6 +231,7 @@ const SchoolSettings = () => {
 
     try {
       await api.changePassword(adminPassword.previous, adminPassword.next);
+      window.dispatchEvent(new CustomEvent('auth:session-expired'));
       toast.success('Main school admin password updated');
       setAdminPassword({ previous: '', next: '' });
     } catch (error) {
@@ -243,35 +239,6 @@ const SchoolSettings = () => {
     }
   };
 
-  const handleRunManualGeneration = () => {
-    const now = new Date();
-    const formatted = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    setLastManualRunAt(formatted);
-    setSchedulerLastRun(formatted);
-
-    if (feeGenerationMode === 'auto') {
-      toast.info('Manual generation executed as an emergency override while policy is Auto');
-      return;
-    }
-
-    toast.success('Fee generation completed');
-  };
-
-  const handleSaveBillingPolicy = () => {
-    const modeMessage: Record<FeeGenerationMode, string> = {
-      auto: 'Auto mode scales best, but requires scheduler monitoring and alerts.',
-      manual: 'Manual mode is simple, but relies on operator discipline.',
-      hybrid: 'Hybrid mode combines scheduled generation with manual override and is recommended.',
-    };
-
-    toast.success(`Billing policy saved. ${modeMessage[feeGenerationMode]}`);
-  };
-
-  const schedulerHealthLabel: Record<SchedulerHealth, string> = {
-    healthy: 'Healthy',
-    warning: 'Warning',
-    failed: 'Failed',
-  };
 
   return (
     <div className="space-y-6">

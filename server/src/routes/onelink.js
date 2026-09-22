@@ -28,6 +28,7 @@ const oneLinkAuth = (req, res, next) => {
   const password = req.headers['password'] || req.headers['Password'];
   const sourceIp = String(req.ip || req.socket.remoteAddress || '').replace(/^::ffff:/, '');
   const accessDenied =
+    !config.onebill.username || !config.onebill.password ||
     !safeEqual(username, config.onebill.username) ||
     !safeEqual(password, config.onebill.password) ||
     (config.nodeEnv === 'production' && !config.onebill.allowedIps.includes(sourceIp));

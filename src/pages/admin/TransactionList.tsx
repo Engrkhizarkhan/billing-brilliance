@@ -1,3 +1,5 @@
+import { TablePagination } from '@/components/TablePagination';
+import { QueryError } from '@/components/QueryError';
 import { useState } from 'react';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api } from '@/lib/api';
@@ -10,18 +12,22 @@ import { Loader2 } from 'lucide-react';
 
 const TransactionList = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const deferredSearch = useDebouncedValue(search.trim());
 
-  const { data: rawTransactions, loading } = useApiQuery(
-    () => api.fetchTransactions({ search: deferredSearch || undefined, status: statusFilter === 'all' ? undefined : statusFilter }),
-    [paymentVersion, deferredSearch, statusFilter]
+  const { data: rawTransactions, meta, loading, error: queryError0 } = useApiQuery(
+    () => api.fetchTransactions({ page, pageSize, search: deferredSearch || undefined, status: statusFilter === 'all' ? undefined : statusFilter }),
+    [paymentVersion, deferredSearch, statusFilter, page, pageSize]
   );
 
   const transactions = (rawTransactions || []) as Array<{ id: string; transactionId: string; consumerNumber: string; amount: number; status: string; date: string; billerName: string }>;
 
   if (loading) return <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+
+  if (queryError0) return <QueryError message={queryError0} />;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -31,7 +37,7 @@ const TransactionList = () => {
       </div>
       <FilterBar
         searchPlaceholder="Search by ID or consumer number..."
-        onSearch={setSearch}
+        onSearch={(value) => { setSearch(value); setPage(1); }}
         filters={[{
           key: 'status', label: 'Status',
           options: [
@@ -40,7 +46,7 @@ const TransactionList = () => {
             { value: 'failed', label: 'Failed' },
           ],
         }]}
-        onFilterChange={(_, v) => setStatusFilter(v)}
+        onFilterChange={(_, v) => { setStatusFilter(v); setPage(1); }}
       />
       <div className="table-container">
         <Table>
@@ -67,6 +73,7 @@ const TransactionList = () => {
             ))}
           </TableBody>
         </Table>
+        <TablePagination total={meta?.total || 0} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </div>
     </div>
   );

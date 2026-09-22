@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/QueryError';
 import { useMemo, useState } from 'react';
 import { FilterBar } from '@/components/FilterBar';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -21,7 +22,7 @@ const OrgPaymentHistory = () => {
   const [pageSize, setPageSize] = useState(25);
   const deferredSearch = useDebouncedValue(search.trim());
 
-  const { data: paymentsData, meta, loading: loadingPayments } = useApiQuery(
+  const { data: paymentsData, meta, loading: loadingPayments, error: queryError0 } = useApiQuery(
     () => api.listOrgPayments({ page, pageSize, search: deferredSearch || undefined, status: statusFilter === 'all' ? undefined : statusFilter }),
     [paymentVersion, page, pageSize, deferredSearch, statusFilter]
   );
@@ -29,6 +30,8 @@ const OrgPaymentHistory = () => {
 
   if (loadingPayments && paymentRecords.length === 0)
     return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+
+  if (queryError0) return <QueryError message={queryError0} />;
 
   return (
     <div className="space-y-6 animate-fade-in">

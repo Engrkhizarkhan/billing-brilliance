@@ -60,6 +60,8 @@ const getDashboardStats = async (req, res, next) => {
          ), latest AS (SELECT DATE(MAX(date)) AS payment_date FROM scoped_payments)
          SELECT COALESCE(SUM(CASE WHEN DATE_FORMAT(sp.date, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m') THEN sp.amount ELSE 0 END), 0) AS collected_this_month,
                 MAX(latest.payment_date) AS latest_payment_date,
+                COALESCE(SUM(CASE WHEN DATE(sp.date) = UTC_DATE() THEN 1 ELSE 0 END),0) AS today_payments,
+                COALESCE(SUM(CASE WHEN DATE(sp.date) = UTC_DATE() THEN sp.amount ELSE 0 END),0) AS today_amount,
                 COALESCE(SUM(CASE WHEN DATE(sp.date) = latest.payment_date THEN 1 ELSE 0 END), 0) AS latest_day_payments,
                 COALESCE(SUM(CASE WHEN DATE(sp.date) = latest.payment_date THEN sp.amount ELSE 0 END), 0) AS latest_day_amount
          FROM scoped_payments sp CROSS JOIN latest`,
@@ -87,6 +89,8 @@ const getDashboardStats = async (req, res, next) => {
         totalLateFees: Number(lateFeeRows[0]?.total_late_fees || 0),
         collectedThisMonth: Number(payments.collected_this_month || 0),
         latestPaymentDate: payments.latest_payment_date || null,
+        todayPayments: Number(payments.today_payments || 0),
+        todayAmount: Number(payments.today_amount || 0),
         latestDayPayments: Number(payments.latest_day_payments || 0),
         latestDayAmount: Number(payments.latest_day_amount || 0),
         classSummary: classRows.map((row) => ({ name: row.name, count: Number(row.count) })),
@@ -124,7 +128,7 @@ const getPlatformSummary = async (req, res, next) => {
     const [[userCount]] = await pool.query('SELECT COUNT(*) as count FROM users WHERE deleted_at IS NULL');
     const [[studentCount]] = await pool.query('SELECT COUNT(*) as count FROM students WHERE deleted_at IS NULL');
     const [[applicantCount]] = await pool.query('SELECT COUNT(*) as count FROM applicants WHERE deleted_at IS NULL');
-    const [[revenue]] = await pool.query("SELECT COALESCE(SUM(amount), 0) as total FROM invoices WHERE status = 'paid' AND deleted_at IS NULL");
+    const [[revenue]] = await pool.query("SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE status IN ('posted','reversed')");
 
     res.json({
       data: {

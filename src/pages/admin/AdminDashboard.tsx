@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/QueryError';
 import { StatCard } from '@/components/StatCard';
 import { StatusBadge } from '@/components/StatusBadge';
 import { DollarSign, CreditCard, AlertTriangle, Building2, Activity, Shield, FileText, Loader2 } from 'lucide-react';
@@ -6,138 +7,17 @@ import { useApiQuery } from '@/hooks/useApiQuery';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { usePaymentStore } from '@/store/paymentStore';
-import { useMemo } from 'react';
-import type { Biller } from '@/types';
-
-type StudentRecord = { id: string; tenantId?: string | null; billerId?: string | null };
-type InvoiceRecord = { id: string; tenantId?: string | null; billerId?: string | null; amount: number; status: 'pending' | 'paid' | 'overdue' | string };
-type TransactionRecord = {
-  id: string;
-  tenantId?: string | null;
-  transactionId: string;
-  consumerNumber: string;
-  amount: number;
-  status: 'completed' | 'pending' | 'failed' | string;
-  date: string;
-  billerName: string;
-};
-
-const toMonthKey = (value: string) => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-};
-
-const toMonthLabel = (monthKey: string) => {
-  const [year, month] = monthKey.split('-').map(Number);
-  return new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'short' });
-};
-
-const resolveTenantId = (record: { tenantId?: string | null; billerId?: string | null }) => record.tenantId || record.billerId || null;
-
+import { useMemo, useState } from 'react';
+import { TablePagination } from '@/components/TablePagination';
 const AdminDashboard = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
-  const { data: billers, loading: lb } = useApiQuery(() => api.fetchBillers({ pageSize: 100 }), []);
-  const { data: studentsData, loading: ls } = useApiQuery(() => api.fetchStudents({ pageSize: 100 }), []);
-  const { data: invoicesData, loading: li } = useApiQuery(() => api.fetchInvoices({ pageSize: 100 }), [paymentVersion]);
-  const { data: txnData, loading: lt } = useApiQuery(() => api.fetchTransactions({ pageSize: 5000 }), [paymentVersion]);
-  const { data: dashStatsRaw } = useApiQuery(() => api.getDashboardStats(), [paymentVersion]);
-
-  const allBillers = useMemo(() => (billers || []) as Biller[], [billers]);
-  const students = useMemo(() => (studentsData || []) as StudentRecord[], [studentsData]);
-  const invoices = useMemo(() => (invoicesData || []) as InvoiceRecord[], [invoicesData]);
-  const transactions = useMemo(() => (txnData || []) as TransactionRecord[], [txnData]);
-  const dashStats = dashStatsRaw as { overdueAmount?: number; pendingAmount?: number } | null;
-
-  const loading = lb || ls || li || lt;
-
-  const recentTransactions = useMemo(
-    () => [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5),
-    [transactions]
-  );
-
-  const revenueData = useMemo(() => {
-    const byMonth = new Map<string, number>();
-    transactions
-      .filter((t) => t.status === 'completed')
-      .forEach((t) => {
-        const key = toMonthKey(t.date);
-        if (!key) return;
-        byMonth.set(key, (byMonth.get(key) || 0) + Number(t.amount || 0));
-      });
-
-    return Array.from(byMonth.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-6)
-      .map(([month, revenue]) => ({ month: toMonthLabel(month), revenue }));
-  }, [transactions]);
-
-  const paymentSuccessData = useMemo(() => {
-    const byMonth = new Map<string, { success: number; failed: number }>();
-    transactions.forEach((t) => {
-      const key = toMonthKey(t.date);
-      if (!key) return;
-      const current = byMonth.get(key) || { success: 0, failed: 0 };
-      if (t.status === 'completed') current.success += 1;
-      else if (t.status === 'failed' || t.status === 'pending') current.failed += 1;
-      byMonth.set(key, current);
-    });
-
-    return Array.from(byMonth.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-6)
-      .map(([month, stats]) => ({ month: toMonthLabel(month), ...stats }));
-  }, [transactions]);
-
-  const transactionVolumeData = useMemo(() => {
-    const byMonth = new Map<string, number>();
-    transactions.forEach((t) => {
-      const key = toMonthKey(t.date);
-      if (!key) return;
-      byMonth.set(key, (byMonth.get(key) || 0) + 1);
-    });
-
-    return Array.from(byMonth.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-6)
-      .map(([month, volume]) => ({ month: toMonthLabel(month), volume }));
-  }, [transactions]);
-
-  const tenantSummary = useMemo(() => {
-    return allBillers.map((biller) => {
-      const studentCount = students.filter((s) => resolveTenantId(s) === biller.id).length;
-      const tenantInvoices = invoices.filter((inv) => resolveTenantId(inv) === biller.id);
-      const invoiceCount = tenantInvoices.length;
-      const pendingAmount = tenantInvoices
-        .filter((inv) => inv.status !== 'paid')
-        .reduce((sum, inv) => sum + Number(inv.amount || 0), 0);
-      const txnCount = transactions.filter((t) => (t.tenantId && t.tenantId === biller.id) || t.billerName === biller.name).length;
-      const revenue = transactions
-        .filter((t) => t.status === 'completed' && ((t.tenantId && t.tenantId === biller.id) || t.billerName === biller.name))
-        .reduce((sum, t) => sum + Number(t.amount || 0), 0);
-      return { ...biller, studentCount, invoiceCount, pendingAmount, txnCount, revenue };
-    });
-  }, [allBillers, students, invoices, transactions]);
-
-  const totals = useMemo(() => {
-    const totalRevenue = transactions
-      .filter((t) => t.status === 'completed')
-      .reduce((sum, t) => sum + Number(t.amount || 0), 0);
-
-    const totalPayments = transactions.filter((t) => t.status === 'completed').length;
-
-    return {
-      tenants: allBillers.length,
-      activeTenants: allBillers.filter((b) => b.status === 'active').length,
-      students: students.length,
-      invoices: invoices.length,
-      totalRevenue,
-      totalPayments,
-      pendingAmount: dashStats?.pendingAmount ?? 0,
-      overdueAmount: dashStats?.overdueAmount ?? 0,
-    };
-  }, [allBillers, students, invoices, transactions, dashStats]);
-
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const { data, loading, error, meta } = useApiQuery(() => api.getPlatformAnalytics(page, pageSize), [paymentVersion, page, pageSize]);
+  const { data: recentTransactions = [], error: transactionError } = useApiQuery(() => api.fetchTransactions({ pageSize: 5 }), [paymentVersion]);
+  const revenueData = useMemo(() => data?.revenueData || [], [data]);
+  const paymentSuccessData = useMemo(() => data?.paymentSuccessData || [], [data]);
+  const transactionVolumeData = useMemo(() => data?.transactionVolumeData || [], [data]);
   const revenueTrendPercent = useMemo(() => {
     if (revenueData.length < 2) return 0;
     const current = revenueData[revenueData.length - 1].revenue;
@@ -161,6 +41,9 @@ const AdminDashboard = () => {
 
   if (loading) return <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin" /></div>;
 
+  if (error || transactionError || !data) return <QueryError message={error || transactionError || 'Dashboard unavailable'} />;
+  const { totals, tenantSummary } = data;
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -170,9 +53,9 @@ const AdminDashboard = () => {
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Activity className="w-3.5 h-3.5 text-success" />
-          <span>All systems operational</span>
+          <span>Reporting in UTC</span>
           <span className="text-border">•</span>
-          <span>Last sync: 2 min ago</span>
+          <span>Refreshes after payment updates</span>
         </div>
       </div>
 
@@ -220,6 +103,7 @@ const AdminDashboard = () => {
             ))}
           </TableBody>
         </Table>
+        <TablePagination total={meta?.total || 0} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -286,7 +170,7 @@ const AdminDashboard = () => {
       <div className="table-container">
         <div className="px-5 py-3 border-b border-border flex items-center justify-between">
           <h3 className="section-title">Recent Transactions</h3>
-          <span className="text-[11px] text-muted-foreground">{transactions.length} total</span>
+          <span className="text-[11px] text-muted-foreground">{totals.totalTransactions} total</span>
         </div>
         <Table>
           <TableHeader>
@@ -300,7 +184,7 @@ const AdminDashboard = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {recentTransactions.map((t) => (
+            {(recentTransactions || []).map((t) => (
               <TableRow key={t.id} className="hover:bg-muted/30">
                 <TableCell className="font-mono text-xs">{t.transactionId}</TableCell>
                 <TableCell className="font-mono text-[11px] text-muted-foreground">{t.consumerNumber}</TableCell>

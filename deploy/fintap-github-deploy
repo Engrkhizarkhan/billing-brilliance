@@ -1,83 +1,106 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# Provisioning instructions: docs/PRODUCTION_DEPLOYMENT_RUNBOOK.md.
 readonly APP_DIR="/var/www/billing-brilliance"
-readonly HEALTH_URL="https://app.fintap.pk/api/health"
-readonly LOG_FILE="/var/log/fintap-deploy.log"
+readonly REPOSITORY="/var/lib/fintap/repository.git"
+readonly RELEASES="/var/lib/fintap/releases"
+readonly ENV_FILE="/etc/fintap/production.env"
+readonly MIGRATION_ENV_FILE="/etc/fintap/migration.env"
+readonly SANDBOX_ENV_FILE="/etc/fintap/sandbox.env"
+readonly HEALTH_URL="https://app.fintap.pk/api/ready"
 readonly REVISION_FILE="/var/lib/fintap/deployed-revision"
 
+# A restricted SSH key executes this script; never eval SSH_ORIGINAL_COMMAND.
+command_text="${SSH_ORIGINAL_COMMAND:-deploy ${1:-}}"
+if [[ ! "$command_text" =~ ^deploy\ ([0-9a-f]{40})$ ]]; then
+  echo 'Usage: deploy <tested 40-character commit SHA>' >&2
+  exit 2
+fi
+readonly target_revision="${BASH_REMATCH[1]}"
 exec 9>/var/lock/fintap-deploy.lock
-if ! /usr/bin/flock -n 9; then
-  echo "Another Fintap deployment is already running."
+/usr/bin/flock -n 9 || { echo 'Deployment already running'; exit 1; }
+[[ -L "$APP_DIR" && -d "$APP_DIR/server" && -f "$ENV_FILE" && -d "$REPOSITORY" ]] || {
+  echo 'Release layout is not provisioned. Follow the deployment runbook; the existing installation has not been modified.'
   exit 1
-fi
+}
+mkdir -p "$RELEASES"
+exec > >(tee -a /var/log/fintap-deploy.log) 2>&1
+previous_release="$(readlink -f "$APP_DIR")"
+release="$(mktemp -d "$RELEASES/${target_revision}.XXXXXX")"
+activated=false
 
-mkdir -p "$(dirname "$REVISION_FILE")"
-touch "$LOG_FILE"
-exec > >(tee -a "$LOG_FILE") 2>&1
+activate() {
+  local destination="$1"
+  ln -s "$destination" "${APP_DIR}.next"
+  mv -Tf "${APP_DIR}.next" "$APP_DIR"
+}
+reload() {
+  FINTAP_ENV_FILE="$ENV_FILE" /usr/bin/pm2 startOrReload "$1/server/ecosystem.config.cjs" --update-env
+  if [[ -f "$SANDBOX_ENV_FILE" ]]; then
+    FINTAP_ENV_FILE="$SANDBOX_ENV_FILE" /usr/bin/pm2 startOrReload "$1/server/ecosystem.sandbox.config.cjs" --update-env
+  fi
+}
+rollback() {
+  local code="${1:-$?}"
+  trap - ERR
+  if [[ "$activated" == true ]]; then
+    echo "Deployment failed; restoring application release $previous_release. Database migrations are forward-only."
+    activate "$previous_release" && reload "$previous_release" || echo 'ROLLBACK FAILED: operator intervention required.' >&2
+  else
+    echo 'Deployment failed before activation; previous release remains active.'
+  fi
+  exit "$code"
+}
+trap rollback ERR
 
-echo "[$(date --iso-8601=seconds)] deployment started"
-cd "$APP_DIR"
-
-if [[ -n "$(/usr/bin/git status --porcelain --untracked-files=no)" ]]; then
-  echo "Deployment refused: tracked server files contain local changes."
-  /usr/bin/git status --short --untracked-files=no
-  exit 1
-fi
-
-/usr/bin/git fetch --prune origin main
-previous_revision="$(/usr/bin/git rev-parse HEAD)"
-target_revision="$(/usr/bin/git rev-parse origin/main)"
-
-if ! /usr/bin/git merge-base --is-ancestor "$previous_revision" "$target_revision"; then
-  echo "Deployment refused: origin/main is not a fast-forward of the deployed revision."
-  exit 1
-fi
-
-if [[ "$previous_revision" == "$target_revision" ]]; then
-  echo "Revision $target_revision is already deployed."
-  exit 0
-fi
-
-/usr/bin/git checkout main
-/usr/bin/git merge --ff-only "$target_revision"
-
-echo "Installing and building frontend..."
+/usr/bin/git --git-dir="$REPOSITORY" fetch origin main:refs/remotes/origin/main
+/usr/bin/git --git-dir="$REPOSITORY" cat-file -e "${target_revision}^{commit}"
+/usr/bin/git --git-dir="$REPOSITORY" merge-base --is-ancestor "$target_revision" refs/remotes/origin/main
+/usr/bin/git --git-dir="$REPOSITORY" archive "$target_revision" | tar -x -C "$release"
+printf '%s\n' "$target_revision" > "$release/REVISION"
+cd "$release"
 /usr/bin/npm ci --no-audit
 /usr/bin/npm run build
-
-echo "Installing backend production dependencies..."
-cd "$APP_DIR/server"
-/usr/bin/npm ci --omit=dev --no-audit
-
-echo "Applying forward-only database migrations..."
-/usr/bin/node src/db/migrate.js
-
-echo "Reloading application processes..."
-/usr/bin/pm2 reload ecosystem.config.cjs --update-env
-
-health_ok=false
-for _ in {1..20}; do
-  if /usr/bin/curl --fail --silent --show-error "$HEALTH_URL" >/dev/null; then
-    health_ok=true
-    break
-  fi
-  sleep 2
-done
-
-if [[ "$health_ok" != true ]]; then
-  echo "Health check failed; rolling application code back to $previous_revision."
-  cd "$APP_DIR"
-  /usr/bin/git reset --hard "$previous_revision"
-  /usr/bin/npm ci --no-audit
-  /usr/bin/npm run build
-  cd "$APP_DIR/server"
-  /usr/bin/npm ci --omit=dev --no-audit
-  /usr/bin/pm2 reload ecosystem.config.cjs --update-env
-  exit 1
+/usr/bin/npm ci --prefix server --omit=dev --no-audit
+# Build/install failures cannot change the live tree. Forward migrations must be
+# backward-compatible with the previous release; never run migrate:fresh here.
+migration_environment="$ENV_FILE"
+if [[ -f "$MIGRATION_ENV_FILE" ]]; then migration_environment="$MIGRATION_ENV_FILE"; fi
+FINTAP_ENV_FILE="$migration_environment" /usr/bin/node server/src/db/migrate.js
+if [[ -f "$SANDBOX_ENV_FILE" ]]; then
+  FINTAP_ENV_FILE="$SANDBOX_ENV_FILE" /usr/bin/node server/src/db/migrate.js
 fi
+activate "$release"
+activated=true
+reload "$release"
 
-printf '%s\n' "$target_revision" > "$REVISION_FILE"
+verify_readiness() {
+  local url="$1"
+  for _ in {1..20}; do
+    if /usr/bin/curl --fail --silent --show-error --max-time 5 "$url" | \
+      /usr/bin/node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{try{const r=JSON.parse(s);process.exit(r.status==="ready"&&r.revision===process.argv[1]?0:1)}catch{process.exit(1)}})' "$target_revision"; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+if ! verify_readiness "$HEALTH_URL"; then
+  echo "Production readiness did not confirm the target revision." >&2
+  rollback 1
+fi
+expected_processes="Fintap-api-backend,Fintap-outbox-worker"
+if [[ -f "$SANDBOX_ENV_FILE" ]]; then
+  if ! verify_readiness "https://sandbox.fintap.pk/api/ready"; then
+    echo "Sandbox readiness did not confirm the target revision." >&2
+    rollback 1
+  fi
+  expected_processes+=",Fintap-sandbox-api,Fintap-sandbox-outbox-worker"
+fi
+/usr/bin/pm2 jlist | /usr/bin/node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const p=JSON.parse(s);process.exit(process.argv[2].split(",").every(n=>p.some(x=>x.name===n&&x.pm2_env.status==="online"&&x.pm2_env.pm_cwd===process.argv[1]+"/server"))?0:1)})' "$release" "$expected_processes"
+printf '%s\n' "$target_revision" > "${REVISION_FILE}.next"
+mv "${REVISION_FILE}.next" "$REVISION_FILE"
 /usr/bin/pm2 save >/dev/null
-echo "[$(date --iso-8601=seconds)] deployed $target_revision successfully"
-
+trap - ERR
+echo "Deployed tested revision $target_revision. Previous release retained at $previous_release."

@@ -1,6 +1,9 @@
 const { pool } = require('../config/database');
 const { postPayment } = require('../services/paymentPostingService');
 
+const { payableQuote } = require('../services/billingRules');
+const { AppError } = require('../middleware/errorHandler');
+
 /** Internal, tenant-scoped bill inquiry used by school dashboards and tenant APIs. */
 const billInquiry = async (req, res, next) => {
   try {
@@ -21,7 +24,7 @@ const billInquiry = async (req, res, next) => {
 
     const student = students[0];
     const [invoices] = await pool.query(
-      `SELECT invoice_number, amount, due_date
+      `SELECT invoice_number, amount, due_date, late_fee, late_fee_applied
        FROM invoices
        WHERE consumer_number = ? AND tenant_id = ? AND status != 'paid' AND deleted_at IS NULL
        ORDER BY due_date ASC`,
@@ -32,9 +35,8 @@ const billInquiry = async (req, res, next) => {
        FROM ledger_entries WHERE tenant_id = ? AND student_id = ?`,
       [req.tenantId, student.id]
     );
-    const invoiceDue = invoices.reduce((sum, invoice) => sum + Number(invoice.amount), 0);
-    const ledgerDue = Math.max(0, Number(ledger.debit) - Number(ledger.credit));
-    const amount = Math.round(Math.max(invoiceDue, ledgerDue) * 100) / 100;
+    const { amount, invoiceDue, ledgerDue } = payableQuote(invoices, ledger);
+    if (ledgerDue < invoiceDue) throw new AppError('Invoice charges require ledger reconciliation before collection', 409, 'LEDGER_RECONCILIATION_REQUIRED');
     const oldest = invoices[0] || null;
     const overdue = invoices.some((invoice) => invoice.due_date && new Date(`${invoice.due_date}T23:59:59Z`) < new Date());
 
@@ -67,6 +69,7 @@ const billInquiry = async (req, res, next) => {
 const postBillPayment = async (req, res, next) => {
   try {
     const { consumerNumber, amount, transactionId, paidAt, channel, voucherNumber, notes } = req.body;
+    if (req.user && (!notes || notes.trim().length < 5)) throw new AppError('A verification reason is required', 400, 'REASON_REQUIRED');
     const result = await postPayment({
       tenantId: req.tenantId,
       targetType: 'invoice',
@@ -79,7 +82,7 @@ const postBillPayment = async (req, res, next) => {
       idempotencyKey: req.headers['x-idempotency-key'] || transactionId.trim(),
       voucherNumber,
       note: notes || 'External billing API payment',
-      source: 'saas_api',
+      source: req.user ? 'manual' : 'sandbox_simulator',
       actorUserId: req.user?.id || null,
       actorName: req.user?.name || 'Billing API',
       ipAddress: req.ip,

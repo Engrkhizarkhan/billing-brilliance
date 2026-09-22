@@ -12,7 +12,7 @@ router.use(tenantScope);
 
 router.get('/', paginationValidation, handleValidation, studentController.fetchStudents);
 router.get('/financial-summary', studentController.fetchStudentFinancialSummary);
-router.get('/ledger-summary', studentController.fetchStudentLedgerSummary);
+router.get('/ledger-summary', paginationValidation, handleValidation, studentController.fetchStudentLedgerSummary);
 router.get('/:id', idParam, handleValidation, studentController.getStudent);
 router.post('/', authorizeSchoolRole('admin'), createStudentValidation, handleValidation, studentController.createStudent);
 router.put('/:id', authorizeSchoolRole('admin'), idParam, handleValidation, studentController.updateStudent);

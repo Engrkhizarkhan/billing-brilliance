@@ -26,6 +26,7 @@ describe('current public API contracts', () => {
   });
 });
 
+if (process.env.RUN_DB_INTEGRATION === 'true') require('../src/services/disposableDatabaseGuard').assertDisposableDatabase(config, process.env.INTEGRATION_DATABASE_CONFIRM);
 const databaseDescribe = process.env.RUN_DB_INTEGRATION === 'true' ? describe : describe.skip;
 
 databaseDescribe('disposable-database authenticated workflows', () => {
@@ -339,6 +340,11 @@ databaseDescribe('disposable-database authenticated workflows', () => {
          VALUES (?, ?, ?, ?, 'Verification Student', ?, 1234.56, 'pending', DATE_ADD(CURDATE(), INTERVAL 7 DAY))`,
         [invoiceId, tenantId, `INV-${billId}`, studentId, consumerNumber]
       );
+
+      await pool.query(`INSERT INTO ledger_entries (id, tenant_id, student_id, date, description, debit, credit, balance, bill_id, reference, entry_type)
+        VALUES (?, ?, ?, CURDATE(), 'Verification charge', 1234.56, 0, 1234.56, ?, ?, 'charge')`,
+      [crypto.randomUUID(), tenantId, studentId, `INV-${billId}`, `INV-${billId}`]);
+      await pool.query('UPDATE students SET balance=1234.56 WHERE id=?', [studentId]);
 
       const inquiry = await request(app)
         .post('/api/manual-payments/inquiry')

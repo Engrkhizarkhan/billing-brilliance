@@ -46,9 +46,7 @@ const ensureUniqueColumnIndex = async (connection, table, column, indexName) => 
 async function migrate() {
   const isFresh = process.argv.includes('--fresh');
 
-  if (isFresh && config.nodeEnv === 'production') {
-    throw new Error('Fresh database migration is disabled when NODE_ENV=production');
-  }
+  if (isFresh) require('../services/disposableDatabaseGuard').assertDisposableDatabase(config);
 
   const connection = await mysql.createConnection({
     host: config.db.host,
@@ -78,6 +76,22 @@ async function migrate() {
     }
     await connection.query(`USE \`${config.db.database}\``);
 
+    // Auto-migrate existing databases: rename legacy etea_* tables if present
+    const legacyTables = [
+      { old: 'etea_postings',              new: 'org_postings' },
+      { old: 'etea_payment_records',       new: 'org_payment_records' },
+      { old: 'etea_payment_notifications', new: 'org_payment_notifications' },
+    ];
+    for (const t of legacyTables) {
+      const [rows] = await connection.query(`SHOW TABLES LIKE '${t.old}'`);
+      if (rows.length > 0) {
+        const [targets] = await connection.query(`SHOW TABLES LIKE '${t.new}'`);
+        if (targets.length) throw new Error(`Both ${t.old} and ${t.new} exist; reconcile legacy tables before migrating`);
+        await connection.query(`RENAME TABLE \`${t.old}\` TO \`${t.new}\``);
+        logger.info(`Renamed legacy table: ${t.old} → ${t.new}`);
+      }
+    }
+
     logger.info(`Applying schema: ${SCHEMA_FILE}`);
     const sql = fs.readFileSync(SCHEMA_FILE, 'utf8');
     await connection.query(sql);
@@ -90,20 +104,6 @@ async function migrate() {
         applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
-
-    // Auto-migrate existing databases: rename legacy etea_* tables if present
-    const legacyTables = [
-      { old: 'etea_postings',              new: 'org_postings' },
-      { old: 'etea_payment_records',       new: 'org_payment_records' },
-      { old: 'etea_payment_notifications', new: 'org_payment_notifications' },
-    ];
-    for (const t of legacyTables) {
-      const [rows] = await connection.query(`SHOW TABLES LIKE '${t.old}'`);
-      if (rows.length > 0) {
-        await connection.query(`RENAME TABLE \`${t.old}\` TO \`${t.new}\``);
-        logger.info(`Renamed legacy table: ${t.old} → ${t.new}`);
-      }
-    }
 
     // CREATE TABLE IF NOT EXISTS does not upgrade existing installations.
     // Apply the additive production schema changes explicitly and idempotently.
@@ -136,9 +136,6 @@ async function migrate() {
       logger.info(`Applied migration ${file}`);
     }
 
-    // Normalize legacy 'etea' role / type values
-    await connection.query("UPDATE users   SET role = 'org' WHERE role = 'etea'");
-    await connection.query("UPDATE tenants SET type = 'org' WHERE type = 'etea'");
 
     logger.info('Migration complete');
   } catch (err) {

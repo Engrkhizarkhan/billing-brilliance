@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/QueryError';
 import { useMemo, useState } from 'react';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -26,7 +27,7 @@ const OrgInvoices = () => {
   const deferredSearch = useDebouncedValue(search.trim());
 
   const apiStatus = statusFilter === 'overdue' ? 'overdue' : statusFilter === 'all' ? undefined : statusFilter;
-  const { data: paymentsData, meta, loading } = useApiQuery(
+  const { data: paymentsData, meta, loading, error: queryError0 } = useApiQuery(
     () => api.listOrgPayments({ page, pageSize, search: deferredSearch || undefined, status: apiStatus }),
     [paymentVersion, page, pageSize, deferredSearch, apiStatus]
   );
@@ -48,6 +49,8 @@ const OrgInvoices = () => {
   );
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+
+  if (queryError0) return <QueryError message={queryError0} />;
 
   return (
     <div className="space-y-6 animate-fade-in">

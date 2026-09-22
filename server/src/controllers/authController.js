@@ -9,6 +9,7 @@ const { auditLog } = require('../middleware/auditLog');
 const { createNotification } = require('../services/notificationService');
 const { isProtectedAdminUser } = require('../services/protectedAdmin');
 const crypto = require('crypto');
+const { replacePassword } = require('../services/sessionService');
 const hashToken = (token) => crypto.createHash('sha256').update(String(token)).digest('hex');
 
 // Parse a JWT duration string (e.g. "7d", "24h", "3600s") into milliseconds.
@@ -39,6 +40,7 @@ const generateTokens = (user) => {
   const accessToken = jwt.sign(
     {
       userId: user.id,
+      authVersion: Number(user.auth_version || 0),
       email: user.email,
       role: user.role,
       tenantId: user.tenant_id,
@@ -50,7 +52,7 @@ const generateTokens = (user) => {
   );
 
   const refreshToken = jwt.sign(
-    { userId: user.id, type: 'refresh' },
+    { userId: user.id, type: 'refresh', jti: uuidv4(), authVersion: Number(user.auth_version || 0) },
     config.jwt.refreshSecret,
     { expiresIn: config.jwt.refreshExpiresIn }
   );
@@ -111,6 +113,7 @@ const login = async (req, res, next) => {
     await createNotification({
       tenantId: user.tenant_id || null,
       userId: user.id,
+      authVersion: Number(user.auth_version || 0),
       title: 'Sign-in recorded',
       message: `You signed in to the ${user.role} portal.`,
       type: 'system',
@@ -146,58 +149,35 @@ const login = async (req, res, next) => {
 };
 
 const refreshToken = async (req, res, next) => {
+  let connection;
   try {
     const token = readCookie(req, REFRESH_COOKIE) || req.body.refreshToken;
-    if (!token) {
-      throw new AppError('Refresh token required', 400);
-    }
-
+    if (!token) throw new AppError('Refresh token required', 401);
     const decoded = jwt.verify(token, config.jwt.refreshSecret);
-
-    const [rows] = await pool.query(
-      'SELECT * FROM refresh_tokens WHERE token_hash = ? AND user_id = ? AND revoked_at IS NULL AND expires_at > NOW()',
-      [hashToken(token), decoded.userId]
-    );
-
-    if (rows.length === 0) {
-      throw new AppError('Invalid refresh token', 401);
+    if (decoded.type !== 'refresh') throw new AppError('Invalid refresh token', 401);
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    // Match password reset's user -> token lock order.
+    const [[user]] = await connection.query("SELECT * FROM users WHERE id = ? AND status = 'active' AND deleted_at IS NULL FOR UPDATE", [decoded.userId]);
+    if (!user || Number(decoded.authVersion || 0) !== Number(user.auth_version || 0)) throw new AppError('Session revoked', 401);
+    if (user.tenant_id) {
+      const [[tenant]] = await connection.query('SELECT status FROM tenants WHERE id = ? AND deleted_at IS NULL', [user.tenant_id]);
+      if (!tenant || tenant.status === 'banned') throw new AppError('Tenant unavailable', 401);
     }
-
-    const [userRows] = await pool.query(
-      `SELECT id, email, name, role, status, tenant_id, school_ref, school_access_role
-       FROM users WHERE id = ? AND status = ? AND deleted_at IS NULL`,
-      [decoded.userId, 'active']
-    );
-
-    if (userRows.length === 0) {
-      throw new AppError('User not found', 401);
-    }
-
-    // Revoke old token
-    await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE token_hash = ?', [hashToken(token)]);
-
-    const user = userRows[0];
+    const [claimed] = await connection.query(`UPDATE refresh_tokens SET revoked_at = UTC_TIMESTAMP()
+      WHERE token_hash = ? AND user_id = ? AND revoked_at IS NULL AND expires_at > UTC_TIMESTAMP()`, [hashToken(token), user.id]);
+    if (claimed.affectedRows !== 1) throw new AppError('Refresh token expired or already used', 401);
     const tokens = generateTokens(user);
-
-    // Store new refresh token
-    const expiresAt = new Date(Date.now() + parseDurationMs(config.jwt.refreshExpiresIn));
-    await pool.query(
-      'INSERT INTO refresh_tokens (id, user_id, token, token_hash, expires_at) VALUES (?, ?, NULL, ?, ?)',
-      [uuidv4(), user.id, hashToken(tokens.refreshToken), expiresAt]
-    );
-
+    await connection.query('INSERT INTO refresh_tokens (id, user_id, token, token_hash, expires_at) VALUES (?, ?, NULL, ?, ?)',
+      [uuidv4(), user.id, hashToken(tokens.refreshToken), new Date(Date.now() + parseDurationMs(config.jwt.refreshExpiresIn))]);
+    await connection.commit();
     setRefreshCookie(res, tokens.refreshToken);
-    res.json({
-      data: {
-        token: tokens.accessToken,
-      },
-    });
+    res.json({ data: { token: tokens.accessToken } });
   } catch (err) {
-    if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
-      return res.status(401).json({ error: 'Invalid refresh token' });
-    }
+    if (connection) await connection.rollback();
+    if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') return res.status(401).json({ error: 'Invalid refresh token' });
     next(err);
-  }
+  } finally { if (connection) connection.release(); }
 };
 
 const logout = async (req, res, next) => {
@@ -252,10 +232,8 @@ const changePassword = async (req, res, next) => {
     if (!isValid) throw new AppError('Current password is incorrect', 400);
 
     const hash = await bcrypt.hash(newPassword, 12);
-    await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, req.user.id]);
-
-    // Revoke all refresh tokens
-    await pool.query('UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = ?', [req.user.id]);
+    await replacePassword(req.user.id, hash, rows[0].password_hash);
+    res.clearCookie(REFRESH_COOKIE, { httpOnly: true, secure: config.nodeEnv === 'production', sameSite: 'strict', path: '/api/auth' });
 
     await auditLog(req, 'update', 'user', req.user.id, 'Password changed');
     await createNotification({
@@ -307,6 +285,7 @@ const impersonate = async (req, res, next) => {
     const impersonationToken = jwt.sign(
       {
         userId: target.id,
+        authVersion: Number(target.auth_version || 0),
         email: target.email,
         role: target.role,
         tenantId: target.tenant_id,

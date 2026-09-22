@@ -1,10 +1,8 @@
-const path = require('path');
-
 const sandboxEnvironment = {
   NODE_ENV: 'production',
   APP_ENVIRONMENT: 'sandbox',
   PORT: 3001,
-  FINTAP_ENV_FILE: path.join(__dirname, '.env.sandbox'),
+  FINTAP_ENV_FILE: process.env.FINTAP_ENV_FILE || '/etc/fintap/sandbox.env',
 };
 
 module.exports = {

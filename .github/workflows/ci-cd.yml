@@ -75,10 +75,65 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --prefix server --omit=dev --audit-level=high
 
+  database:
+    name: MySQL regression checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: disposable-ci-only
+          MYSQL_DATABASE: fintap_ci_hardening
+        ports: ['3306:3306']
+        options: --health-cmd="mysqladmin ping -h localhost -pdisposable-ci-only" --health-interval=10s --health-timeout=5s --health-retries=12
+    env:
+      NODE_ENV: test
+      APP_ENVIRONMENT: development
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: disposable-ci-only
+      DB_NAME: fintap_ci_hardening
+      INTEGRATION_DATABASE_CONFIRM: fintap_ci_hardening
+      JWT_SECRET: disposable-ci-access-secret-at-least-32-characters
+      JWT_REFRESH_SECRET: disposable-ci-refresh-secret-at-least-32-characters
+      FINTECH_PREFIX: '105172'
+      RATE_LIMIT_MAX_REQUESTS: '100000'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci --prefix server
+      - run: npm run migrate --prefix server
+      - run: npm run test:hardening --prefix server
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Browser regressions with disposable fixtures
+        env:
+          PORT: '53317'
+          CORS_ORIGIN: http://127.0.0.1:5177
+          E2E_BASE_URL: http://127.0.0.1:5177
+          DEV_API_TARGET: http://127.0.0.1:53317
+        run: |
+          node server/src/index.js > /tmp/fintap-api.log 2>&1 &
+          api_pid=$!
+          npm run dev -- --host 127.0.0.1 --port 5177 > /tmp/fintap-web.log 2>&1 &
+          web_pid=$!
+          trap 'kill "$api_pid" "$web_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:53317/api/health >/dev/null && curl -fsS http://127.0.0.1:5177/login >/dev/null; then break; fi
+            sleep 1
+          done
+          npx playwright test e2e/production-hardening.spec.ts --project=chromium
+
   deploy:
     name: Deploy production
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.PRODUCTION_DEPLOY_ENABLED == 'true'
-    needs: [frontend, backend]
+    needs: [frontend, backend, database]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production
@@ -104,4 +159,4 @@ jobs:
             -p "$DEPLOY_PORT" \
             -o BatchMode=yes \
             -o IdentitiesOnly=yes \
-            "$DEPLOY_USER@$DEPLOY_HOST" deploy
+            "$DEPLOY_USER@$DEPLOY_HOST" "deploy $GITHUB_SHA"

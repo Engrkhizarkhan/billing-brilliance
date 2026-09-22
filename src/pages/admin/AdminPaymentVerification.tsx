@@ -1,3 +1,4 @@
+import { toLocalDateTimeInput } from '@/lib/dateTime';
 import { FormEvent, useState } from 'react';
 import { api } from '@/lib/api';
 import { formatDate, formatPKR } from '@/lib/formatters';
@@ -13,7 +14,7 @@ import { AlertCircle, CheckCircle2, ClipboardCheck, Code2, Copy, Loader2, Search
 import { toast } from 'sonner';
 
 const initialForm = () => ({
-  receivedAt: new Date().toISOString().slice(0, 16),
+  receivedAt: toLocalDateTimeInput(),
   channel: 'counter',
   externalReference: '',
   reason: '',

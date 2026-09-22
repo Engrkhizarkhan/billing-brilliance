@@ -3,6 +3,7 @@ const config = require('../config');
 const logger = require('../config/logger');
 const { pool } = require('../config/database');
 const { hashApiKey } = require('../services/apiKeyService');
+const { assertIntegrationPolicy } = require('../services/integrationPolicy');
 const expectedApiKeyScope = config.appEnvironment === 'sandbox' ? 'test' : 'live';
 
 const authenticate = async (req, res, next) => {
@@ -18,7 +19,7 @@ const authenticate = async (req, res, next) => {
     // Verify user still exists and is active
     const [rows] = await pool.query(
       `SELECT u.id, u.tenant_id, u.email, u.name, u.role, u.school_access_role,
-              u.school_ref, u.main_school_user_id, u.status, u.verified,
+              u.school_ref, u.main_school_user_id, u.status, u.verified, u.auth_version,
               t.name AS tenant_name, t.status AS tenant_status,
               t.lifecycle_stage AS tenant_lifecycle_stage,
               t.consumer_number_length
@@ -33,6 +34,8 @@ const authenticate = async (req, res, next) => {
     }
 
     const user = rows[0];
+    if (Number(decoded.authVersion || 0) !== Number(user.auth_version || 0)) return res.status(401).json({ error: 'Session revoked', code: 'SESSION_REVOKED' });
+    req.authExpiresAt = decoded.exp * 1000;
     if (user.status !== 'active') {
       return res.status(403).json({ error: 'Account is not active' });
     }
@@ -68,7 +71,7 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({ error: 'Invalid token' });
     }
     logger.error('Authentication error:', err);
-    return res.status(500).json({ error: 'Authentication failed' });
+    return res.status(err.statusCode || 500).json({ error: err.statusCode ? err.message : 'Authentication failed', code: err.code });
   }
 };
 
@@ -137,13 +140,14 @@ const apiKeyAuth = async (req, res, next) => {
     );
     if (rows.length === 0) return res.status(401).json({ error: 'Invalid API key' });
 
+    await assertIntegrationPolicy(req, rows[0].id);
     req.tenantId = rows[0].id;
     req.authType = 'apiKey';
     req.tenant = rows[0];
     next();
   } catch (err) {
     logger.error('API key auth error:', err);
-    return res.status(500).json({ error: 'Authentication failed' });
+    return res.status(err.statusCode || 500).json({ error: err.statusCode ? err.message : 'Authentication failed', code: err.code });
   }
 };
 
@@ -158,13 +162,14 @@ const authenticateOrApiKey = async (req, res, next) => {
         [hashApiKey(apiKey), expectedApiKeyScope]
       );
       if (rows.length === 0) return res.status(401).json({ error: 'Invalid API key' });
+      await assertIntegrationPolicy(req, rows[0].id);
       req.tenantId = rows[0].id;
       req.authType = 'apiKey';
       req.tenant = rows[0];
       return next();
     } catch (err) {
       logger.error('API key auth error:', err);
-      return res.status(500).json({ error: 'Authentication failed' });
+      return res.status(err.statusCode || 500).json({ error: err.statusCode ? err.message : 'Authentication failed', code: err.code });
     }
   }
   return authenticate(req, res, next);

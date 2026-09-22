@@ -86,7 +86,7 @@ export const api = {
     return post<ApiResponse<{ user: User; defaultPassword: string }>>('/users', payload);
   },
 
-  async updateUser(id: string, payload: Partial<Pick<User, 'name' | 'email' | 'verified' | 'schoolAccessRole'>>): Promise<ApiResponse<User>> {
+  async updateUser(id: string, payload: Partial<Pick<User, 'name' | 'email' | 'verified' | 'schoolAccessRole'>> & { newPassword?: string }): Promise<ApiResponse<User>> {
     return put<ApiResponse<User>>(`/users/${id}`, payload);
   },
 
@@ -230,7 +230,7 @@ export const api = {
   },
 
   async updateInvoiceStatus(id: string, status: string): Promise<ApiResponse<Invoice>> {
-    return patch<ApiResponse<Invoice>>(`/invoices/${id}/status`, { status });
+    return put<ApiResponse<Invoice>>(`/invoices/${id}/status`, { status });
   },
 
   async deleteInvoice(id: string): Promise<ApiResponse<boolean>> {
@@ -247,9 +247,9 @@ export const api = {
   },
 
   // ---- Transactions & Payments ----
-  async fetchTransactions(params: { page?: number; pageSize?: number; status?: string; search?: string } = {}): Promise<ApiResponse<unknown[]>> {
+  async fetchTransactions(params: { page?: number; pageSize?: number; status?: string; search?: string } = {}): Promise<ApiResponse<{ id: string; transactionId: string; consumerNumber: string; amount: number; status: string; date: string; billerName: string }[]>> {
     const q = buildQuery({ page: params.page, pageSize: params.pageSize, status: params.status, search: params.search });
-    return get<ApiResponse<unknown[]>>(`/transactions${q}`);
+    return get<ApiResponse<{ id: string; transactionId: string; consumerNumber: string; amount: number; status: string; date: string; billerName: string }[]>>(`/transactions${q}`);
   },
 
   async fetchPaymentHistory(params: { page?: number; pageSize?: number; search?: string; className?: string; channel?: string; month?: string } = {}): Promise<ApiResponse<unknown[]>> {
@@ -310,7 +310,7 @@ export const api = {
   },
 
   async getOrgPaymentStatus(applicationId: string): Promise<ApiResponse<unknown>> {
-    return get<ApiResponse<unknown>>(`/payments/${applicationId}`);
+    return get<ApiResponse<unknown>>(`/payments/${encodeURIComponent(applicationId)}`);
   },
 
   async listOrgPayments(params: { page?: number; pageSize?: number; status?: string; search?: string; applicationId?: string; from?: string; to?: string } = {}): Promise<ApiResponse<OrgPaymentRecord[]>> {
@@ -354,19 +354,6 @@ export const api = {
 
   async expireOverduePayments(): Promise<ApiResponse<{ expired: number }>> {
     return post<ApiResponse<{ expired: number }>>('/payments/expire', {});
-  },
-
-  async getOrgStats(): Promise<ApiResponse<{
-    totalRequests: number;
-    pending: number;
-    paid: number;
-    expired: number;
-    failed: number;
-    feeCollected: number;
-    verifiedTransactions: number;
-    collectionTrend: { month: string; revenue: number }[];
-  }>> {
-    return get('/stats');
   },
 
   // ---- Settings ----
@@ -524,7 +511,7 @@ export const api = {
     paidInvoices: number; pendingInvoices: number; defaultersCount: number;
     totalTransactions: number; totalLateFees: number; collectedThisMonth: number;
     studentsWithoutCurrentBill: number; latestPaymentDate: string | null;
-    latestDayPayments: number; latestDayAmount: number;
+    latestDayPayments: number; latestDayAmount: number; todayPayments: number; todayAmount: number;
     classSummary: { name: string; count: number }[];
     defaultersByClass: { className: string; count: number }[];
   }>> {
@@ -541,6 +528,18 @@ export const api = {
 
   async getCollectionByFeePlan(): Promise<ApiResponse<{ name: string; value: number }[]>> {
     return get('/reports/collection-by-fee-plan');
+  },
+
+  async getPlatformAnalytics(page = 1, pageSize = 25): Promise<ApiResponse<{
+    totals: { tenants: number; activeTenants: number; students: number; invoices: number; totalTransactions: number; totalPayments: number; totalRevenue: number; revenueToday: number; revenueThisMonth: number; pendingAmount: number; overdueAmount: number };
+    revenueData: { month: string; revenue: number }[];
+    paymentSuccessData: { month: string; success: number; failed: number }[];
+    transactionVolumeData: { month: string; volume: number }[];
+    dailyData: { day: string; inflow: number; outflow: number }[];
+    pieData: { name: string; value: number }[];
+    tenantSummary: { id: string; name: string; type: string; billerCode: string; status: string; studentCount: number; invoiceCount: number; txnCount: number; revenue: number; pendingAmount: number }[];
+  }>> {
+    return get(`/reports/platform-analytics${buildQuery({ page, pageSize })}`);
   },
 
   async getPlatformSummary(): Promise<ApiResponse<{

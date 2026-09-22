@@ -18,7 +18,7 @@ const auditRoutes = async (page: Page, routes: string[], screenshotPath: string)
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   page.on('response', (response) => {
-    if (response.url().includes('/api/') && response.status() >= 500) {
+    if (response.url().includes('/api/') && response.status() >= 400) {
       failures.push(`${response.status()} ${response.request().method()} ${response.url()}`);
     }
   });
@@ -33,10 +33,10 @@ const auditRoutes = async (page: Page, routes: string[], screenshotPath: string)
 
   await page.screenshot({ path: screenshotPath, fullPage: true });
   expect(pageErrors, `Browser errors while visiting ${routes.join(', ')}`).toEqual([]);
-  expect(failures, `API 5xx responses while visiting ${routes.join(', ')}`).toEqual([]);
+  expect(failures, `unexpected API errors while visiting ${routes.join(', ')}`).toEqual([]);
 };
 
-test('every admin, school, and organization dashboard route renders without browser errors or API 5xx responses', async ({ browser, request }) => {
+test('every admin, school, and organization dashboard route renders without browser errors or unexpected API errors', async ({ browser, request }) => {
   test.setTimeout(150000);
   const adminEmail = process.env.E2E_ADMIN_EMAIL || 'admin@example.com';
   const adminPassword = process.env.E2E_ADMIN_PASSWORD;

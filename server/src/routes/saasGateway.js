@@ -8,6 +8,8 @@ const { allocateConsumerNumber } = require('../services/consumerNumberService');
 const { postPayment } = require('../services/paymentPostingService');
 const { hashApiKey } = require('../services/apiKeyService');
 
+const { lockBillingTenant, createInvoiceCharges } = require('../services/invoiceAccountingService');
+const { assertIntegrationPolicy } = require('../services/integrationPolicy');
 const router = express.Router();
 const expectedApiKeyScope = config.appEnvironment === 'sandbox' ? 'test' : 'live';
 
@@ -26,6 +28,7 @@ const apiKeyAuth = async (req, res, next) => {
     if (config.appEnvironment !== 'sandbox' && tenant.lifecycle_stage !== 'live') {
       return res.status(403).json({ error: 'Biller is not active in production', code: 'TENANT_NOT_LIVE' });
     }
+    await assertIntegrationPolicy(req, tenant.id);
     req.saasTenantId = tenant.id;
     req.saasTenant = tenant;
     next();
@@ -116,6 +119,7 @@ router.get('/payment-history/:consumerNumber', async (req, res, next) => {
 
 router.post('/make-payment', async (req, res, next) => {
   try {
+    if (config.appEnvironment !== 'sandbox') return res.status(403).json({ error: 'Payment simulation is available only in the isolated sandbox', code: 'VERIFIED_PAYMENT_REQUIRED' });
     const reference = String(req.body.reference || '').trim();
     if (!reference) return res.status(400).json({ error: 'reference is required', code: 'REFERENCE_REQUIRED' });
     const result = await postPayment({
@@ -124,7 +128,7 @@ router.post('/make-payment', async (req, res, next) => {
       receivedAt: req.body.receivedAt || new Date(), channel: req.body.channel || 'saas_gateway',
       externalReference: reference, transactionId: reference,
       idempotencyKey: req.headers['x-idempotency-key'] || reference,
-      note: req.body.note || 'Tenant API payment', source: 'saas_api', actorName: 'Tenant API',
+      note: req.body.note || 'Tenant API payment', source: 'sandbox_simulator', actorName: 'Tenant API',
       ipAddress: req.ip, userAgent: req.headers['user-agent'],
     });
     res.status(201).json(result);
@@ -142,6 +146,7 @@ router.post('/register-consumer', async (req, res, next) => {
     }
     connection = await pool.getConnection();
     await connection.beginTransaction();
+    await lockBillingTenant(connection, req.saasTenantId);
     if (externalRef) {
       const [existing] = await connection.query(
         `SELECT id, consumer_number, bill_id, name FROM students
@@ -171,23 +176,11 @@ router.post('/register-consumer', async (req, res, next) => {
         const invalid = new Error('invoice.amount and invoice.dueDate (YYYY-MM-DD) are required');
         invalid.statusCode = 400; invalid.code = 'INVALID_INVOICE'; throw invalid;
       }
-      const invoiceId = uuidv4();
-      const invoiceNumber = `INV-${allocated.billerCode}-${String(allocated.sequence).padStart(6, '0')}`;
-      await connection.query(
-        `INSERT INTO invoices
-         (id, tenant_id, invoice_number, student_id, student_name, consumer_number, month, amount, status, due_date)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
-        [invoiceId, req.saasTenantId, invoiceNumber, consumerId, name.trim(), allocated.consumerNumber,
-          String(invoice.dueDate).slice(0, 7), amount, invoice.dueDate]
-      );
-      await connection.query(
-        `INSERT INTO ledger_entries
-         (id, tenant_id, student_id, date, description, debit, credit, balance, bill_id, entry_type)
-         VALUES (?, ?, ?, CURDATE(), ?, ?, 0, ?, ?, 'charge')`,
-        [uuidv4(), req.saasTenantId, consumerId, invoice.description || `Invoice ${invoiceNumber}`, amount, amount, invoiceNumber]
-      );
-      await connection.query('UPDATE students SET balance = ? WHERE id = ?', [amount, consumerId]);
-      invoiceResult = { invoiceNumber, amount, dueDate: invoice.dueDate };
+      const [created] = await createInvoiceCharges(connection, req.saasTenantId, [{
+        studentId: consumerId, month: String(invoice.dueDate).slice(0, 7), amount,
+        dueDate: invoice.dueDate, description: invoice.description || 'Registration invoice',
+      }]);
+      invoiceResult = { invoiceNumber: created.invoiceNumber, amount, dueDate: invoice.dueDate };
     }
     await connection.commit();
     res.status(201).json({ consumerNumber: allocated.consumerNumber, consumerId, name: name.trim(),

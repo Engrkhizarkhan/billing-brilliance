@@ -3,18 +3,10 @@
  * Shared by migrate.js, seed.js, and reset.js.
  * Loads .env automatically — no need to call dotenv.config() in scripts that require this.
  */
-require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
-
+const config = require('../config');
 const mysql = require('mysql2/promise');
-
-const DEFAULT_CFG = {
-  host:               process.env.DB_HOST     || 'localhost',
-  port:               Number(process.env.DB_PORT) || 3306,
-  user:               process.env.DB_USER     || 'root',
-  password:           process.env.DB_PASSWORD || '',
-  database:           process.env.DB_NAME     || 'Fintap',
-  multipleStatements: true,
-};
+const DEFAULT_CFG = { ...config.db, timezone: '+00:00', dateStrings: true, multipleStatements: true };
+delete DEFAULT_CFG.connectionLimit;
 
 /**
  * createConnection(overrides?)
@@ -22,7 +14,9 @@ const DEFAULT_CFG = {
  * @param {object} [overrides] - Any mysql2 connection options to override defaults.
  */
 async function createConnection(overrides = {}) {
-  return mysql.createConnection({ ...DEFAULT_CFG, ...overrides });
+  const connection = await mysql.createConnection({ ...DEFAULT_CFG, ...overrides });
+  await connection.query("SET time_zone = '+00:00'");
+  return connection;
 }
 
 /**

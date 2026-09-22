@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { API_BASE_URL, getAccessToken } from '@/lib/apiClient';
+import { API_BASE_URL, getAccessToken, attemptTokenRefresh } from '@/lib/apiClient';
 import { notifyPaymentUpdate } from '@/store/paymentStore';
 
 export const usePaymentEvents = (enabled: boolean) => {
@@ -16,13 +16,30 @@ export const usePaymentEvents = (enabled: boolean) => {
       try {
         const token = getAccessToken();
         if (!token) return;
-        const response = await fetch(`${API_BASE_URL}/payments/events`, {
-          headers: { Authorization: `Bearer ${token}`, Accept: 'text/event-stream' },
+        const open = (access: string) => fetch(`${API_BASE_URL}/payments/events`, {
+          headers: { Authorization: `Bearer ${access}`, Accept: 'text/event-stream' },
           credentials: 'include',
           signal: controller.signal,
         });
+        let response = await open(token);
+        if (response.status === 401) {
+          try { response = await open(await attemptTokenRefresh()); }
+          catch {
+            window.dispatchEvent(new CustomEvent('auth:session-expired'));
+            stopped = true;
+            setConnected(false);
+            return;
+          }
+        }
+        if ([401, 403].includes(response.status)) {
+          window.dispatchEvent(new CustomEvent('auth:session-expired'));
+          stopped = true;
+          setConnected(false);
+          return;
+        }
         if (!response.ok || !response.body) throw new Error(`Payment stream failed (${response.status})`);
         setConnected(true);
+        notifyPaymentUpdate(); // Catch up on events missed while disconnected.
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';

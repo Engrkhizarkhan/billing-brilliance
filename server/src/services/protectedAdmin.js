@@ -51,7 +51,7 @@ const ensureProtectedAdmin = async () => {
 
   const passwordHash = await bcrypt.hash(protectedAdmin.password, 12);
   const [rows] = await pool.query(
-    'SELECT id FROM users WHERE LOWER(email) = ? LIMIT 1',
+    'SELECT id, password_hash, deleted_at, role FROM users WHERE LOWER(email) = ? LIMIT 1',
     [protectedAdmin.email]
   );
 
@@ -66,6 +66,9 @@ const ensureProtectedAdmin = async () => {
     return;
   }
 
+  if (rows[0].deleted_at || rows[0].role !== 'admin' || !await bcrypt.compare(protectedAdmin.password, rows[0].password_hash)) {
+    await require('./sessionService').replacePassword(rows[0].id, passwordHash, undefined, { includeDeleted: true });
+  }
   await pool.query(
     `UPDATE users
      SET tenant_id = NULL,

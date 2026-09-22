@@ -17,22 +17,24 @@ export function useApiQuery<T, TMeta = unknown>(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  const requestId = useRef(0);
 
   const refetch = useCallback(async () => {
+    const currentRequest = ++requestId.current;
     setLoading(true);
     setError(null);
     try {
       const res = await fetcher();
-      if (mountedRef.current) {
+      if (mountedRef.current && currentRequest === requestId.current) {
         setData(res.data);
         setMeta(res.meta ?? null);
       }
     } catch (e) {
-      if (mountedRef.current) {
+      if (mountedRef.current && currentRequest === requestId.current) {
         setError(e instanceof Error ? e.message : 'An error occurred');
       }
     } finally {
-      if (mountedRef.current) {
+      if (mountedRef.current && currentRequest === requestId.current) {
         setLoading(false);
       }
     }
@@ -44,6 +46,7 @@ export function useApiQuery<T, TMeta = unknown>(
     refetch();
     return () => {
       mountedRef.current = false;
+      requestId.current += 1;
     };
   }, [refetch]);
 

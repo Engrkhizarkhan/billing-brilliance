@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/QueryError';
 import { useState } from 'react';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api } from '@/lib/api';
@@ -19,7 +20,7 @@ const Defaulters = () => {
   const [pageSize, setPageSize] = useState(25);
   const deferredSearch = useDebouncedValue(search.trim());
 
-  const { data, meta, loading } = useApiQuery(
+  const { data, meta, loading, error: queryError0 } = useApiQuery(
     () => api.fetchStudents({
       page,
       pageSize,
@@ -38,6 +39,8 @@ const Defaulters = () => {
   const classOptions = (meta?.facets.classes ?? []).map((item) => item.name);
 
   if (loading) return <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+
+  if (queryError0) return <QueryError message={queryError0} />;
 
   return (
     <div className="space-y-6 animate-fade-in">

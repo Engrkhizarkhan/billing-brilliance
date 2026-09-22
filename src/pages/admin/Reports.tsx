@@ -1,80 +1,17 @@
+import { QueryError } from '@/components/QueryError';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
 import { usePaymentStore } from '@/store/paymentStore';
-import { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-
-type BillerRecord = { id: string; type: 'school' | 'org' | 'private_agency'; name: string };
-type TransactionRecord = { tenantId?: string | null; amount: number; status: 'completed' | 'pending' | 'failed' | string; date: string };
 
 const COLORS = ['hsl(221, 83%, 53%)', 'hsl(160, 84%, 39%)', 'hsl(38, 92%, 50%)'];
 
-const toMonthKey = (value: string) => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-};
-
-const toMonthLabel = (monthKey: string) => {
-  const [year, month] = monthKey.split('-').map(Number);
-  return new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'short' });
-};
-
 const Reports = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
-  const { data: txnData, loading: loadingTransactions } = useApiQuery(() => api.fetchTransactions({ pageSize: 5000 }), [paymentVersion]);
-  const { data: billersData, loading: loadingBillers } = useApiQuery(() => api.fetchBillers({ pageSize: 100 }), []);
-
-  const transactions = useMemo(() => (txnData || []) as TransactionRecord[], [txnData]);
-  const billers = useMemo(() => (billersData || []) as BillerRecord[], [billersData]);
-
-  const revenueData = useMemo(() => {
-    const byMonth = new Map<string, number>();
-    transactions
-      .filter((t) => t.status === 'completed')
-      .forEach((t) => {
-        const key = toMonthKey(t.date);
-        if (!key) return;
-        byMonth.set(key, (byMonth.get(key) || 0) + Number(t.amount || 0));
-      });
-
-    return Array.from(byMonth.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-6)
-      .map(([month, revenue]) => ({ month: toMonthLabel(month), revenue }));
-  }, [transactions]);
-
-  const pieData = useMemo(() => {
-    const tenantTypeById = new Map(billers.map((b) => [b.id, b.type] as const));
-    const totals = {
-      school: 0,
-      org: 0,
-      private_agency: 0,
-    };
-
-    transactions
-      .filter((t) => t.status === 'completed')
-      .forEach((t) => {
-        const tenantType = t.tenantId ? tenantTypeById.get(t.tenantId) : undefined;
-        if (tenantType === 'school') totals.school += Number(t.amount || 0);
-        else if (tenantType === 'org') totals.org += Number(t.amount || 0);
-        else totals.private_agency += Number(t.amount || 0);
-      });
-
-    return [
-      { name: 'Schools', value: totals.school },
-      { name: 'Organizations', value: totals.org },
-      { name: 'Agencies', value: totals.private_agency },
-    ];
-  }, [transactions, billers]);
-
-  if (loadingTransactions || loadingBillers) {
-    return (
-      <div className="flex items-center justify-center h-48">
-        <p className="text-sm text-muted-foreground">Loading reports...</p>
-      </div>
-    );
-  }
+  const { data, loading, error } = useApiQuery(() => api.getPlatformAnalytics(), [paymentVersion]);
+  if (loading) return <p>Loading reports…</p>;
+  if (error || !data) return <QueryError message={error || 'Report unavailable'} />;
+  const { revenueData, pieData } = data;
 
   return (
     <div className="space-y-6 animate-fade-in">

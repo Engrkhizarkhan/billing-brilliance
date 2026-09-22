@@ -1,207 +1,58 @@
-# Fintap production deployment runbook
+# Production release runbook
 
-This runbook deploys application changes only. It does not modify the established StrongSwan, loopback, routing, Nginx TLS, firewall, or 1LINK VPN configuration.
+Updated 23 September 2026. This release changes deployment layout: **do not copy the new forced-command script onto the old in-place checkout without provisioning the layout below first**. This procedure does not change VPN, network selectors, firewall, TLS or provider settings.
 
-## Required values and approvals
+## Release gates
 
-- Approved release commit/tag and maintenance window.
-- Recent successful encrypted database backup plus tested restore owner.
-- Production `.env` with `NODE_ENV=production`, `APP_ENVIRONMENT=production`, `DB_NAME=Fintap`, strong unique JWT/webhook secrets, `REQUIRE_HTTPS=true`, prefix `105172`, and 1LINK source IPs `10.95.8.92,10.95.8.94`.
-- A six-digit `ADMIN_ACTION_PIN` stored in the deployment secret manager and copied into the protected `server/.env` file, plus a stable `API_KEY_ENCRYPTION_KEY` generated with `openssl rand -base64 32`. The `server/.env` PIN is authoritative so a stale PM2 environment snapshot cannot override a rotation. Keep the file mode at `600` and restart the API after changing it. Losing or changing the encryption key makes existing recoverable API-key envelopes unreadable; back it up with the application secrets.
-- A separately deployed sandbox API/database/hostname. Set production `SANDBOX_BASE_URL` to that API and configure the same strong `SANDBOX_PURGE_SECRET` on both runtimes. Set frontend build variable `VITE_SANDBOX_BASE_URL` to the public sandbox API origin. Until configured, the core production API remains available, while sandbox provisioning and tenant activation fail closed with `SANDBOX_NOT_CONFIGURED`.
-- Do not print `.env`, PSK, database password, JWT secrets, API keys or certificate private keys.
-- The leaf/full-chain certificate may be shared where required; never share `privkey.pem`.
+1. Pass frontend type checks, unit tests, lint and build; backend unit and MySQL regression suites; and disposable-environment browser journeys. CI pins Node 22 and MySQL 8.4.
+2. Restore an encrypted production backup into an isolated staging database. Apply forward migrations, compare counts, run read-only reconciliation, and exercise billing/payment/reversal flows. Back up secrets too, especially API_KEY_ENCRYPTION_KEY. Historical accounting discrepancies require evidence-based reconciliation, not bulk balance replacement.
+3. Rehearse a failed build, failed migration and failed readiness check using the new deployment layout. Confirm that the old release remains/rebecomes active and that its code is compatible with forward migrations. Database rollback is not automatic.
+4. Verify real provider UAT over the approved connection: inquiry, exact payment, duplicate, invalid credentials, insufficient/mismatched amount, expired bill, and agreed correction/reversal procedures. Confirm contracted consumer lengths, authoritative selectors/IPs, TLS, allowlists, settlement files and reconciliation owner. Historical VPN documents are not current approval.
+5. Confirm worker monitoring, outbox terminal-failure alerts, tested backup restoration, disk/log retention, operational support and rollback ownership. Keep one API instance while SSE uses a process-local event bus.
+6. Review and publish actual commercial/privacy policies and approve marketing branding/claims before publishing the separate static marketing site. Contact now opens an email draft; it is not a lead-capture service and mailbox ownership must be verified.
 
-### First-time API-key encryption bootstrap
+## One-time release layout provisioning
 
-Only use this bootstrap when `API_KEY_ENCRYPTION_KEY` has never been configured and no recoverable tenant keys have been created with an earlier key. If a real value already exists in a backup or secret manager, restore that exact value instead of generating another one.
+Prepare these paths during a controlled maintenance window, retaining a backup of the current checkout:
 
-```bash
-pm2 stop Fintap-api-backend
-install -d -m 700 /root/backups/fintap-secrets
-cp -a /var/www/billing-brilliance/server/.env "/root/backups/fintap-secrets/server.env.$(date +%Y%m%d-%H%M%S)"
+| Path | Purpose |
+|---|---|
+| `/var/lib/fintap/repository.git` | Bare Git repository with the approved origin; deploy account can fetch |
+| `/var/lib/fintap/releases/<revision>.<unique>` | Immutable application releases, including built dist and production server dependencies |
+| `/var/www/billing-brilliance` | Symlink to the active release; existing Nginx dist root resolves through it |
+| `/etc/fintap/production.env` | Protected shared runtime configuration, readable only by service/deploy owner |
+| `/etc/fintap/migration.env` | Optional privileged migration configuration; API and worker use the restricted production account |
+| `/etc/fintap/sandbox.env` | Optional separate sandbox configuration; when present, the same release migrates, reloads and checks both sandbox processes |
+| `/var/lib/fintap/deployed-revision` | Last fully verified successful revision |
 
-bash <<'EOF'
-set -Eeuo pipefail
-env_file=/var/www/billing-brilliance/server/.env
-existing="$(sed -n 's/^API_KEY_ENCRYPTION_KEY=//p' "$env_file" | tail -n 1)"
-if [ -n "$existing" ] && [ "$existing" != "replace_with_32_byte_base64_key" ]; then
-  echo "A non-placeholder encryption key already exists; refusing to replace it."
-  exit 2
-fi
-new_key="$(openssl rand -base64 32 | tr -d '\n')"
-sed -i '/^API_KEY_ENCRYPTION_KEY=/d' "$env_file"
-printf '\nAPI_KEY_ENCRYPTION_KEY=%s\n' "$new_key" >> "$env_file"
-chmod 600 "$env_file"
-unset new_key
-echo "Encryption key stored without printing it."
-EOF
+Create the initial release from the currently deployed code, preserve its built assets/dependencies and REVISION, and point the application path to that release. Keep the original checkout backup outside the served path. Confirm Nginx follows the symlink and PM2 processes run from that release's server directory. Do not delete the previous release or backups during the cutover.
 
-cd /var/www/billing-brilliance/server
-node -e "require('./src/services/apiKeyService').validateApiKeyEncryptionKey(); console.log('Encryption key format: valid')"
-pm2 restart Fintap-api-backend --update-env
-pm2 save
-```
+Set `NODE_ENV=production`, `APP_ENVIRONMENT=production`, existing production DB credentials, strong distinct JWT/refresh/webhook secrets, `REQUIRE_HTTPS=true`, approved 1LINK credentials/IP allowlist, ADMIN credentials/PIN, a stable 32-byte base64 API_KEY_ENCRYPTION_KEY, CORS origin and explicit PORT. Set the separately deployed SANDBOX_BASE_URL/PURGE_SECRET as required by onboarding. Keep file permissions at 0600 and preserve the established encryption key. Never reuse the development fallback key. FINTAP_ENV_FILE is passed explicitly to migrations and both PM2 processes.
 
-Immediately copy the protected `.env` backup into the approved encrypted off-host secret store. Never rotate this key casually: doing so makes previously stored API-key envelopes unreadable.
+Frontend public configuration must be build-time available (e.g. reviewed `.env.production` build configuration or environment variables on the deployment host). Do not place API credentials, DB passwords or server secrets in VITE-prefixed variables.
 
-## 1. Pre-deployment evidence
+Install `deploy/fintap-github-deploy` as the restricted forced command for the deployment SSH key. Keep existing host-key verification. The command accepts only `deploy <40-character-tested-SHA>`; it never evaluates arbitrary SSH commands. Ensure `/usr/bin/node`, npm, pm2, git, curl and flock are the approved executables for the service account.
 
-Run on a CI runner or clean checkout:
+## Normal release
 
-```bash
-npm ci
-npm run lint
-npm run test
-npm run build
-npm --prefix server ci
-npm --prefix server test
-npm audit --omit=dev
-npm --prefix server audit --omit=dev
-```
+CI sends its exact GITHUB_SHA. The script verifies the commit is on fetched main, stages it into a new release directory, installs dependencies and builds there, then applies forward migrations. Before activation, the live application tree is untouched.
 
-Rehearse `npm --prefix server run migrate` on a restored production-like database first. Validate record counts, consumer uniqueness, payment/ledger reconciliation, and application smoke tests. Do not make `migrate:fresh` available in a production procedure.
+An atomic symlink replacement activates the staged release. PM2 reloads API and worker with the shared environment file. The release is successful only when `/api/ready` returns the target revision and fresh production worker heartbeat, and both PM2 processes report online from the staged directory. Only then is deployed-revision replaced and PM2 saved.
 
-## 2. Back up production
+Any build/install/migration error stops before activation. Any post-activation error attempts to restore the previous symlink and processes. The prior build is retained, so rollback does not require another install/build. Inspect rollback logs and readiness manually after a failure. Forward database migrations remain applied; incompatible/destructive migrations require a separate reviewed rollout strategy.
 
-Resolve the configured database name without echoing credentials. The following assumes MySQL login is supplied securely by the operator or an existing protected option file:
+The script deliberately does not skip solely because Git HEAD equals the target. Failed deployments can be retried safely into a fresh release directory. Deployment locking prevents concurrent activation.
 
-```bash
-install -d -m 700 /root/backups/fintap
-mysqldump --single-transaction --routines --triggers --events Fintap | gzip > /root/backups/fintap/Fintap-predeploy-$(date +%Y%m%d-%H%M%S).sql.gz
-test -s /root/backups/fintap/$(ls -1t /root/backups/fintap/Fintap-predeploy-*.sql.gz | head -n1 | xargs basename)
-```
+## Verification and monitoring
 
-Copy the backup to the approved off-host encrypted backup location and record its checksum. Do not proceed if backup or restore ownership is uncertain.
+`/api/health` checks process liveness. `/api/ready` checks MySQL, production worker heartbeat (90-second freshness), and returns revision. API startup checks required migration versions. Protect infrastructure endpoints appropriately at the network edge; do not confuse HTTP liveness with financial correctness.
 
-## 3. Build and migrate
+Monitor worker heartbeat, failed/exhausted/skipped outbox records, provider response failures, authorization failures, reconciliation differences, disk capacity, database backups, and PM2 restart counts. Worker status online alone is insufficient. Keep a durable off-host copy of deployment logs and encrypted backups.
 
-From `/var/www/billing-brilliance` after checking out the approved revision:
+Run `npm run reconcile --prefix server` against a read-only database account where practical. The report does not mutate data; investigate every difference before launch. Do not run seed, reset, or migrate:fresh on production.
 
-```bash
-npm ci
-npm run build
-npm --prefix server ci
-npm --prefix server run migrate
-```
+Deployment evidence and remaining provider acceptance requirements are recorded separately in `DEPLOYMENT_VERIFICATION_2026-09-23.md`. Automated application tests do not constitute 1LINK certification.
 
-Migrations `007_production_foundation.js` through `011_consumer_registry_indexes.js` are additive, checksum-tracked, and required. Never edit an applied migration; create a new numbered migration. The API now verifies the complete JavaScript migration set during startup and refuses to accept traffic when any required migration is missing.
+## Missing historical invoice charges
 
-## 4. Start API and worker
-
-```bash
-pm2 startOrReload server/ecosystem.config.cjs --update-env
-pm2 save
-pm2 status
-```
-
-Expected processes:
-
-- `Fintap-api-backend`
-- `Fintap-outbox-worker`
-
-The API binds to `127.0.0.1:3000`; Nginx remains the TLS/public/private-VPN listener on port 443.
-
-Keep the production API at one PM2 application process while realtime payment events use the current in-process event bus. Before increasing API instances, add shared Redis/pub-sub or durable fan-out so an event accepted by one worker reaches clients connected to another. The durable outbox worker remains the source for server-to-server webhook delivery.
-
-## 5. Post-deployment checks
-
-```bash
-curl --fail --silent --show-error https://app.fintap.pk/api/health
-curl --fail --silent --show-error https://app.fintap.pk/api/ready
-pm2 logs Fintap-api-backend --lines 100 --nostream
-pm2 logs Fintap-outbox-worker --lines 100 --nostream
-```
-
-Run a read-only inquiry against a disposable UAT consumer from the approved network. Payment testing requires an explicitly disposable UAT consumer and `E2E_ALLOW_PAYMENT=true`:
-
-```bash
-cd /var/www/billing-brilliance/server
-E2E_BASE_URL=http://127.0.0.1:3000 E2E_CONSUMER_NUMBER='REPLACE_UAT_CONSUMER' node tests/e2e_1link_flow.js
-```
-
-Credentials remain sourced from the protected server environment; do not put them in shell history.
-
-## 6. Database integrity checks
-
-Run using a read-only operations account where possible:
-
-```sql
-SELECT version, checksum, applied_at FROM schema_migrations ORDER BY applied_at;
-
-SELECT tenant_id, reference, COUNT(*) duplicates
-FROM payments
-WHERE reference IS NOT NULL
-GROUP BY tenant_id, reference
-HAVING COUNT(*) > 1;
-
-SELECT tenant_id, idempotency_key, COUNT(*) duplicates
-FROM payments
-WHERE idempotency_key IS NOT NULL
-GROUP BY tenant_id, idempotency_key
-HAVING COUNT(*) > 1;
-
-SELECT tenant_id, consumer_number, COUNT(*) duplicates
-FROM (
-  SELECT tenant_id, consumer_number FROM students WHERE deleted_at IS NULL
-  UNION ALL SELECT tenant_id, consumer_number FROM applicants WHERE deleted_at IS NULL
-  UNION ALL SELECT tenant_id, consumer_number FROM org_payment_records
-) consumers
-GROUP BY tenant_id, consumer_number
-HAVING COUNT(*) > 1;
-
-SELECT status, COUNT(*) FROM outbox_events GROUP BY status;
-```
-
-Any duplicate payment key or consumer namespace is a stop condition.
-
-## 7. Application rollback
-
-If the release fails before accepting new financial writes, return to the prior approved application revision, rebuild, and use `pm2 startOrReload`. Database migrations are forward-only; do not blindly reverse or drop columns. If financial writes occurred, incident/reconciliation ownership must decide recovery from the backup or a corrective migration.
-
-Never use `git reset --hard`, delete the production database, or run `migrate:fresh` as rollback.
-
-## 8. Sandbox deployment
-
-Use `server/.env.sandbox.example` on a separate hostname/process/database/user. The sandbox database name must contain `sandbox`, `uat`, or `test`; otherwise startup fails. Do not route the sandbox host into the production 1LINK IPsec tunnel. Use independent API/JWT/webhook credentials and a separate retention/reset policy.
-
-The checked-in deployment components are:
-
-- `server/scripts/bootstrap-sandbox.sh` — creates `Fintap_sandbox`, its least-privilege MySQL user, unique secrets, the ignored `server/.env.sandbox`, and the shared production purge credential without printing secrets.
-- `server/ecosystem.sandbox.config.cjs` — runs the sandbox API on loopback port 3001 and a separate sandbox outbox worker using `FINTAP_ENV_FILE`.
-- `deploy/nginx/sandbox.fintap.pk.conf` — proxies only the sandbox hostname to port 3001; Certbot adds TLS after public DNS resolves.
-
-Deployment order:
-
-```bash
-cd /var/www/billing-brilliance
-chmod 700 server/scripts/bootstrap-sandbox.sh
-server/scripts/bootstrap-sandbox.sh
-FINTAP_ENV_FILE=/var/www/billing-brilliance/server/.env.sandbox npm --prefix server run migrate
-pm2 startOrReload server/ecosystem.sandbox.config.cjs --update-env
-pm2 restart Fintap-api-backend --update-env
-pm2 save
-```
-
-Install the Nginx site only after `dig +short sandbox.fintap.pk @1.1.1.1` returns `178.238.236.126`, then obtain the certificate:
-
-```bash
-cp deploy/nginx/sandbox.fintap.pk.conf /etc/nginx/sites-available/sandbox.fintap.pk
-ln -sfn /etc/nginx/sites-available/sandbox.fintap.pk /etc/nginx/sites-enabled/sandbox.fintap.pk
-nginx -t
-systemctl reload nginx
-certbot --nginx -d sandbox.fintap.pk
-```
-
-Rebuild the frontend after pulling. Production builds default to `https://sandbox.fintap.pk`; `VITE_SANDBOX_BASE_URL` can override it for a different deployment. Verify that the hosts report different environments:
-
-```bash
-curl --fail https://app.fintap.pk/api/ready
-curl --fail https://sandbox.fintap.pk/api/ready
-```
-
-The expected environment fields are `production` and `sandbox`, respectively.
-
-Before activating a tenant, prove that the production API can call the sandbox internal provision/purge endpoints, that sandbox data is absent from the production database, and that activation deletes sandbox tenant data and invalidates the old test key. Activation intentionally fails closed when purge cannot be confirmed.
-
-For the dashboard event stream, preserve `X-Accel-Buffering: no`, disable proxy buffering for `/api/payments/events`, and set a proxy read timeout longer than the server heartbeat interval. Confirm reconnect behavior through the public TLS hostname.
+`server/src/operations/restoreMissingInvoiceCharges.js` defaults to a dry-run plan. It only accepts accounts with exactly one existing invoice, no original debit, zero cached balance, and payment credits that exactly match canonical allocations. Ambiguous accounts stop the entire operation. Apply requires `INVOICE_CHARGE_PLAN_HASH` from the reviewed plan and `INVOICE_CHARGE_DATABASE_CONFIRM` matching the selected database. The transaction rechecks evidence under tenant locks, appends missing charges and audit records, and derives cached balances; existing invoices and payments are preserved. Back up and rehearse on a restored copy first. Never use this as a general balance reset.

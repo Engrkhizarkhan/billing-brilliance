@@ -1,3 +1,4 @@
+const { lockBillingTenant, createInvoiceCharges } = require('../services/invoiceAccountingService');
 const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
@@ -144,6 +145,8 @@ const createStudent = async (req, res, next) => {
     const tenantId = req.tenantId || req.body.tenantId;
     if (!tenantId) throw new AppError('Tenant ID is required', 400);
 
+    if (req.body.balance !== undefined && Number(req.body.balance) !== 0) throw new AppError('Create an invoice for an opening balance; student balances are ledger-controlled', 409, 'BALANCE_IMMUTABLE');
+
     // Allocate and insert in one transaction so concurrent requests cannot collide.
     const conn = await pool.getConnection();
     let seq, id, consumerNumber, billId;
@@ -207,6 +210,8 @@ const updateStudent = async (req, res, next) => {
     const [existing] = await pool.query(`SELECT * FROM students ${where}`, params);
     if (existing.length === 0) throw new AppError('Student not found', 404);
 
+    if (req.body.balance !== undefined && Number(req.body.balance) !== Number(existing[0].balance)) throw new AppError('Student balances can only change through billing and payments', 409, 'BALANCE_IMMUTABLE');
+
     const mapping = {
       name: 'name',
       fatherName: 'father_name',
@@ -216,7 +221,6 @@ const updateStudent = async (req, res, next) => {
       phone: 'phone',
       cnic: 'cnic',
       status: 'status',
-      balance: 'balance',
       admissionDate: 'admission_date',
       gender: 'gender',
       dateOfBirth: 'date_of_birth',
@@ -314,7 +318,7 @@ const getStudentLedger = async (req, res, next) => {
     if (req.tenantId) { where += ' AND le.tenant_id = ?'; params.push(req.tenantId); }
 
     const [rows] = await pool.query(
-      `SELECT * FROM ledger_entries le ${where} ORDER BY le.date ASC, le.created_at ASC`,
+      `SELECT le.*, SUM(le.debit-le.credit) OVER (ORDER BY le.date ASC, le.created_at ASC, le.id ASC ROWS UNBOUNDED PRECEDING) AS balance FROM ledger_entries le ${where} ORDER BY le.date ASC, le.created_at ASC, le.id ASC`,
       params
     );
 
@@ -430,62 +434,26 @@ const ADDITIONAL_CHARGE_LABELS = {
 };
 
 const createAdditionalCharge = async (req, res, next) => {
+  let connection;
   try {
     const tenantId = req.tenantId;
     if (!tenantId) throw new AppError('Tenant ID is required', 400);
-
-    const studentId = req.params.id;
     const { chargeType, description, amount, date } = req.body;
-
-    if (!chargeType || amount === undefined) {
-      throw new AppError('chargeType and amount are required', 400);
-    }
-
-    const parsedAmount = parseFloat(amount);
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      throw new AppError('Amount must be a positive number', 400);
-    }
-
-    const validTypes = Object.keys(ADDITIONAL_CHARGE_LABELS);
-    if (!validTypes.includes(chargeType)) {
-      throw new AppError(`chargeType must be one of: ${validTypes.join(', ')}`, 400);
-    }
-
-    const [students] = await pool.query(
-      'SELECT id, name, bill_id, consumer_number FROM students WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL',
-      [studentId, tenantId]
-    );
-    if (!students.length) throw new AppError('Student not found', 404);
-
-    const student = students[0];
+    if (!Object.hasOwn(ADDITIONAL_CHARGE_LABELS, chargeType)) throw new AppError('Invalid charge type', 400);
+    if (!Number.isFinite(Number(amount)) || Number(amount) <= 0) throw new AppError('Amount must be positive', 400);
     const chargeDate = date || new Date().toISOString().slice(0, 10);
-    const chargeLabel = ADDITIONAL_CHARGE_LABELS[chargeType];
-    const chargeDescription = description?.trim() ? description.trim() : chargeLabel;
-
-    // Running balance from last ledger entry
-    const [lastEntry] = await pool.query(
-      'SELECT balance FROM ledger_entries WHERE student_id = ? ORDER BY date DESC, created_at DESC LIMIT 1',
-      [studentId]
-    );
-    const prevBalance = lastEntry.length ? parseFloat(lastEntry[0].balance) : 0;
-    const newBalance = prevBalance + parsedAmount;
-
-    const id = uuidv4();
-    await pool.query(
-      `INSERT INTO ledger_entries (id, tenant_id, student_id, date, description, debit, credit, balance, bill_id, entry_type)
-       VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, 'charge')`,
-      [id, tenantId, studentId, chargeDate, chargeDescription, parsedAmount, newBalance, student.bill_id]
-    );
-
-    await pool.query('UPDATE students SET balance = balance + ? WHERE id = ?', [parsedAmount, studentId]);
-    await auditLog(req, 'create', 'ledger_entry', id,
-      `Additional charge (${chargeLabel}): ${chargeDescription} - PKR ${parsedAmount} for ${student.name}`);
-
-    const [rows] = await pool.query('SELECT * FROM ledger_entries WHERE id = ?', [id]);
-    res.status(201).json({ data: rows[0], message: `${chargeLabel} posted to ledger` });
-  } catch (err) {
-    next(err);
-  }
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    await lockBillingTenant(connection, tenantId);
+    const [invoice] = await createInvoiceCharges(connection, tenantId, [{ studentId: req.params.id,
+      amount, dueDate: chargeDate, month: chargeDate.slice(0, 7),
+      description: description?.trim() || ADDITIONAL_CHARGE_LABELS[chargeType] }]);
+    await connection.commit();
+    await auditLog(req, 'create', 'invoice', invoice.id, `Additional charge ${invoice.invoiceNumber}: PKR ${invoice.amount}`);
+    const [[entry]] = await pool.query('SELECT * FROM ledger_entries WHERE tenant_id = ? AND student_id = ? AND reference = ?', [tenantId, req.params.id, invoice.invoiceNumber]);
+    res.status(201).json({ data: entry, message: 'Charge and invoice created' });
+  } catch (err) { if (connection) await connection.rollback(); next(err); }
+  finally { if (connection) connection.release(); }
 };
 
 const fetchStudentLedgerSummary = async (req, res, next) => {
@@ -519,11 +487,7 @@ const fetchStudentLedgerSummary = async (req, res, next) => {
          s.id, s.name, s.class, s.section, s.roll_number, s.consumer_number, s.bill_id, s.status,
          COALESCE(SUM(le.debit), 0) AS total_debit,
          COALESCE(SUM(le.credit), 0) AS total_credit,
-         COALESCE((
-           SELECT balance FROM ledger_entries
-           WHERE student_id = s.id
-           ORDER BY date DESC, created_at DESC LIMIT 1
-         ), 0) AS running_balance,
+         COALESCE(SUM(le.debit-le.credit), 0) AS running_balance,
          COUNT(le.id) AS entry_count
        FROM students s
        LEFT JOIN ledger_entries le ON le.student_id = s.id
