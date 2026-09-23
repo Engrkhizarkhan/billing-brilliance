@@ -1,3 +1,5 @@
+> Historical/reference documentation. For current implementation and operating rules, use [the current guide](../../../README.md). Examples and readiness statements below must not be treated as current deployment verification.
+
 # Fintap database scripts
 
 Run these commands from `server/` against MySQL 8 or later.

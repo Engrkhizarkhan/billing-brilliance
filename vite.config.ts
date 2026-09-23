@@ -13,12 +13,12 @@ export default defineConfig(({ mode }) => ({
     },
     proxy: {
       "/api": {
-        target: "http://localhost:3000",
+        target: process.env.DEV_API_TARGET || "http://127.0.0.1:3000",
         changeOrigin: true,
         secure: false,
       },
       "/v1": {
-        target: "http://localhost:3000",
+        target: process.env.DEV_API_TARGET || "http://127.0.0.1:3000",
         changeOrigin: true,
         secure: false,
       },

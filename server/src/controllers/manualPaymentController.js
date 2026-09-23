@@ -1,3 +1,4 @@
+const { payableQuote } = require('../services/billingRules');
 const { pool } = require('../config/database');
 const config = require('../config');
 const { postPayment, reverseManualPayment } = require('../services/paymentPostingService');
@@ -46,7 +47,7 @@ const paidResponse = (label, dueDate, payment) => ({
 });
 
 const tenantCanCollect = (tenant) => tenant.status === 'active'
-  && (config.appEnvironment !== 'production' || tenant.lifecycle_stage === 'live');
+  && (config.appEnvironment === 'sandbox' || tenant.lifecycle_stage === 'live');
 
 /** Platform-admin lookup used before a manually verified payment is posted. */
 const inquirePayment = async (req, res, next) => {
@@ -75,18 +76,14 @@ const inquirePayment = async (req, res, next) => {
          FROM ledger_entries WHERE tenant_id = ? AND student_id = ?`,
         [student.tenant_id, student.id]
       );
-      const invoiceDue = invoices.reduce((sum, invoice) => sum + Number(invoice.amount), 0);
-      const ledgerDue = Math.max(0, Number(ledger.debit) - Number(ledger.credit));
-      const baseDue = Math.max(invoiceDue, ledgerDue);
+      const { baseDue, lateFees, invoiceDue, ledgerDue } = payableQuote(invoices, ledger);
       const now = new Date();
-      const lateFees = invoices.reduce((sum, invoice) => {
-        const overdue = invoice.due_date && toDate(`${invoice.due_date} 23:59:59`) < now;
-        return sum + (overdue && !invoice.late_fee_applied ? Number(invoice.late_fee || 0) : 0);
-      }, 0);
+
       const amount = Math.round((baseDue + lateFees) * 100) / 100;
       const oldest = invoices[0] || null;
       const allowed = tenantCanCollect({ status: student.tenant_status, lifecycle_stage: student.lifecycle_stage });
-      const payable = allowed && student.status === 'active' && amount > 0;
+      const reconciled = ledgerDue >= invoiceDue;
+      const payable = allowed && reconciled && student.status === 'active' && amount > 0;
       let oneBillResponse;
       if (!allowed) oneBillResponse = unavailableResponse('01');
       else if (student.status !== 'active') oneBillResponse = unavailableResponse('02');
@@ -118,7 +115,7 @@ const inquirePayment = async (req, res, next) => {
           invoiceNumber: oldest?.invoice_number || null, dueDate: oldest?.due_date || null,
           pendingCount: invoices.length, baseAmount: baseDue, lateFee: lateFees, amount,
           currency: 'PKR', payable,
-          reason: payable ? null : amount === 0 ? 'This bill is already paid'
+          reason: payable ? null : !reconciled ? 'Invoice charges require ledger reconciliation before collection' : amount === 0 ? 'This bill is already paid'
             : student.status !== 'active' ? 'Consumer is blocked'
               : 'The biller is not enabled for collection',
           oneBillResponse,

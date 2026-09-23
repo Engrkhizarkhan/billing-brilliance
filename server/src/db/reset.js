@@ -1,3 +1,5 @@
+const config = require('../config');
+const { assertDisposableDatabase } = require('../services/disposableDatabaseGuard');
 /**
  * Database Reset Script
  * Clears application/test data and keeps every platform administrator.
@@ -8,6 +10,7 @@ const { createConnection } = require('./db');    // also loads .env
 const logger = require('../config/logger');
 
 async function reset() {
+  assertDisposableDatabase(config);
   const connection = await createConnection();
 
   try {

@@ -3,11 +3,13 @@ const config = require('../config');
 const logger = require('../config/logger');
 const { pool, testConnection } = require('../config/database');
 const { assertSafePublicHttpsUrl } = require('../services/urlSafety');
+const { sendWebhook } = require('../services/safeWebhookTransport');
 
 const pollMs = Math.max(500, Number(process.env.OUTBOX_POLL_MS) || 2000);
 const maxAttempts = Math.max(1, Number(process.env.OUTBOX_MAX_ATTEMPTS) || 10);
 let stopping = false;
 let working = false;
+let lastExpirySweep = 0;
 
 const parseSettings = (value) => {
   if (!value) return {};
@@ -66,16 +68,18 @@ const markFailed = (event, error) => {
 
 const deliver = async (event) => {
   const [tenants] = await pool.query(
-    'SELECT settings FROM tenants WHERE id = ? AND deleted_at IS NULL LIMIT 1', [event.tenant_id]
+    'SELECT settings, status FROM tenants WHERE id = ? AND deleted_at IS NULL LIMIT 1', [event.tenant_id]
   );
   if (!tenants.length) throw new Error('Tenant no longer exists');
+  if (tenants[0].status !== 'active') throw new Error('Tenant is suspended; delivery deferred');
   const settings = parseSettings(tenants[0].settings);
   const notificationUrl = settings.notification_url;
-  if (!notificationUrl) return markDelivered(event.id);
+  if (!notificationUrl) return pool.query("UPDATE outbox_events SET status = 'skipped', processed_at = UTC_TIMESTAMP(), processing_started_at = NULL, last_error = 'No notification URL configured' WHERE id = ?", [event.id]);
 
   const safeUrl = await assertSafePublicHttpsUrl(notificationUrl);
   const parsedPayload = typeof event.payload === 'object' ? event.payload : JSON.parse(event.payload);
   const body = JSON.stringify({
+    schema_version: 1,
     event_id: event.id,
     event_type: event.event_type,
     created_at: event.created_at,
@@ -83,15 +87,13 @@ const deliver = async (event) => {
   });
   const secret = settings.webhook_secret || config.org.webhookSecret;
   const signature = crypto.createHmac('sha256', secret).update(body).digest('hex');
-  const response = await fetch(safeUrl, {
-    method: 'POST',
+  const response = await sendWebhook(safeUrl, {
     headers: {
       'Content-Type': 'application/json',
       'X-Fintap-Event-Id': event.id,
       'X-Webhook-Signature': signature,
     },
     body,
-    signal: AbortSignal.timeout(8000),
   });
   if (!response.ok) throw new Error(`Webhook returned HTTP ${response.status}`);
   await markDelivered(event.id);
@@ -101,7 +103,12 @@ const tick = async () => {
   if (stopping || working) return;
   working = true;
   try {
+    if (Date.now() - lastExpirySweep > 60000) {
+      await pool.query("UPDATE org_payment_records SET status = 'expired' WHERE status = 'pending' AND expiry_date <= UTC_TIMESTAMP()");
+      lastExpirySweep = Date.now();
+    }
     const event = await claimEvent();
+    await pool.query("INSERT INTO worker_health (name, heartbeat_at) VALUES ('outbox', UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE heartbeat_at = UTC_TIMESTAMP()");
     if (event) {
       try { await deliver(event); }
       catch (error) {

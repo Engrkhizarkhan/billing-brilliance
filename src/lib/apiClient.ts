@@ -66,7 +66,7 @@ const processRefreshQueue = (token: string | null, error?: Error) => {
   refreshQueue = [];
 };
 
-const attemptTokenRefresh = async (): Promise<string> => {
+export const attemptTokenRefresh = async (): Promise<string> => {
   if (isRefreshing) {
     return new Promise<string>((resolve, reject) => {
       refreshQueue.push({ resolve, reject });
@@ -75,19 +75,18 @@ const attemptTokenRefresh = async (): Promise<string> => {
 
   isRefreshing = true;
   try {
-    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({}),
-    });
-
-    if (!res.ok) {
-      clearTokens();
-      throw new Error('Token refresh failed');
-    }
-
-    const json = await res.json();
+    const refresh = async () => {
+      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', body: JSON.stringify({}),
+      });
+      if (!res.ok) throw new Error('Token refresh failed');
+      return res.json();
+    };
+    // Serialize shared-cookie rotation across tabs, as well as within this tab.
+    const json = navigator.locks
+      ? await navigator.locks.request('fintap-refresh', refresh)
+      : await refresh();
     const newAccess = json.data.token;
     setTokens(newAccess);
     processRefreshQueue(newAccess);

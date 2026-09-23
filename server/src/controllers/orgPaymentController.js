@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const config = require('../config');
 
 const { pool } = require('../config/database');
-const logger = require('../config/logger');
+const { assertIntegrationPolicy } = require('../services/integrationPolicy');
 const { AppError } = require('../middleware/errorHandler');
 const { auditLog } = require('../middleware/auditLog');
 const { allocateConsumerNumber } = require('../services/consumerNumberService');
@@ -50,46 +50,7 @@ const assertSecurity = async (req, options = {}) => {
     throw new AppError('HTTPS is required', 403, 'HTTPS_REQUIRED');
   }
 
-  // If request is JWT-authenticated (dashboard users), skip API key and IP checks
-  if (!req.user) {
-    // API Key check for external integrations — tenant-specific key already validated by middleware
-    // but assertSecurity may be reached directly, so check header presence only
-    const apiKey = req.headers['x-api-key'];
-    if (!apiKey) {
-      throw new AppError('Invalid API key', 401, 'INVALID_API_KEY');
-    }
-
-    // Per-tenant IP whitelist — configured by org admin in settings, stored in DB
-    if (req.tenantId) {
-      const [settingRows] = await pool.query(
-        `SELECT value FROM settings
-         WHERE tenant_id = ? AND \`key\` IN ('org_security_context', 'etea_security_context')
-         ORDER BY \`key\` = 'org_security_context' DESC LIMIT 1`,
-        [req.tenantId]
-      );
-      let setting = {};
-      if (settingRows.length > 0) {
-        const rawValue = settingRows[0].value;
-        if (rawValue && typeof rawValue === 'object') setting = rawValue;
-        else try { setting = JSON.parse(rawValue); } catch { /* handled below */ }
-      }
-      const rawIps = setting.sourceIp;
-      const allowedIps = (Array.isArray(rawIps) ? rawIps : String(rawIps || '').split(','))
-        .map((ip) => ip.trim().replace(/^::ffff:/, ''))
-        .filter(Boolean);
-      if (config.nodeEnv === 'production' && allowedIps.length === 0) {
-        throw new AppError('Source IP allowlist is not configured', 503, 'IP_ALLOWLIST_REQUIRED');
-      }
-      if (allowedIps.length > 0) {
-        const raw = req.ip || req.connection?.remoteAddress || '';
-        const ip = raw.replace(/^::ffff:/, '');
-        if (!allowedIps.includes(ip)) {
-          logger.warn(`IP_BLOCKED: incoming="${ip}"`);
-          throw new AppError('Source IP not whitelisted', 403, 'IP_BLOCKED');
-        }
-      }
-    }
-  }
+  await assertIntegrationPolicy(req, req.tenantId);
 
   // Webhook signature validation (only for callbacks)
   if (options.requireWebhookSignature && options.callback && REQUIRE_WEBHOOK_SIGNATURE) {
@@ -120,10 +81,11 @@ const ensurePaymentNotStale = async (payment, executor = pool) => {
   if (parseDbDate(payment.expiry_date).getTime() > Date.now()) return payment;
 
   await executor.query(
-    'UPDATE org_payment_records SET status = ? WHERE id = ? AND tenant_id = ?',
-    ['expired', payment.id, payment.tenant_id]
+    "UPDATE org_payment_records SET status = 'expired' WHERE id = ? AND tenant_id = ? AND status = 'pending' AND expiry_date <= UTC_TIMESTAMP()",
+    [payment.id, payment.tenant_id]
   );
-  return { ...payment, status: 'expired' };
+  const [[current]] = await executor.query('SELECT * FROM org_payment_records WHERE id = ? AND tenant_id = ?', [payment.id, payment.tenant_id]);
+  return current || payment;
 };
 
 // ---- POST /api/payments/create ----
@@ -455,8 +417,12 @@ const listPayments = async (req, res, next) => {
               p.id AS posted_payment_id, p.source AS payment_source,
               p.receipt_number AS payment_receipt_number
        FROM org_payment_records opr
-       LEFT JOIN payment_allocations pa ON pa.target_type = 'org_payment' AND pa.target_id = opr.id
-       LEFT JOIN payments p ON p.id = pa.payment_id AND p.tenant_id = opr.tenant_id
+       LEFT JOIN payments p ON p.id = (
+         SELECT p2.id FROM payment_allocations pa JOIN payments p2 ON p2.id = pa.payment_id
+         WHERE pa.target_type = 'org_payment' AND pa.target_id = opr.id AND pa.tenant_id = opr.tenant_id
+           AND p2.tenant_id = opr.tenant_id AND p2.status = 'posted' AND p2.reversal_of_payment_id IS NULL
+         ORDER BY p2.received_at DESC, p2.id DESC LIMIT 1
+       )
        ${where}
        ORDER BY opr.created_at DESC LIMIT ? OFFSET ?`,
       [...params, limit, offset]

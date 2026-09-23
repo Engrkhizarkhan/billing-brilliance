@@ -15,7 +15,9 @@
     "test:integration": "jest tests/api.test.js --runInBand --detectOpenHandles --forceExit",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "test:hardening": "jest tests/integration --runInBand --detectOpenHandles",
+    "reconcile": "node src/operations/reconcile.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/QueryError';
 import { useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -21,7 +22,7 @@ const STATUS_COLORS: Record<string, string> = {
 const OrgReports = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
 
-  const { data: statsData, loading } = useApiQuery(() => api.getOrgStats(), [paymentVersion]);
+  const { data: statsData, loading, error: queryError0 } = useApiQuery(() => api.getOrgStats(), [paymentVersion]);
 
   // ── Monthly collections (bar + line combined) ─────────────────────────────
   const monthlyCollections = useMemo(() => (statsData?.collectionTrend || []).map((row) => ({
@@ -58,6 +59,8 @@ const OrgReports = () => {
   }, [monthlyCollections]);
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+
+  if (queryError0) return <QueryError message={queryError0} />;
 
   return (
     <div className="space-y-6 animate-fade-in">

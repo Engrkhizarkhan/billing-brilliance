@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import { useApiQuery } from '@/hooks/useApiQuery';
+import { QueryError } from '@/components/QueryError';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api } from '@/lib/api';
 import { FilterBar } from '@/components/FilterBar';
@@ -61,29 +63,15 @@ const AuditTrail = () => {
   const [entityFilter, setEntityFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
-  const [logs, setLogs] = useState<AuditLog[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
   const deferredSearch = useDebouncedValue(search.trim());
-
-  const fetchLogs = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await api.fetchAuditLogs({
-        page,
-        pageSize,
-        search: deferredSearch || undefined,
-        action: actionFilter !== 'all' ? actionFilter : undefined,
-        entity: entityFilter !== 'all' ? entityFilter : undefined,
-      });
-      setLogs((res.data as AuditLog[]) || []);
-      setTotal(res.meta?.total ?? 0);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, pageSize, deferredSearch, actionFilter, entityFilter]);
-
-  useEffect(() => { fetchLogs(); }, [fetchLogs]);
+  const { data, meta, loading, error } = useApiQuery(() => api.fetchAuditLogs({
+    page, pageSize, search: deferredSearch || undefined,
+    action: actionFilter === 'all' ? undefined : actionFilter,
+    entity: entityFilter === 'all' ? undefined : entityFilter,
+  }), [page, pageSize, deferredSearch, actionFilter, entityFilter]);
+  const logs = (data || []) as AuditLog[];
+  const total = meta?.total || 0;
+  if (error) return <QueryError message={error} />;
 
   const resetPage = () => setPage(1);
 

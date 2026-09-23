@@ -1,3 +1,5 @@
+import { TablePagination } from '@/components/TablePagination';
+import { QueryError } from '@/components/QueryError';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api, type StudentDirectoryMeta } from '@/lib/api';
@@ -25,8 +27,8 @@ import { toast } from 'sonner';
 import { ChevronDown, ChevronRight, Plus, Power, UserPlus, X, Search, Loader2 } from 'lucide-react';
 
 const Scholarships = () => {
-  const { data: scholarshipsData, loading: scholarshipsLoading, refetch: refetchScholarships } = useApiQuery(() => api.fetchScholarships({}), []);
-  const { data: assignmentsData, refetch: refetchAssignments } = useApiQuery(() => api.fetchAllScholarshipAssignments(), []);
+  const { data: scholarshipsData, loading: scholarshipsLoading, refetch: refetchScholarships, error: queryError0 } = useApiQuery(() => api.fetchScholarships({}), []);
+  const { data: assignmentsData, refetch: refetchAssignments, error: queryError1 } = useApiQuery(() => api.fetchAllScholarshipAssignments(), []);
 
   const [list, setList] = useState<Scholarship[]>([]);
   const [assignments, setAssignments] = useState<StudentScholarshipAssignment[]>([]);
@@ -51,15 +53,18 @@ const Scholarships = () => {
     effectiveFrom: new Date().toISOString().split('T')[0],
   });
   const deferredStudentLookup = useDebouncedValue(studentLookup.trim());
-  const { data: studentsData, meta: studentMeta, loading: studentsLoading } = useApiQuery<StudentDirectoryRecord[], StudentDirectoryMeta>(
+  const studentCriteria = `${deferredStudentLookup}|${assignmentForm.scope}|${assignmentForm.className}|${assignmentForm.section}`;
+  const [studentPaging, setStudentPaging] = useState({ criteria: '', page: 1 });
+  const studentPage = studentPaging.criteria === studentCriteria ? studentPaging.page : 1;
+  const { data: studentsData, meta: studentMeta, loading: studentsLoading, error: queryError2 } = useApiQuery<StudentDirectoryRecord[], StudentDirectoryMeta>(
     () => api.fetchStudents({
-      pageSize: 120,
+      page: studentPage, pageSize: 50,
       search: deferredStudentLookup || undefined,
       className: assignmentForm.scope === 'class' ? assignmentForm.className : undefined,
       section: assignmentForm.scope === 'class' && assignmentForm.section !== 'all' ? assignmentForm.section : undefined,
       status: 'active',
     }),
-    [deferredStudentLookup, assignmentForm.scope, assignmentForm.className, assignmentForm.section]
+    [deferredStudentLookup, assignmentForm.scope, assignmentForm.className, assignmentForm.section, studentPage]
   );
   const studentDirectory = useMemo(() => (studentsData || []) as StudentDirectoryRecord[], [studentsData]);
 
@@ -284,6 +289,8 @@ const Scholarships = () => {
     return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
   }
 
+  if (queryError0 || queryError1 || queryError2) return <QueryError message={queryError0 || queryError1 || queryError2} />;
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -335,7 +342,10 @@ const Scholarships = () => {
                   <div>
                     <Label>Student</Label>
                     <div className="space-y-2">
-                      <div className="relative">
+                      <TablePagination total={studentMeta?.total || 0} page={studentPage} pageSize={50}
+                    onPageChange={(page) => setStudentPaging({ criteria: studentCriteria, page })}
+                    onPageSizeChange={() => {}} pageSizeOptions={[50]} />
+                  <div className="relative">
                         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <Input
                           value={studentLookup}
@@ -364,7 +374,7 @@ const Scholarships = () => {
                           })
                         )}
                       </div>
-                      <p className="text-[11px] text-muted-foreground">Showing up to 120 students. Narrow the search to find specific students quickly.</p>
+                      <p className="text-[11px] text-muted-foreground">Use the page controls or search to find students.</p>
                     </div>
                   </div>
                 ) : (

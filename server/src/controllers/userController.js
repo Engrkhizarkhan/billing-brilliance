@@ -1,3 +1,4 @@
+const { replacePassword } = require('../services/sessionService');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
@@ -194,7 +195,11 @@ const resetPassword = async (req, res, next) => {
     assertNotProtectedAdminUser(userRows[0], 'password-reset');
 
     const hash = await bcrypt.hash(newPassword, 12);
-    await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, req.params.id]);
+    const target = userRows[0];
+    if (req.user.role !== 'admin' && !(req.user.role === 'school' && req.user.school_access_role === 'admin'
+      && req.user.tenant_id && target.tenant_id === req.user.tenant_id && target.role === 'school'
+      && target.main_school_user_id && target.id !== req.user.id)) throw new AppError('Only an administrator of this school can reset a sub-user password', 403);
+    await replacePassword(req.params.id, hash);
     await auditLog(req, 'update', 'user', req.params.id, 'Password reset by admin');
     await createNotification({
       tenantId: userRows[0].tenant_id || null,
@@ -337,15 +342,18 @@ const deleteSchoolUser = async (req, res, next) => {
 };
 
 const updateUser = async (req, res, next) => {
+  let connection;
   try {
     const { id } = req.params;
     const { name, email, verified, schoolAccessRole } = req.body;
 
-    const [rows] = await pool.query('SELECT * FROM users WHERE id = ? AND deleted_at IS NULL', [id]);
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [rows] = await connection.query('SELECT * FROM users WHERE id = ? AND deleted_at IS NULL FOR UPDATE', [id]);
     if (rows.length === 0) throw new AppError('User not found', 404);
     assertNotProtectedAdminUser(rows[0], 'updated');
 
-    if (req.user.role !== 'admin' && req.tenantId && rows[0].tenant_id !== req.tenantId) {
+    if (req.user.role !== 'admin' && (!req.tenantId || rows[0].tenant_id !== req.tenantId)) {
       throw new AppError('Access denied', 403);
     }
     if (req.user.role !== 'admin' && (req.user.school_access_role !== 'admin' || rows[0].role !== 'school')) {
@@ -353,7 +361,7 @@ const updateUser = async (req, res, next) => {
     }
 
     if (email && email !== rows[0].email) {
-      const [dup] = await pool.query('SELECT id FROM users WHERE email = ? AND id != ? AND deleted_at IS NULL', [email, id]);
+      const [dup] = await connection.query('SELECT id FROM users WHERE email = ? AND id != ? AND deleted_at IS NULL', [email, id]);
       if (dup.length > 0) throw new AppError('Another user already has this email', 409);
     }
 
@@ -365,13 +373,21 @@ const updateUser = async (req, res, next) => {
     if (verified !== undefined) { fields.push('verified = ?'); values.push(verified ? 1 : 0); }
     if (schoolAccessRole !== undefined) { fields.push('school_access_role = ?'); values.push(schoolAccessRole); }
 
+    if (req.body.newPassword) {
+      if (typeof req.body.newPassword !== 'string' || req.body.newPassword.length < 12) throw new AppError('Password must be at least 12 characters', 400);
+      if (req.user.role !== 'admin' && (!rows[0].main_school_user_id || rows[0].id === req.user.id)) throw new AppError('Use the account password workflow for this user', 403);
+      fields.push('password_hash = ?', 'auth_version = auth_version + 1');
+      values.push(await bcrypt.hash(req.body.newPassword, 12));
+    }
     if (fields.length === 0) throw new AppError('No fields to update', 400);
 
     values.push(id);
-    await pool.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, values);
+    await connection.query(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, values);
+    if (req.body.newPassword) await connection.query('UPDATE refresh_tokens SET revoked_at = UTC_TIMESTAMP() WHERE user_id = ?', [id]);
+    await connection.commit();
     await auditLog(req, 'update', 'user', id, `User updated: ${fields.join(', ')}`);
 
-    const [updated] = await pool.query(
+    const [updated] = await connection.query(
       `SELECT u.id, u.tenant_id, u.email, u.name, u.role, u.school_access_role, u.school_ref, u.main_school_user_id,
               u.status, u.verified, u.created_at, t.name AS tenant_name, t.biller_code
        FROM users u LEFT JOIN tenants t ON t.id = u.tenant_id AND t.deleted_at IS NULL
@@ -381,8 +397,9 @@ const updateUser = async (req, res, next) => {
 
     res.json({ data: decorateProtectedUser(updated[0]), message: 'User updated' });
   } catch (err) {
+    if (connection) await connection.rollback();
     next(err);
-  }
+  } finally { if (connection) connection.release(); }
 };
 
 module.exports = {

@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/QueryError';
 import { useMemo, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -45,7 +46,7 @@ const LoginActivity = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const { data, loading } = useApiQuery(() => api.fetchAuditLogs({ action: 'login', pageSize: 500 }), []);
+  const { data, loading, error: queryError0 } = useApiQuery(() => api.fetchAuditLogs({ action: 'login', pageSize: 500 }), []);
 
   const events = useMemo(() => {
     const logs = (data || []) as AuditLog[];
@@ -74,6 +75,8 @@ const LoginActivity = () => {
   }, [events, roleFilter, search]);
 
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  if (queryError0) return <QueryError message={queryError0} />;
 
   return (
     <div className="space-y-6 animate-fade-in">

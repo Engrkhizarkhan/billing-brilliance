@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/QueryError';
 import { useState } from 'react';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api } from '@/lib/api';
@@ -38,7 +39,7 @@ const InvoiceList = () => {
   });
   const deferredSearch = useDebouncedValue(search.trim());
 
-  const { data, meta, loading, refetch: refetchInvoices } = useApiQuery(
+  const { data, meta, loading, refetch: refetchInvoices, error: queryError0 } = useApiQuery(
     () => api.fetchInvoices({
       page,
       pageSize,
@@ -49,7 +50,7 @@ const InvoiceList = () => {
     [page, pageSize, deferredSearch, statusFilter, classFilter, paymentVersion]
   );
   const invoices = (data || []) as Invoice[];
-  const { data: studentsData } = useApiQuery(
+  const { data: studentsData, error: queryError1 } = useApiQuery(
     () => api.fetchStudents({ page: 1, pageSize: 100, status: 'active' }),
     [createDialogOpen]
   );
@@ -117,6 +118,8 @@ const InvoiceList = () => {
   };
 
   if (loading) return <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+
+  if (queryError0 || queryError1) return <QueryError message={queryError0 || queryError1} />;
 
   return (
     <div className="space-y-6 animate-fade-in">

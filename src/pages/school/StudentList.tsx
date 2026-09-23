@@ -1,3 +1,5 @@
+import { parseCsv } from '@/lib/csv';
+import { QueryError } from '@/components/QueryError';
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api, StudentDirectoryMeta } from '@/lib/api';
@@ -106,7 +108,7 @@ const StudentList = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const deferredSearch = useDebouncedValue(search.trim());
-  const { data: studentsData, meta: studentsMeta, loading: studentsLoading, refetch } = useApiQuery<StudentDirectoryRecord[], StudentDirectoryMeta>(
+  const { data: studentsData, meta: studentsMeta, loading: studentsLoading, refetch, error: queryError0 } = useApiQuery<StudentDirectoryRecord[], StudentDirectoryMeta>(
     () => api.fetchStudents({
       page,
       pageSize,
@@ -355,38 +357,24 @@ const StudentList = () => {
     return s;
   };
 
-  const parseCsvLine = (line: string): string[] => {
-    const result: string[] = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        inQuotes = !inQuotes;
-      } else if (ch === ',' && !inQuotes) {
-        result.push(current);
-        current = '';
-      } else {
-        current += ch;
-      }
-    }
-    result.push(current);
-    return result;
-  };
-
   const handleFileImport = async (file: File) => {
-    const text = await file.text();
-    const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-    if (lines.length < 2) {
-      toast.error('CSV file is empty or has no data rows');
-      return;
+    if (!/\.csv$/i.test(file.name)) { toast.error('Please select a CSV file'); return; }
+    let rows: string[][];
+    try { rows = parseCsv(await file.text()); }
+    catch (error) { toast.error(error instanceof Error ? error.message : 'Invalid CSV'); return; }
+    if (rows.length < 2) { toast.error('CSV file has no data rows'); return; }
+    const expected = ['Name', 'Father Name', 'Roll Number', 'Class', 'Section', 'Phone', 'CNIC', 'Gender', 'Date of Birth', 'Address', 'Bus Service', 'Bus Start Month', 'Bus Monthly Fee'];
+    if (expected.some((name, index) => rows[0][index]?.trim().toLowerCase() !== name.toLowerCase())) {
+      toast.error('CSV headers must match the downloadable template'); return;
     }
-    const dataRows = lines.slice(1);
+    const dataRows = rows.slice(1);
+    const invalid = dataRows.findIndex(row => row.length !== expected.length || !row[0]?.trim() || !row[1]?.trim() || !row[3]?.trim());
+    if (invalid >= 0) { toast.error(`Row ${invalid + 2}: check column count, name, father name, and class`); return; }
     setBulkImporting(true);
     let successCount = 0;
     let failCount = 0;
-    for (const line of dataRows) {
-      const cols = parseCsvLine(line);
+    const failures: number[] = [];
+    for (const [rowIndex, cols] of dataRows.entries()) {
       if (cols.length < 4) continue;
       const [name, fatherName, rollNumber, cls, section, phone, cnic, gender, dateOfBirth, address, busService, busStartMonth, busMonthlyFeeStr] = cols;
       if (!name?.trim() || !fatherName?.trim()) { failCount++; continue; }
@@ -414,6 +402,7 @@ const StudentList = () => {
         });
         successCount++;
       } catch {
+        failures.push(rowIndex + 2);
         failCount++;
       }
     }
@@ -424,7 +413,7 @@ const StudentList = () => {
     if (failCount === 0) {
       toast.success(`${successCount} student(s) imported successfully`);
     } else {
-      toast.warning(`${successCount} imported, ${failCount} failed — check names and required fields`);
+      toast.warning(`${successCount} imported; failed CSV rows: ${failures.join(", ")}. Correct and retry only these rows.`);
     }
   };
 
@@ -440,6 +429,8 @@ const StudentList = () => {
   if (studentsLoading) {
     return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
   }
+
+  if (queryError0) return <QueryError message={queryError0} />;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -476,7 +467,7 @@ const StudentList = () => {
                   <FileText className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
                   <p className="text-sm font-semibold">Upload CSV file</p>
                   <p className="text-xs text-muted-foreground mt-1">Name, Father Name, Roll #, Class, Section, Phone, CNIC, Bus Service, Bus Start Month, Bus Monthly Fee</p>
-                  <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileImport(f); }} />
+                  <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileImport(f); }} />
                   <Button variant="outline" size="sm" className="mt-4 rounded-lg" onClick={() => fileInputRef.current?.click()} disabled={bulkImporting}>
                     {bulkImporting ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Importing…</> : 'Choose File'}
                   </Button>

@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/QueryError';
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
@@ -15,7 +16,7 @@ import { Badge } from '@/components/ui/badge';
 const emptyForm = { name: '', amount: '', frequency: 'monthly' as FeePlan['frequency'], dueDay: '10', lateFee: '', planType: 'tuition' as FeePlan['planType'] };
 
 const FeePlans = () => {
-  const { data: plansData, loading, refetch } = useApiQuery(() => api.fetchFeePlans(), []);
+  const { data: plansData, loading, refetch, error: queryError0 } = useApiQuery(() => api.fetchFeePlans(), []);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<FeePlan | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -93,6 +94,8 @@ const FeePlans = () => {
       setDeletingId(null);
     }
   };
+
+  if (queryError0) return <QueryError message={queryError0} />;
 
   return (
     <div className="space-y-6 animate-fade-in">

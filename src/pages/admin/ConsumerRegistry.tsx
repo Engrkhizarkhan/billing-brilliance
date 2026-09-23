@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/QueryError';
 import { useState } from 'react';
 import { AlertCircle, Check, Clipboard, GraduationCap, Hash, ReceiptText, Search, UserRoundCheck } from 'lucide-react';
 import { toast } from 'sonner';
@@ -36,7 +37,7 @@ const ConsumerRegistry = () => {
   const [copied, setCopied] = useState('');
   const debouncedSearch = useDebouncedValue(search.trim());
 
-  const { data, meta, loading, error } = useApiQuery<ConsumerRegistryRecord[], ConsumerRegistryMeta>(
+  const { data, meta, loading, error, error: queryError0 } = useApiQuery<ConsumerRegistryRecord[], ConsumerRegistryMeta>(
     () => api.fetchConsumerRegistry({
       page,
       pageSize,
@@ -65,6 +66,8 @@ const ConsumerRegistry = () => {
     toast.success('Consumer number copied');
     window.setTimeout(() => setCopied(''), 1500);
   };
+
+  if (queryError0) return <QueryError message={queryError0} />;
 
   return (
     <div className="space-y-6 animate-fade-in">

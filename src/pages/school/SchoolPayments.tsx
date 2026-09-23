@@ -1,4 +1,5 @@
-﻿import { useMemo, useState } from 'react';
+import { QueryError } from '@/components/QueryError';
+import { useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useApiQuery } from '@/hooks/useApiQuery';
@@ -60,12 +61,12 @@ const SchoolPayments = () => {
 
   // Request one row only; the server returns class facets independently of the
   // page so filters do not require downloading the entire student directory.
-  const { meta: studentMeta } = useApiQuery<StudentDirectoryRecord[], StudentDirectoryMeta>(
+  const { meta: studentMeta, error: queryError0 } = useApiQuery<StudentDirectoryRecord[], StudentDirectoryMeta>(
     () => api.fetchStudents({ pageSize: 1 }),
     []
   );
 
-  const { data: historyRaw, meta: historyMeta } = useApiQuery(
+  const { data: historyRaw, meta: historyMeta, error: queryError1 } = useApiQuery(
     () => api.fetchPaymentHistory({
       page,
       pageSize,
@@ -91,6 +92,8 @@ const SchoolPayments = () => {
     () => Array.from(new Set(payments.map((p) => p.date?.slice(0, 7)).filter(Boolean))).sort((a, b) => b.localeCompare(a)),
     [payments]
   );
+
+  if (queryError0 || queryError1) return <QueryError message={queryError0 || queryError1} />;
 
   return (
     <div className="space-y-6 animate-fade-in">

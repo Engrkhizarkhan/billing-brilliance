@@ -1,3 +1,5 @@
+> Historical/reference documentation. For current implementation and operating rules, use [the current guide](CURRENT_SYSTEM.md). Examples and readiness statements below must not be treated as current deployment verification.
+
 # Software Requirements Specification (SRS)
 
 ## Billing Brilliance — Multi-Tenant Education Payment Platform

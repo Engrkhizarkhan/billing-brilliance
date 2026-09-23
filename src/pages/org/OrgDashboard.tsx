@@ -1,3 +1,5 @@
+import { usePaymentStore } from '@/store/paymentStore';
+import { QueryError } from '@/components/QueryError';
 import { useNavigate } from 'react-router-dom';
 import { Activity, CheckCircle2, Code2, Receipt, Wallet } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -21,7 +23,8 @@ const emptyStats = {
 
 const OrgDashboard = () => {
   const navigate = useNavigate();
-  const { data, loading, error, refetch } = useApiQuery(() => api.getOrgStats(), []);
+  const paymentVersion = usePaymentStore(state => state.version);
+  const { data, loading, error, refetch, error: queryError0 } = useApiQuery(() => api.getOrgStats(), [paymentVersion]);
   const stats = data || emptyStats;
   const pipeline = [
     { label: 'Pending', value: stats.pending, color: 'bg-warning' },
@@ -30,6 +33,8 @@ const OrgDashboard = () => {
     { label: 'Expired', value: stats.expired, color: 'bg-muted-foreground' },
   ];
   const maxPipelineValue = Math.max(...pipeline.map((item) => item.value), 1);
+
+  if (queryError0) return <QueryError message={queryError0} />;
 
   return (
     <div className="space-y-6 animate-fade-in">

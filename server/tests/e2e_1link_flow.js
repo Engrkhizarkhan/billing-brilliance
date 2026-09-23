@@ -4,8 +4,9 @@
  * Inquiry is safe and always runs. Payment runs only when E2E_ALLOW_PAYMENT=true.
  * Use a disposable sandbox/UAT consumer; never point this script at production data.
  */
-require('dotenv').config();
+require('../src/config');
 const http = require('http');
+const https = require('https');
 
 const base = new URL(process.env.E2E_BASE_URL || 'http://127.0.0.1:3000');
 const consumerNumber = process.env.E2E_CONSUMER_NUMBER;
@@ -16,9 +17,10 @@ const sourceIp = process.env.E2E_SOURCE_IP;
 
 const request = (path, body) => new Promise((resolve, reject) => {
   const payload = JSON.stringify(body);
-  const req = http.request({
+  const transport = base.protocol === 'https:' ? https : http;
+  const req = transport.request({
     hostname: base.hostname,
-    port: base.port || 80,
+    port: base.port || (base.protocol === 'https:' ? 443 : 80),
     path,
     method: 'POST',
     headers: {
@@ -31,8 +33,9 @@ const request = (path, body) => new Promise((resolve, reject) => {
   }, (res) => {
     let text = '';
     res.on('data', (chunk) => { text += chunk; });
-    res.on('end', () => resolve({ status: res.statusCode, body: JSON.parse(text) }));
+    res.on('end', () => { try { resolve({ status: res.statusCode, body: JSON.parse(text) }); } catch { reject(new Error('Provider endpoint returned invalid JSON')); } });
   });
+  req.setTimeout(10000, () => req.destroy(new Error('Provider request timed out')));
   req.on('error', reject);
   req.end(payload);
 });
@@ -63,7 +66,9 @@ async function run() {
     return;
   }
   assert(inquiry.body.bill_status === 'U', 'Consumer is not unpaid');
-  const minorAmount = amountFromInquiry(inquiry.body.amount_after_dueDate);
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const amountField = inquiry.body.due_date && today > inquiry.body.due_date ? 'amount_after_dueDate' : 'amount_within_dueDate';
+  const minorAmount = amountFromInquiry(inquiry.body[amountField]);
   assert(Number.isFinite(minorAmount) && minorAmount > 0, 'Inquiry returned no payable amount');
   const parts = nowParts();
   const tranAuthId = String(Math.floor(100000 + Math.random() * 900000));
@@ -83,7 +88,7 @@ async function run() {
 
   const repeat = await request('/api/1.0/Payments/BillPayment', paymentBody);
   console.log(JSON.stringify({ step: 'duplicate-check', result: repeat.body }, null, 2));
-  assert(repeat.body.response_Code === '03' || repeat.body.response_Code === '06', 'Duplicate payment was not rejected');
+  assert(repeat.body.response_Code === '03', 'Duplicate payment was not rejected');
 }
 
 run().catch((error) => {

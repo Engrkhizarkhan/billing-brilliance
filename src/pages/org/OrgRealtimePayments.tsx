@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/QueryError';
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, Loader2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -25,11 +26,11 @@ const OrgRealtimePayments = () => {
     setLastLiveUpdateAt(new Date().toISOString());
   }, [paymentVersion]);
 
-  const { data: paymentsData, loading } = useApiQuery(
+  const { data: paymentsData, loading, error: queryError0 } = useApiQuery(
     () => api.listOrgPayments({ page: 1, pageSize: 30, status: 'paid' }),
     [paymentVersion]
   );
-  const { data: statsData } = useApiQuery(() => api.getOrgStats(), [paymentVersion]);
+  const { data: statsData, error: queryError1 } = useApiQuery(() => api.getOrgStats(), [paymentVersion]);
   const allPayments = useMemo(() => (paymentsData || []) as OrgPaymentRecord[], [paymentsData]);
 
   const paidPayments = useMemo(
@@ -44,6 +45,8 @@ const OrgRealtimePayments = () => {
   const lastPayment = paidPayments[0] || null;
 
   if (loading && allPayments.length === 0) return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+
+  if (queryError0 || queryError1) return <QueryError message={queryError0 || queryError1} />;
 
   return (
     <div className="space-y-6 animate-fade-in">

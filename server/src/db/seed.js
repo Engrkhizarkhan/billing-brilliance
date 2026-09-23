@@ -1,3 +1,5 @@
+const config = require('../config');
+const { assertDisposableDatabase } = require('../services/disposableDatabaseGuard');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { createConnection } = require('./db');      // also loads .env
@@ -10,6 +12,7 @@ function generateConsumerNumber(billerCode, num) {
 }
 
 async function seed() {
+  assertDisposableDatabase(config);
   // --fresh: truncate all data before seeding
   if (process.argv.includes('--fresh')) {
     logger.info('--fresh flag detected — resetting database before seeding...');

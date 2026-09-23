@@ -2,6 +2,8 @@ const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const { auditLog } = require('../middleware/auditLog');
+const { lockBillingTenant, createInvoiceCharges } = require('../services/invoiceAccountingService');
+const { billingDueDate, money } = require('../services/billingRules');
 const { createRequestNotification } = require('../services/notificationService');
 
 const fetchInvoices = async (req, res, next) => {
@@ -69,322 +71,142 @@ const createInvoice = async (req, res, next) => {
   try {
     const tenantId = req.tenantId || req.body.tenantId;
     if (!tenantId) throw new AppError('Tenant ID is required', 400);
-
     const { studentId, month, amount, dueDate } = req.body;
-    const normalizedAmount = Number(amount);
-    if (!studentId) throw new AppError('Student is required', 400, 'STUDENT_REQUIRED');
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(month || ''))) {
-      throw new AppError('Billing month must use YYYY-MM format', 400, 'INVALID_BILLING_MONTH');
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dueDate || '')) || Number.isNaN(Date.parse(`${dueDate}T00:00:00Z`))) {
-      throw new AppError('Due date must use YYYY-MM-DD format', 400, 'INVALID_DUE_DATE');
-    }
-    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
-      throw new AppError('Amount must be greater than zero', 400, 'INVALID_AMOUNT');
-    }
-
+    if (!studentId || !Number.isFinite(Number(amount)) || Number(amount) <= 0) throw new AppError('Student and positive amount are required', 400, 'INVALID_AMOUNT');
     connection = await pool.getConnection();
     await connection.beginTransaction();
-    // Serialize numbering per tenant so concurrent manual/batch runs cannot collide.
-    await connection.query('SELECT id FROM tenants WHERE id = ? FOR UPDATE', [tenantId]);
-    const [studentRows] = await connection.query(
-      `SELECT id, name, consumer_number FROM students
-       WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL LIMIT 1 FOR UPDATE`,
-      [studentId, tenantId]
-    );
-    if (!studentRows.length) throw new AppError('Student not found', 404, 'STUDENT_NOT_FOUND');
-    const student = studentRows[0];
-    const [seqRows] = await connection.query(
-      `SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(invoice_number, '-', -1) AS UNSIGNED)), 10000) AS max_seq
-       FROM invoices WHERE tenant_id = ?`,
-      [tenantId]
-    );
-    const invoiceNumber = `INV-${String(Number(seqRows[0].max_seq) + 1)}`;
-
-    const id = uuidv4();
-    await connection.query(
-      `INSERT INTO invoices (id, tenant_id, invoice_number, student_id, student_name, consumer_number, month, amount, status, due_date)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
-      [id, tenantId, invoiceNumber, student.id, student.name, student.consumer_number, month, normalizedAmount, dueDate]
-    );
+    await lockBillingTenant(connection, tenantId);
+    const [invoice] = await createInvoiceCharges(connection, tenantId, [{ studentId, month, amount, dueDate }]);
     await connection.commit();
-
-    await auditLog(req, 'create', 'invoice', id, `Invoice ${invoiceNumber} for ${normalizedAmount}`);
-    await createRequestNotification(req, {
-      title: 'Invoice created',
-      message: `Invoice ${invoiceNumber} was generated for ${student.name}.`,
-      type: 'system',
-      tenantId,
-    });
-
-    const [rows] = await pool.query('SELECT * FROM invoices WHERE id = ?', [id]);
-    res.status(201).json({ data: rows[0], message: 'Invoice created' });
+    await auditLog(req, 'create', 'invoice', invoice.id, `Invoice ${invoice.invoiceNumber} for ${invoice.amount}`);
+    const [[row]] = await pool.query('SELECT * FROM invoices WHERE id = ? AND tenant_id = ?', [invoice.id, tenantId]);
+    res.status(201).json({ data: row, message: 'Invoice created' });
   } catch (err) {
     if (connection) await connection.rollback();
     next(err);
-  } finally {
-    if (connection) connection.release();
-  }
+  } finally { if (connection) connection.release(); }
 };
 
 const updateInvoiceStatus = async (req, res, next) => {
   try {
     const { status } = req.body;
-    if (!['pending', 'paid', 'overdue'].includes(status)) {
-      throw new AppError('Invalid status', 400);
-    }
-    if (status === 'paid') {
-      throw new AppError(
-        'Use Record payment so the payment, transaction, ledger and audit trail are created together',
-        409,
-        'PAYMENT_POSTING_REQUIRED'
-      );
-    }
-
+    if (!['pending', 'overdue'].includes(status)) throw new AppError('Payment states require the payment or reversal workflow', 409, 'PAYMENT_POSTING_REQUIRED');
     let where = 'WHERE id = ? AND deleted_at IS NULL';
     const params = [req.params.id];
     if (req.tenantId) { where += ' AND tenant_id = ?'; params.push(req.tenantId); }
-
-    const [existing] = await pool.query(`SELECT * FROM invoices ${where}`, params);
-    if (existing.length === 0) throw new AppError('Invoice not found', 404);
-
-    await pool.query(
-      `UPDATE invoices SET status = ?, paid_at = ? WHERE id = ?`,
-      [status, null, req.params.id]
-    );
-
-    await auditLog(req, 'update', 'invoice', req.params.id, `Invoice status → ${status}`);
-    await createRequestNotification(req, {
-      title: 'Invoice status updated',
-      message: `Invoice ${existing[0].invoice_number} is now ${status}.`,
-      type: status === 'overdue' ? 'alert' : 'system',
-    });
-
-    const [rows] = await pool.query('SELECT * FROM invoices WHERE id = ?', [req.params.id]);
-    res.json({ data: rows[0], message: 'Invoice updated' });
-  } catch (err) {
-    next(err);
-  }
+    const [[existing]] = await pool.query(`SELECT * FROM invoices ${where}`, params);
+    if (!existing) throw new AppError('Invoice not found', 404);
+    if (existing.status === 'paid') throw new AppError('Reverse the payment before changing a settled invoice', 409, 'PAYMENT_IMMUTABLE');
+    const [updated] = await pool.query(`UPDATE invoices SET status = ? ${where} AND status != 'paid'`, [status, ...params]);
+    if (!updated.affectedRows) throw new AppError('Invoice changed; refresh and retry', 409, 'INVOICE_STATE_CHANGED');
+    await auditLog(req, 'update', 'invoice', existing.id, `Invoice status → ${status}`);
+    res.json({ data: { ...existing, status }, message: 'Invoice updated' });
+  } catch (err) { next(err); }
 };
 
 const deleteInvoice = async (req, res, next) => {
+  let connection;
   try {
     let where = 'WHERE id = ? AND deleted_at IS NULL';
     const params = [req.params.id];
     if (req.tenantId) { where += ' AND tenant_id = ?'; params.push(req.tenantId); }
-
-    const [existing] = await pool.query(`SELECT * FROM invoices ${where}`, params);
-    if (existing.length === 0) throw new AppError('Invoice not found', 404);
-
-    if (existing[0].status !== 'pending') {
-      throw new AppError('Only pending invoices can be deleted', 400);
-    }
-
-    await pool.query('UPDATE invoices SET deleted_at = NOW() WHERE id = ?', [req.params.id]);
-    await auditLog(req, 'delete', 'invoice', req.params.id, `Invoice ${existing[0].invoice_number} deleted`);
-
-    res.json({ data: true, message: `Invoice ${existing[0].invoice_number} deleted` });
+    const [[target]] = await pool.query(`SELECT tenant_id FROM invoices ${where}`, params);
+    if (!target) throw new AppError('Invoice not found', 404);
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    await lockBillingTenant(connection, target.tenant_id);
+    const [[invoice]] = await connection.query(`SELECT * FROM invoices ${where} FOR UPDATE`, params);
+    if (!invoice || invoice.status !== 'pending') throw new AppError('Only pending invoices can be cancelled', 409, 'INVOICE_STATE_CHANGED');
+    const [[charge]] = await connection.query(`SELECT COALESCE(SUM(debit-credit),0) AS amount FROM ledger_entries
+      WHERE tenant_id = ? AND student_id = ? AND entry_type = 'charge' AND (reference = ? OR bill_id = ?)`,
+    [invoice.tenant_id, invoice.student_id, invoice.invoice_number, invoice.invoice_number]);
+    if (money(charge.amount) !== money(invoice.amount)) throw new AppError('This legacy invoice needs ledger reconciliation before cancellation', 409, 'LEDGER_RECONCILIATION_REQUIRED');
+    const [[totals]] = await connection.query('SELECT COALESCE(SUM(debit-credit),0) AS balance FROM ledger_entries WHERE tenant_id = ? AND student_id = ?', [invoice.tenant_id, invoice.student_id]);
+    const balance = money(Number(totals.balance) - Number(charge.amount));
+    await connection.query(`INSERT INTO ledger_entries
+      (id, tenant_id, student_id, date, description, debit, credit, balance, bill_id, reference, entry_type)
+      VALUES (?, ?, ?, UTC_DATE(), ?, 0, ?, ?, ?, ?, 'adjustment')`,
+    [uuidv4(), invoice.tenant_id, invoice.student_id, `Invoice cancellation — ${invoice.invoice_number}`, charge.amount, balance, invoice.invoice_number, `CANCEL-${invoice.id}`]);
+    await connection.query('UPDATE students SET balance = ? WHERE id = ? AND tenant_id = ?', [balance, invoice.student_id, invoice.tenant_id]);
+    await connection.query('UPDATE invoices SET deleted_at = UTC_TIMESTAMP() WHERE id = ? AND tenant_id = ?', [invoice.id, invoice.tenant_id]);
+    await connection.query(`INSERT INTO audit_logs (id, tenant_id, user_id, user_name, action, entity, entity_id, details)
+      VALUES (?, ?, ?, ?, 'delete', 'invoice', ?, ?)`,
+    [uuidv4(), invoice.tenant_id, req.user?.id || null, req.user?.name || 'Administrator', invoice.id, `Cancelled ${invoice.invoice_number}; ledger credit ${charge.amount}`]);
+    await connection.commit();
+    res.json({ data: true, message: `Invoice ${invoice.invoice_number} cancelled` });
   } catch (err) {
+    if (connection) await connection.rollback();
     next(err);
-  }
+  } finally { if (connection) connection.release(); }
 };
-
 
 const generateInvoicesFromAssignments = async (req, res, next) => {
   let connection;
   try {
     const tenantId = req.tenantId || req.body.tenantId;
     if (!tenantId) throw new AppError('Tenant ID is required', 400);
-
     const month = String(req.body.month || new Date().toISOString().slice(0, 7));
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new AppError('Invalid billing month', 400, 'INVALID_BILLING_MONTH');
     connection = await pool.getConnection();
     await connection.beginTransaction();
-    // One generator per tenant at a time: prevents duplicate month/plan rows and
-    // guarantees that the corresponding ledger entries commit atomically.
-    await connection.query('SELECT id FROM tenants WHERE id = ? FOR UPDATE', [tenantId]);
-
-    const [assignmentRows] = await connection.query(
-      `SELECT ppa.id as assignment_id, ppa.student_id, ppa.next_due_date, s.name as student_name, s.consumer_number,
-              fp.id as fee_plan_id, fp.name as fee_plan_name, fp.amount, fp.due_day, fp.late_fee, fp.frequency,
-              s.uses_bus_service, s.bus_service_start_month, s.bus_service_end_month, s.bus_monthly_fee
-       FROM payment_plan_assignments ppa
-       JOIN students s ON s.id = ppa.student_id AND s.deleted_at IS NULL
-       JOIN fee_plans fp ON fp.id = ppa.fee_plan_id AND fp.deleted_at IS NULL
-       WHERE ppa.tenant_id = ? AND ppa.status = 'active'
-         AND (fp.plan_type = 'tuition' OR fp.plan_type IS NULL)`,
-      [tenantId]
-    );
-
-    const [seqRows] = await connection.query(
-      `SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(invoice_number, '-', -1) AS UNSIGNED)), 10000) AS max_seq
-       FROM invoices WHERE tenant_id = ?`,
-      [tenantId]
-    );
-    let counter = Number(seqRows[0].max_seq);
-    let created = 0;
+    await lockBillingTenant(connection, tenantId);
+    const [assignments] = await connection.query(`SELECT ppa.id AS assignment_id, ppa.student_id, ppa.assigned_date, ppa.next_due_date,
+      fp.id AS fee_plan_id, fp.name AS fee_plan_name, fp.amount, fp.due_day, fp.late_fee, fp.frequency, fp.plan_type,
+      s.uses_bus_service, s.bus_service_start_month, s.bus_service_end_month, s.bus_monthly_fee
+      FROM payment_plan_assignments ppa
+      JOIN students s ON s.id = ppa.student_id AND s.tenant_id = ppa.tenant_id AND s.deleted_at IS NULL AND s.status = 'active'
+      JOIN fee_plans fp ON fp.id = ppa.fee_plan_id AND fp.tenant_id = ppa.tenant_id AND fp.deleted_at IS NULL
+      WHERE ppa.tenant_id = ? AND ppa.status = 'active'`, [tenantId]);
+    const [existing] = await connection.query('SELECT student_id, fee_plan_id FROM invoices WHERE tenant_id = ? AND month = ? AND deleted_at IS NULL', [tenantId, month]);
+    const keys = new Set(existing.map(row => `${row.student_id}:${row.fee_plan_id}`));
+    const [scholarships] = await connection.query(`SELECT ssa.student_id, s.type, s.value FROM student_scholarship_assignments ssa
+      JOIN scholarships s ON s.id = ssa.scholarship_id AND s.tenant_id = ssa.tenant_id AND s.deleted_at IS NULL AND s.status = 'active'
+      WHERE ssa.tenant_id = ? AND ssa.status = 'active' AND ssa.effective_from <= ?
+      AND (s.is_lifetime = 1 OR (s.start_date <= ? AND (s.end_date IS NULL OR s.end_date >= ?)))`, [tenantId, `${month}-01`, `${month}-01`, `${month}-01`]);
+    const description = `Transport Fee — ${month}`;
+    const [busRows] = await connection.query(`SELECT DISTINCT l.student_id FROM ledger_entries l JOIN invoices i
+      ON i.tenant_id = l.tenant_id AND i.invoice_number = l.bill_id AND i.deleted_at IS NULL
+      WHERE l.tenant_id = ? AND l.description = ?`, [tenantId, description]);
+    const busCharged = new Set(busRows.map(row => row.student_id));
+    const charges = [], completed = [];
     let skipped = 0;
-
-    // Preload all batch dependencies. This holds database round-trips roughly
-    // constant as enrolment grows instead of issuing several queries per pupil.
-    const [existingRows] = await connection.query(
-      `SELECT student_id, fee_plan_id FROM invoices
-       WHERE tenant_id = ? AND month = ? AND deleted_at IS NULL`,
-      [tenantId, month]
-    );
-    const existingKeys = new Set(existingRows.map((row) => `${row.student_id}:${row.fee_plan_id}`));
-
-    const [balanceRows] = await connection.query(
-      `SELECT student_id,
-              CAST(SUBSTRING_INDEX(GROUP_CONCAT(balance ORDER BY date DESC, created_at DESC), ',', 1) AS DECIMAL(12,2)) AS balance
-       FROM ledger_entries WHERE tenant_id = ? GROUP BY student_id`,
-      [tenantId]
-    );
-    const studentBalances = Object.fromEntries(balanceRows.map((row) => [row.student_id, Number(row.balance || 0)]));
-
-    const [scholarshipRows] = await connection.query(
-      `SELECT ssa.student_id, s.type, s.value
-       FROM student_scholarship_assignments ssa
-       JOIN scholarships s ON s.id = ssa.scholarship_id AND s.deleted_at IS NULL
-       WHERE ssa.tenant_id = ? AND ssa.status = 'active'
-         AND (s.is_lifetime = 1 OR (s.start_date <= ? AND (s.end_date IS NULL OR s.end_date >= ?)))`,
-      [tenantId, `${month}-01`, `${month}-01`]
-    );
-    const scholarshipsByStudent = new Map();
-    for (const scholarship of scholarshipRows) {
-      const list = scholarshipsByStudent.get(scholarship.student_id) || [];
-      list.push(scholarship);
-      scholarshipsByStudent.set(scholarship.student_id, list);
+    for (const assignment of assignments) {
+      const key = `${assignment.student_id}:${assignment.fee_plan_id}`;
+      const dueDate = billingDueDate(assignment, month);
+      if (!dueDate || keys.has(key)) { skipped++; continue; }
+      keys.add(key);
+      const gross = money(assignment.amount);
+      const discount = assignment.plan_type === 'additional' ? 0 : Math.min(gross, money(scholarships
+        .filter(s => s.student_id === assignment.student_id)
+        .reduce((sum, s) => sum + (s.type === 'percentage' ? gross * Number(s.value) / 100 : Number(s.value)), 0)));
+      const net = money(gross - discount);
+      charges.push({ studentId: assignment.student_id, feePlanId: assignment.fee_plan_id, month, dueDate, lateFee: assignment.late_fee,
+        components: [{ description: `${assignment.fee_plan_name} — ${month}`, amount: net,
+          ...(assignment.plan_type !== 'additional' ? { grossTuition: gross, scholarshipDiscount: discount, netTuition: net } : {}) }] });
+      if (assignment.frequency === 'one-time') completed.push(assignment.assignment_id);
     }
-
-    const transportDescription = `Transport Fee — ${month}`;
-    const [busRows] = await connection.query(
-      `SELECT DISTINCT student_id FROM ledger_entries
-       WHERE tenant_id = ? AND description = ?`,
-      [tenantId, transportDescription]
-    );
-    const busChargedStudents = new Set(busRows.map((row) => row.student_id));
-    const invoiceValues = [];
-    const ledgerValues = [];
-    const completedAssignments = [];
-
-    for (const assignment of assignmentRows) {
-      // Dedup per assignment+month: one invoice per fee plan per student per month
-      const assignmentKey = `${assignment.student_id}:${assignment.fee_plan_id}`;
-      if (existingKeys.has(assignmentKey)) {
-        skipped += 1;
-        continue;
-      }
-      existingKeys.add(assignmentKey);
-      if (!(assignment.student_id in studentBalances)) studentBalances[assignment.student_id] = 0;
-
-      counter += 1;
-      const invoiceId = uuidv4();
-      const invoiceNumber = `INV-${String(10000 + counter)}`;
-      const [year, monthNumber] = month.split('-').map(Number);
-      const lastDay = new Date(year, monthNumber, 0).getDate();
-      const dueDate = `${month}-${String(Math.min(Number(assignment.due_day) || 1, lastDay)).padStart(2, '0')}`;
-
-      // Apply active scholarships
-      const schRows = scholarshipsByStudent.get(assignment.student_id) || [];
-
-      const grossAmount = parseFloat(assignment.amount);
-      let totalDiscount = 0;
-      for (const sch of schRows) {
-        if (sch.type === 'percentage') {
-          totalDiscount += grossAmount * (parseFloat(sch.value) / 100);
-        } else {
-          totalDiscount += parseFloat(sch.value);
-        }
-      }
-      totalDiscount = Math.min(totalDiscount, grossAmount);
-      const netAmount = parseFloat((grossAmount - totalDiscount).toFixed(2));
-
-      // Check bus service eligibility before building the invoice total
-      const busMonthlyFee = parseFloat(assignment.bus_monthly_fee || 0);
-      const busActive = assignment.uses_bus_service &&
-        busMonthlyFee > 0 &&
-        assignment.bus_service_start_month <= month &&
-        (!assignment.bus_service_end_month || assignment.bus_service_end_month >= month);
-
-      // Invoice total = net tuition + bus fee (so one payment clears everything)
-      const invoiceAmount = parseFloat((netAmount + (busActive ? busMonthlyFee : 0)).toFixed(2));
-
-      invoiceValues.push([
-        invoiceId, tenantId, invoiceNumber, assignment.student_id, assignment.fee_plan_id,
-        assignment.student_name, assignment.consumer_number, month, invoiceAmount,
-        parseFloat(assignment.late_fee || 0), 'pending', dueDate,
-      ]);
-
-      // Create ledger charge entry for this fee plan — balance carries the running total
-      studentBalances[assignment.student_id] = parseFloat((studentBalances[assignment.student_id] + netAmount).toFixed(2));
-      const ledgerId = uuidv4();
-      ledgerValues.push([
-        ledgerId, tenantId, assignment.student_id, dueDate, `${assignment.fee_plan_name} — ${month}`,
-        netAmount, 0, studentBalances[assignment.student_id], invoiceNumber, invoiceNumber,
-        'charge', grossAmount, totalDiscount, netAmount,
-      ]);
-
-      // Create ledger charge entry for bus fee if student has active bus service this month
-      if (busActive) {
-        if (!busChargedStudents.has(assignment.student_id)) {
-          studentBalances[assignment.student_id] = parseFloat((studentBalances[assignment.student_id] + busMonthlyFee).toFixed(2));
-          const busLedgerId = uuidv4();
-          ledgerValues.push([
-            busLedgerId, tenantId, assignment.student_id, dueDate, transportDescription,
-            busMonthlyFee, 0, studentBalances[assignment.student_id], invoiceNumber, invoiceNumber,
-            'charge', null, null, null,
-          ]);
-          busChargedStudents.add(assignment.student_id);
-        }
-      }
-
-      created += 1;
-
-      // Auto-complete one-time plans so they don't get charged again on the next run
-      if ((assignment.frequency || '').toLowerCase() === 'one-time') {
-        completedAssignments.push(assignment.assignment_id);
-      }
+    const [transportStudents] = await connection.query(`SELECT id AS student_id, uses_bus_service,
+      bus_service_start_month, bus_service_end_month, bus_monthly_fee FROM students
+      WHERE tenant_id = ? AND deleted_at IS NULL AND status = 'active' AND uses_bus_service = 1`, [tenantId]);
+    for (const student of transportStudents) {
+      if (busCharged.has(student.student_id) || !student.uses_bus_service || Number(student.bus_monthly_fee) <= 0
+        || !student.bus_service_start_month || student.bus_service_start_month > month
+        || (student.bus_service_end_month && student.bus_service_end_month < month)) continue;
+      const component = { description, amount: money(student.bus_monthly_fee) };
+      const invoice = charges.find(charge => charge.studentId === student.student_id);
+      if (invoice) invoice.components.push(component);
+      else charges.push({ studentId: student.student_id, month, dueDate: `${month}-01`, components: [component] });
+      busCharged.add(student.student_id);
     }
-
-    if (invoiceValues.length > 0) {
-      await connection.query(
-        `INSERT INTO invoices
-         (id, tenant_id, invoice_number, student_id, fee_plan_id, student_name, consumer_number, month, amount, late_fee, status, due_date)
-         VALUES ?`,
-        [invoiceValues]
-      );
-    }
-    if (ledgerValues.length > 0) {
-      await connection.query(
-        `INSERT INTO ledger_entries
-         (id, tenant_id, student_id, date, description, debit, credit, balance, bill_id, reference, entry_type, gross_tuition, scholarship_discount, net_tuition)
-         VALUES ?`,
-        [ledgerValues]
-      );
-    }
-    if (completedAssignments.length > 0) {
-      await connection.query(
-        "UPDATE payment_plan_assignments SET status = 'completed' WHERE id IN (?)",
-        [completedAssignments]
-      );
-    }
+    const created = (await createInvoiceCharges(connection, tenantId, charges)).length;
+    if (completed.length) await connection.query("UPDATE payment_plan_assignments SET status = 'completed' WHERE tenant_id = ? AND id IN (?)", [tenantId, completed]);
     await connection.commit();
-
     await auditLog(req, 'create', 'invoice_batch', month, `Generated ${created} invoice(s) for ${month}`);
-    await createRequestNotification(req, {
-      title: 'Fee generation completed',
-      message: `${created} invoice(s) generated for ${month}; ${skipped} skipped because they already existed.`,
-      type: 'system',
-      tenantId,
-    });
-
+    await createRequestNotification(req, { title: 'Fee generation completed', message: `${created} invoice(s) generated; ${skipped} ineligible or existing assignments skipped.`, type: 'system', tenantId });
     res.json({ data: { month, created, skipped }, message: 'Fee generation completed' });
   } catch (err) {
     if (connection) await connection.rollback();
     next(err);
-  } finally {
-    if (connection) connection.release();
-  }
+  } finally { if (connection) connection.release(); }
 };
-
 module.exports = { fetchInvoices, getInvoice, createInvoice, updateInvoiceStatus, deleteInvoice, generateInvoicesFromAssignments };

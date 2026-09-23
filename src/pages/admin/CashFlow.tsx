@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/QueryError';
 import { StatCard } from '@/components/StatCard';
 import { DollarSign, TrendingUp, CreditCard, AlertTriangle, ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -5,97 +6,10 @@ import { useApiQuery } from '@/hooks/useApiQuery';
 import { usePaymentStore } from '@/store/paymentStore';
 import { useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-type InvoiceRecord = { amount: number; status: 'pending' | 'paid' | 'overdue' | string };
-type TransactionRecord = { amount: number; status: 'completed' | 'pending' | 'failed' | string; date: string };
-
-const toDateKey = (value: Date) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
-
-const toMonthKey = (value: string) => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-};
-
-const toMonthLabel = (monthKey: string) => {
-  const [year, month] = monthKey.split('-').map(Number);
-  return new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'short' });
-};
-
 const CashFlow = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
-  const { data: txnData, loading: loadingTransactions } = useApiQuery(() => api.fetchTransactions({ pageSize: 5000 }), [paymentVersion]);
-  const { data: invoicesData, loading: loadingInvoices } = useApiQuery(() => api.fetchInvoices({ pageSize: 100 }), [paymentVersion]);
-
-  const transactions = useMemo(() => (txnData || []) as TransactionRecord[], [txnData]);
-  const invoices = useMemo(() => (invoicesData || []) as InvoiceRecord[], [invoicesData]);
-
-  const summary = useMemo(() => {
-    const today = new Date();
-    const todayKey = toDateKey(today);
-    const monthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-
-    const completed = transactions.filter((t) => t.status === 'completed');
-    const totalRevenue = completed.reduce((sum, t) => sum + Number(t.amount || 0), 0);
-    const revenueToday = completed
-      .filter((t) => {
-        const d = new Date(t.date);
-        return !Number.isNaN(d.getTime()) && toDateKey(d) === todayKey;
-      })
-      .reduce((sum, t) => sum + Number(t.amount || 0), 0);
-
-    const revenueThisMonth = completed
-      .filter((t) => {
-        const key = toMonthKey(t.date);
-        return key === monthKey;
-      })
-      .reduce((sum, t) => sum + Number(t.amount || 0), 0);
-
-    const overduePayments = invoices
-      .filter((i) => i.status === 'overdue')
-      .reduce((sum, i) => sum + Number(i.amount || 0), 0);
-
-    return { revenueToday, revenueThisMonth, totalRevenue, overduePayments };
-  }, [transactions, invoices]);
-
-  const dailyData = useMemo(() => {
-    const dayKeys = Array.from({ length: 7 }, (_, index) => {
-      const date = new Date();
-      date.setDate(date.getDate() - (6 - index));
-      return toDateKey(date);
-    });
-
-    return dayKeys.map((key) => {
-      const date = new Date(key);
-      const day = date.toLocaleDateString('en-US', { weekday: 'short' });
-
-      const inflow = transactions
-        .filter((t) => t.status === 'completed' && toDateKey(new Date(t.date)) === key)
-        .reduce((sum, t) => sum + Number(t.amount || 0), 0);
-
-      const outflow = transactions
-        .filter((t) => t.status === 'failed' && toDateKey(new Date(t.date)) === key)
-        .reduce((sum, t) => sum + Number(t.amount || 0), 0);
-
-      return { day, inflow, outflow };
-    });
-  }, [transactions]);
-
-  const revenueData = useMemo(() => {
-    const byMonth = new Map<string, number>();
-    transactions
-      .filter((t) => t.status === 'completed')
-      .forEach((t) => {
-        const key = toMonthKey(t.date);
-        if (!key) return;
-        byMonth.set(key, (byMonth.get(key) || 0) + Number(t.amount || 0));
-      });
-
-    return Array.from(byMonth.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-6)
-      .map(([month, revenue]) => ({ month: toMonthLabel(month), revenue }));
-  }, [transactions]);
-
+  const { data, loading, error } = useApiQuery(() => api.getPlatformAnalytics(), [paymentVersion]);
+  const revenueData = useMemo(() => data?.revenueData || [], [data]);
   const monthlyTrendPercent = useMemo(() => {
     if (revenueData.length < 2) return 0;
     const current = revenueData[revenueData.length - 1].revenue;
@@ -104,13 +18,10 @@ const CashFlow = () => {
     return ((current - previous) / previous) * 100;
   }, [revenueData]);
 
-  if (loadingTransactions || loadingInvoices) {
-    return (
-      <div className="flex items-center justify-center h-48">
-        <TrendingUp className="w-6 h-6 animate-pulse text-muted-foreground" />
-      </div>
-    );
-  }
+  if (loading) return <p>Loading cash flow…</p>;
+  if (error || !data) return <QueryError message={error || 'Report unavailable'} />;
+  const summary = { ...data.totals, overduePayments: data.totals.overdueAmount };
+  const { dailyData } = data;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -120,7 +31,7 @@ const CashFlow = () => {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard title="Revenue Today" value={`₨ ${Math.round(summary.revenueToday).toLocaleString()}`} icon={DollarSign} trend="From completed transactions" trendUp />
+        <StatCard title="Revenue Today" value={`₨ ${Math.round(summary.revenueToday).toLocaleString()}`} icon={DollarSign} trend="Net of reversals · UTC" trendUp />
         <StatCard title="Revenue This Month" value={`₨ ${Math.round(summary.revenueThisMonth).toLocaleString()}`} icon={TrendingUp} trend={`${Math.abs(monthlyTrendPercent).toFixed(1)}% vs last month`} trendUp={monthlyTrendPercent >= 0} />
         <StatCard title="Total Revenue" value={`₨ ${Math.round(summary.totalRevenue).toLocaleString()}`} icon={CreditCard} />
         <StatCard title="Overdue Payments" value={`₨ ${Math.round(summary.overduePayments).toLocaleString()}`} icon={AlertTriangle} trend="Outstanding invoice amount" trendUp={false} />
@@ -132,7 +43,7 @@ const CashFlow = () => {
             <h3 className="section-title">Weekly Cash Flow</h3>
             <div className="flex items-center gap-3 text-[11px]">
               <span className="flex items-center gap-1 text-success"><ArrowUpRight className="w-3 h-3" /> Inflow</span>
-              <span className="flex items-center gap-1 text-destructive"><ArrowDownRight className="w-3 h-3" /> Failed</span>
+              <span className="flex items-center gap-1 text-destructive"><ArrowDownRight className="w-3 h-3" /> Reversed</span>
             </div>
           </div>
           <ResponsiveContainer width="100%" height={280}>

@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/QueryError';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '@/lib/api';
@@ -70,29 +71,14 @@ const FeeLedger = () => {
   const [listPage, setListPage] = useState(1);
   const [listPageSize, setListPageSize] = useState(25);
 
-  const { data: summaryData, loading: summaryLoading } = useApiQuery(
+  const { data: summaryData, meta: summaryMeta, loading: summaryLoading, error: queryError0 } = useApiQuery(
     () => !selectedStudent
-      ? api.fetchStudentLedgerSummary({ pageSize: 1000 })
-      : Promise.resolve({ data: [] as StudentLedgerSummary[] }),
-    [selectedStudent]
+      ? api.fetchStudentLedgerSummary({ page: listPage, pageSize: listPageSize, search: listSearch || undefined, className: listClass === 'all' ? undefined : listClass })
+      : Promise.resolve({ data: [] as StudentLedgerSummary[], meta: { total: 0, page: 1, pageSize: 25 } }),
+    [selectedStudent, listPage, listPageSize, listSearch, listClass]
   );
-  const allSummaries = useMemo(() => (summaryData || []) as StudentLedgerSummary[], [summaryData]);
-
-  const filteredSummaries = useMemo(() => {
-    let list = allSummaries;
-    if (listSearch.trim()) {
-      const q = listSearch.toLowerCase();
-      list = list.filter((s) =>
-        s.name.toLowerCase().includes(q) ||
-        s.consumerNumber.toLowerCase().includes(q) ||
-        (s.rollNumber || '').toLowerCase().includes(q)
-      );
-    }
-    if (listClass !== 'all') list = list.filter((s) => s.class === listClass);
-    return list;
-  }, [allSummaries, listSearch, listClass]);
-
-  const paginatedSummaries = filteredSummaries.slice((listPage - 1) * listPageSize, listPage * listPageSize);
+  const filteredSummaries = (summaryData || []) as StudentLedgerSummary[];
+  const paginatedSummaries = filteredSummaries;
 
   // ---- DETAIL VIEW STATE ----
   const [ledgerVersion, setLedgerVersion] = useState(0);
@@ -108,34 +94,40 @@ const FeeLedger = () => {
   const [searching, setSearching] = useState(false);
   const [selectedStudentObj, setSelectedStudentObj] = useState<Student | null>(null);
   const paymentVersion = usePaymentStore((state) => state.version);
+  const searchGeneration = useRef(0);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load student when URL param changes
   useEffect(() => {
     if (!selectedStudent) return;
+    let active = true;
     void api.getStudent(selectedStudent).then((res) => {
+      if (!active) return;
       const s = res?.data;
       if (s) {
         setSelectedStudentObj(s);
         setStudentQuery(`${s.name} — ${s.class} ${s.section} (${s.rollNumber})`);
       }
-    });
+    }).catch(error => { if (active) toast.error(error instanceof Error ? error.message : 'Unable to load student'); });
+    return () => { active = false; };
   }, [selectedStudent]);
 
   const doSearch = useCallback(async (q: string) => {
-    if (q.trim().length < 2) { setSearchResults([]); return; }
+    const generation = ++searchGeneration.current;
+    if (q.trim().length < 2) { setSearchResults([]); setSearching(false); return; }
     setSearching(true);
     try {
       const res = await api.fetchStudents({ search: q.trim(), pageSize: 15 });
-      setSearchResults((res?.data || []) as Student[]);
+      if (generation === searchGeneration.current) setSearchResults((res?.data || []) as Student[]);
     } catch {
-      setSearchResults([]);
+      if (generation === searchGeneration.current) setSearchResults([]);
     } finally {
-      setSearching(false);
+      if (generation === searchGeneration.current) setSearching(false);
     }
   }, []);
 
   const handleQueryChange = (value: string) => {
+    searchGeneration.current += 1;
     setStudentQuery(value);
     setShowStudentResults(true);
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
@@ -144,18 +136,18 @@ const FeeLedger = () => {
 
   useEffect(() => () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); }, []);
 
-  const { data: ledgerData } = useApiQuery(
+  const { data: ledgerData, error: queryError1 } = useApiQuery(
     () => selectedStudent ? api.getStudentLedger(selectedStudent) : Promise.resolve({ data: [] }),
     [selectedStudent, ledgerVersion, paymentVersion]
   );
   const ledger = useMemo(() => (ledgerData || []) as LedgerEntry[], [ledgerData]);
 
-  const { data: financialSnapshot } = useApiQuery(
+  const { data: financialSnapshot, error: queryError2 } = useApiQuery(
     () => selectedStudent ? api.getStudentSnapshot(selectedStudent) : Promise.resolve({ data: null as unknown as StudentFinancialSnapshot }),
     [selectedStudent, ledgerVersion, paymentVersion]
   );
 
-  const { data: scholarshipsData } = useApiQuery(
+  const { data: scholarshipsData, error: queryError3 } = useApiQuery(
     () => selectedStudent ? api.fetchStudentScholarships(selectedStudent) : Promise.resolve({ data: [] }),
     [selectedStudent, ledgerVersion]
   );
@@ -240,6 +232,7 @@ const FeeLedger = () => {
     }
   };
 
+  if (!selectedStudent && queryError0) return <QueryError message={queryError0} />;
   if (!selectedStudent) {
     return (
       <div className="space-y-6 animate-fade-in">
@@ -294,7 +287,7 @@ const FeeLedger = () => {
         <div className="table-container">
           <div className="px-5 py-3 border-b border-border">
             <p className="text-sm font-semibold">
-              {filteredSummaries.length} students
+              {summaryMeta?.total || 0} students
             </p>
           </div>
           {summaryLoading ? (
@@ -350,7 +343,7 @@ const FeeLedger = () => {
                 </TableBody>
               </Table>
               <TablePagination
-                total={filteredSummaries.length}
+                total={summaryMeta?.total || 0}
                 page={listPage}
                 pageSize={listPageSize}
                 onPageChange={setListPage}
@@ -362,6 +355,8 @@ const FeeLedger = () => {
       </div>
     );
   }
+
+  if (queryError0 || queryError1 || queryError2 || queryError3) return <QueryError message={queryError0 || queryError1 || queryError2 || queryError3} />;
 
   return (
     <div className="space-y-6 animate-fade-in">

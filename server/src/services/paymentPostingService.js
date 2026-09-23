@@ -4,14 +4,14 @@ const config = require('../config');
 const { AppError } = require('../middleware/errorHandler');
 const { emitPaymentEvent } = require('./paymentEventBus');
 
-const money = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+const { money, payableQuote, lateFeeFor } = require('./billingRules');
 const mysqlDateTime = (value) => {
   const date = value ? new Date(value) : new Date();
   if (Number.isNaN(date.getTime())) throw new AppError('Invalid received date/time', 400, 'INVALID_RECEIVED_AT');
   return date.toISOString().slice(0, 19).replace('T', ' ');
 };
 
-const assertTenantCanCollect = async (connection, tenantId, source) => {
+const assertTenantCanCollect = async (connection, tenantId) => {
   const [rows] = await connection.query(
     `SELECT id, name, status, lifecycle_stage FROM tenants
      WHERE id = ? AND deleted_at IS NULL FOR UPDATE`, [tenantId]
@@ -19,7 +19,7 @@ const assertTenantCanCollect = async (connection, tenantId, source) => {
   if (!rows.length) throw new AppError('Tenant not found', 404, 'TENANT_NOT_FOUND');
   const tenant = rows[0];
   if (tenant.status !== 'active') throw new AppError('Biller is suspended', 403, 'TENANT_SUSPENDED');
-  if (config.appEnvironment !== 'sandbox' && source !== 'sandbox_simulator' && tenant.lifecycle_stage !== 'live') {
+  if (config.appEnvironment !== 'sandbox' && tenant.lifecycle_stage !== 'live') {
     throw new AppError('Biller is not activated for production collections', 403, 'TENANT_NOT_LIVE');
   }
   return tenant;
@@ -78,6 +78,7 @@ const insertTransactionalAudit = async (connection, input, paymentId, amount, co
       source: input.source, reference: input.externalReference,
       transactionId: input.transactionId || input.externalReference,
       receivedAt: input.receivedAt || null, targetType: input.targetType,
+      applicationId: input.applicationId || null, billId: input.billId || null, targetId: input.targetId || null,
     })]
   );
 };
@@ -121,7 +122,7 @@ const postOrgPayment = async (connection, input, tenant, paidAt) => {
      VALUES (?, ?, ?, ?, ?, 'paid')`,
     [uuidv4(), input.tenantId, record.application_id, record.id, record.bill_id]
   );
-  await insertTransactionalAudit(connection, input, paymentId, received, record.consumer_number);
+  await insertTransactionalAudit(connection, { ...input, receivedAt: paidAt, applicationId: record.application_id, billId: record.bill_id, targetId: record.id }, paymentId, received, record.consumer_number);
   return { paymentId, receiptNumber, consumerNumber: record.consumer_number, amount: received,
     remainingBalance: 0, status: 'paid', paidAt, reference: input.externalReference,
     targetType: 'org_payment', targetId: record.id };
@@ -147,7 +148,6 @@ const postStudentPayment = async (connection, input, tenant, paidAt) => {
   if (input.invoiceId && !invoices.length) throw new AppError('Invoice is already paid or not found', 409, 'ALREADY_PAID');
 
   const paidDate = new Date(`${paidAt.replace(' ', 'T')}Z`);
-  const baseDue = money(invoices.reduce((sum, invoice) => sum + Number(invoice.amount), 0));
   const [[prePaymentTotals]] = await connection.query(
     `SELECT COALESCE(SUM(debit),0) AS debit, COALESCE(SUM(credit),0) AS credit
      FROM ledger_entries WHERE tenant_id = ? AND student_id = ?`, [input.tenantId, student.id]
@@ -156,11 +156,8 @@ const postStudentPayment = async (connection, input, tenant, paidAt) => {
   if (!invoices.length && ledgerOutstanding === 0) {
     throw new AppError('Bill is already paid or not found', 409, 'ALREADY_PAID');
   }
-  const lateFees = money(invoices.reduce((sum, invoice) => (
-    sum + (!invoice.late_fee_applied && new Date(`${invoice.due_date}T23:59:59Z`) < paidDate ? Number(invoice.late_fee || 0) : 0)
-  ), 0));
-  const payableBase = input.invoiceId ? baseDue : Math.max(baseDue, ledgerOutstanding);
-  const expected = money(payableBase + lateFees);
+  const { invoiceDue: baseDue, baseDue: payableBase, amount: expected } = payableQuote(invoices, prePaymentTotals, paidDate, Boolean(input.invoiceId));
+  if (ledgerOutstanding < baseDue) throw new AppError('Invoice charges do not reconcile with the ledger; financial review is required before collection', 409, 'LEDGER_RECONCILIATION_REQUIRED');
   const received = money(input.amount);
   if (received !== expected) throw new AppError(`Exact payment of PKR ${expected.toFixed(2)} is required`, 422, 'AMOUNT_MISMATCH');
 
@@ -172,8 +169,7 @@ const postStudentPayment = async (connection, input, tenant, paidAt) => {
   let runningBalance = ledgerOutstanding;
   for (const invoice of invoices) {
     const invoiceAmount = money(invoice.amount);
-    const isLate = !invoice.late_fee_applied && new Date(`${invoice.due_date}T23:59:59Z`) < paidDate;
-    const lateFee = isLate ? money(invoice.late_fee || 0) : 0;
+    const lateFee = lateFeeFor(invoice, paidDate);
     if (lateFee > 0) {
       runningBalance = money(runningBalance + lateFee);
       await connection.query(
@@ -226,7 +222,7 @@ const postStudentPayment = async (connection, input, tenant, paidAt) => {
      VALUES (?, ?, NULL, 'Payment received', ?, 'payment')`,
     [uuidv4(), input.tenantId, `PKR ${received.toFixed(2)} received for ${student.name}`]
   );
-  await insertTransactionalAudit(connection, input, paymentId, received, student.consumer_number);
+  await insertTransactionalAudit(connection, { ...input, receivedAt: paidAt, targetId: student.id }, paymentId, received, student.consumer_number);
   return { paymentId, receiptNumber, consumerNumber: student.consumer_number, amount: received,
     remainingBalance: runningBalance, status: runningBalance === 0 ? 'paid' : 'partial', paidAt,
     reference: input.externalReference, invoiceNumber: invoices[0]?.invoice_number || null,
@@ -273,6 +269,7 @@ const reverseManualPayment = async (input) => {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
+    await assertTenantCanCollect(connection, input.tenantId);
     const [rows] = await connection.query(
       `SELECT * FROM payments WHERE id = ? AND tenant_id = ? FOR UPDATE`,
       [input.paymentId, input.tenantId]
@@ -342,8 +339,7 @@ const reverseManualPayment = async (input) => {
 
     if (payment.student_id) {
       const [balances] = await connection.query(
-        `SELECT balance FROM ledger_entries WHERE tenant_id = ? AND student_id = ?
-         ORDER BY date DESC, created_at DESC LIMIT 1 FOR UPDATE`,
+        `SELECT COALESCE(SUM(debit-credit),0) AS balance FROM ledger_entries WHERE tenant_id = ? AND student_id = ?`,
         [input.tenantId, payment.student_id]
       );
       const balance = money(Number(balances[0]?.balance || 0) + amount);

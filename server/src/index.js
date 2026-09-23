@@ -209,7 +209,11 @@ app.use('/api/saas/v1', saasLimiter, saasGatewayRoutes);
 app.get('/api/ready', async (req, res) => {
   try {
     await pool.query('SELECT 1');
-    res.json({ status: 'ready', service: 'fintap-api', environment: config.appEnvironment, timestamp: new Date().toISOString() });
+    if (config.nodeEnv === 'production') {
+      const [[worker]] = await pool.query("SELECT name FROM worker_health WHERE name = 'outbox' AND heartbeat_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 90 SECOND)");
+      if (!worker) throw new Error('Outbox worker heartbeat missing');
+    }
+    res.json({ status: 'ready', revision: (() => { try { return require('fs').readFileSync(require('path').resolve(__dirname, '../../REVISION'), 'utf8').trim(); } catch { return 'development'; } })(), service: 'fintap-api', environment: config.appEnvironment, timestamp: new Date().toISOString() });
   } catch {
     res.status(503).json({ status: 'not_ready', service: 'fintap-api', environment: config.appEnvironment, timestamp: new Date().toISOString() });
   }

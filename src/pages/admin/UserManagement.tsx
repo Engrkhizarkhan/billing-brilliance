@@ -1,3 +1,5 @@
+import { QueryError } from '@/components/QueryError';
+import { parseCsv } from '@/lib/csv';
 import { useEffect, useRef, useState } from 'react';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useNavigate } from 'react-router-dom';
@@ -19,24 +21,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Biller, User } from '@/types';
 import { useAuthStore } from '@/store/authStore';
 import { TablePagination } from '@/components/TablePagination';
-
-const parseCsvLine = (line: string) => {
-  const values: string[] = [];
-  let value = '';
-  let quoted = false;
-  for (let index = 0; index < line.length; index += 1) {
-    const character = line[index];
-    if (character === '"') {
-      if (quoted && line[index + 1] === '"') { value += '"'; index += 1; }
-      else quoted = !quoted;
-    } else if (character === ',' && !quoted) {
-      values.push(value.trim()); value = '';
-    } else value += character;
-  }
-  if (quoted) throw new Error('CSV contains an unclosed quoted field');
-  values.push(value.trim());
-  return values;
-};
 
 const UserManagement = () => {
   const navigate = useNavigate();
@@ -62,6 +46,7 @@ const UserManagement = () => {
   const [pageSize, setPageSize] = useState(25);
   const [total, setTotal] = useState(0);
   const [billers, setBillers] = useState<Biller[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const deferredSearch = useDebouncedValue(search.trim());
   const schoolTenants = billers.filter((b) => b.type === 'school');
   const orgTenants = billers.filter((b) => b.type === 'org');
@@ -75,12 +60,15 @@ const UserManagement = () => {
         : [];
       setBillers([...first.data, ...remaining.flatMap((response) => response.data)]);
     };
-    void loadTenantOptions();
+    void loadTenantOptions().catch(error => setLoadError(error instanceof Error ? error.message : 'Unable to load tenants'));
   }, []);
 
   useEffect(() => {
+    let active = true;
     const load = async () => {
       setLoading(true);
+      setLoadError(null);
+      try {
       const response = await api.fetchUsers({
         page,
         pageSize,
@@ -88,33 +76,39 @@ const UserManagement = () => {
         role: roleFilter === 'all' ? undefined : roleFilter,
         status: statusFilter === 'all' ? undefined : statusFilter,
       });
-      setUsers(response.data);
-      setTotal(Number(response.meta?.total || 0));
-      setLoading(false);
+      if (active) setUsers(response.data);
+      if (active) setTotal(Number(response.meta?.total || 0));
+      } catch (error) { if (active) setLoadError(error instanceof Error ? error.message : "Unable to load records"); }
+      finally { if (active) setLoading(false); }
     };
     void load();
+    return () => { active = false; };
   }, [page, pageSize, deferredSearch, roleFilter, statusFilter]);
 
   const filtered = users;
 
   const banUser = async (id: string) => {
     setLoading(true);
+    try {
     const updated = await api.updateUserStatus(id, 'banned');
     if (updated.data) {
       setUsers((prev) => prev.map((u) => (u.id === id ? updated.data! : u)));
       toast.error('User has been banned');
     }
-    setLoading(false);
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Unable to save changes"); }
+    finally { setLoading(false); }
   };
 
   const unbanUser = async (id: string) => {
     setLoading(true);
+    try {
     const updated = await api.updateUserStatus(id, 'active');
     if (updated.data) {
       setUsers((prev) => prev.map((u) => (u.id === id ? updated.data! : u)));
       toast.success('User reinstated');
     }
-    setLoading(false);
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Unable to save changes"); }
+    finally { setLoading(false); }
   };
 
   const deleteUser = async () => {
@@ -178,17 +172,17 @@ const UserManagement = () => {
   const handleBulkUpload = async (file: File) => {
     setLoading(true);
     try {
-      const lines = (await file.text()).replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim());
+      const lines = parseCsv(await file.text());
       if (lines.length < 2) throw new Error('CSV must contain a header and at least one user');
       if (lines.length > 101) throw new Error('Import is limited to 100 users per file');
-      const headers = parseCsvLine(lines[0]).map((header) => header.toLowerCase().replace(/[^a-z]/g, ''));
+      const headers = lines[0].map((header) => header.toLowerCase().replace(/[^a-z]/g, ''));
       const requiredHeaders = ['name', 'email', 'role'];
       if (requiredHeaders.some((header) => !headers.includes(header))) {
         throw new Error('CSV headers must include Name, Email and Role');
       }
       const indexOf = (header: string) => headers.indexOf(header);
       const payloads = lines.slice(1).map((line, rowIndex) => {
-        const row = parseCsvLine(line);
+        const row = line;
         const role = row[indexOf('role')]?.toLowerCase() as User['role'];
         const name = row[indexOf('name')]?.trim();
         const email = row[indexOf('email')]?.trim();
@@ -233,6 +227,8 @@ const UserManagement = () => {
     URL.revokeObjectURL(url);
     toast.success('Template downloaded');
   };
+
+  if (loadError) return <QueryError message={loadError} />;
 
   return (
     <div className="space-y-5 animate-fade-in">

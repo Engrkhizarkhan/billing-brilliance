@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/QueryError';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { KeyRound, Plus, ShieldCheck, X } from 'lucide-react';
@@ -25,7 +26,7 @@ const OrgSettings = () => {
   const [ipInput, setIpInput] = useState('');
   const [configuredIpCount, setConfiguredIpCount] = useState(0);
   const [savingSecurityContext, setSavingSecurityContext] = useState(false);
-  const { data: securityContextData } = useApiQuery(() => api.fetchSetting<OrgRequestSecurityContext>('org_security_context'), []);
+  const { data: securityContextData, error: queryError0 } = useApiQuery(() => api.fetchSetting<OrgRequestSecurityContext>('org_security_context'), []);
 
   useEffect(() => {
     const securityContext = securityContextData as OrgRequestSecurityContext | null;
@@ -38,8 +39,9 @@ const OrgSettings = () => {
     if (newPassword !== confirmPassword) return toast.error('New password and confirmation do not match');
     try {
       await api.changePassword(currentPassword, newPassword);
+      window.dispatchEvent(new CustomEvent('auth:session-expired'));
       setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
-      toast.success('Password updated. Other sessions have been revoked.');
+      toast.success('Password updated. Sign in with your new password.');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to update password');
     }
@@ -69,6 +71,8 @@ const OrgSettings = () => {
     }
   };
 
+  if (queryError0) return <QueryError message={queryError0} />;
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div><h1 className="page-header">Integration Security</h1><p className="page-description">Manage the credentials and network controls used by your API integration.</p></div>
@@ -77,7 +81,7 @@ const OrgSettings = () => {
         <CardHeader><CardTitle className="flex items-center gap-2"><KeyRound className="h-5 w-5" /> Organization API key</CardTitle><CardDescription>Use this key only from your backend. Never embed it in a website, mobile app, source repository, email, or support ticket.</CardDescription></CardHeader>
         <CardContent className="space-y-3">
           <Input value={user?.tenantApiKeyPrefix ? `${user.tenantApiKeyPrefix}…` : 'Key identifier unavailable'} readOnly className="font-mono" />
-          <p className="text-xs text-muted-foreground">The secret is shown once when issued and is never retrievable afterward. Key rotation is restricted to platform administrators and requires typed confirmation.</p>
+          <p className="text-xs text-muted-foreground">Only platform administrators can reveal or rotate the key, using the administrator PIN and an audited action.</p>
         </CardContent>
       </Card>
 

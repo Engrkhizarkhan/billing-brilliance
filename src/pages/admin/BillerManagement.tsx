@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/QueryError';
 import { useEffect, useState } from 'react';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { Biller } from '@/types';
@@ -80,6 +81,7 @@ const BillerManagement = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [total, setTotal] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const deferredSearch = useDebouncedValue(search.trim());
 
   const copyApiKey = (key: string) => {
@@ -138,8 +140,11 @@ const BillerManagement = () => {
   };
 
   useEffect(() => {
+    let active = true;
     const load = async () => {
       setLoading(true);
+      setLoadError(null);
+      try {
       const response = await api.fetchBillers({
         page,
         pageSize,
@@ -147,11 +152,13 @@ const BillerManagement = () => {
         status: statusFilter === 'all' ? undefined : statusFilter,
         type: typeFilter === 'all' ? undefined : typeFilter,
       });
-      setBillerList(response.data);
-      setTotal(Number(response.meta?.total || 0));
-      setLoading(false);
+      if (active) setBillerList(response.data);
+      if (active) setTotal(Number(response.meta?.total || 0));
+      } catch (error) { if (active) setLoadError(error instanceof Error ? error.message : "Unable to load records"); }
+      finally { if (active) setLoading(false); }
     };
     void load();
+    return () => { active = false; };
   }, [page, pageSize, deferredSearch, statusFilter, typeFilter]);
 
   const filtered = billerList;
@@ -162,13 +169,15 @@ const BillerManagement = () => {
       return;
     }
     setLoading(true);
+    try {
     const response = await api.createBiller({ name: form.name, email: form.email, phone: form.phone, type: form.type, consumerNumberLength: form.consumerNumberLength });
     setBillerList((prev) => [response.data, ...prev].slice(0, pageSize));
     setTotal((current) => current + 1);
     setDialogOpen(false);
     setForm(emptyBillerForm);
     toast.success(`Biller "${response.data.name}" created with code ${response.data.billerCode}`);
-    setLoading(false);
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Unable to save changes"); }
+    finally { setLoading(false); }
   };
 
   const openEditBiller = (biller: Biller) => {
@@ -191,6 +200,7 @@ const BillerManagement = () => {
     }
 
     setLoading(true);
+    try {
     const updated = await api.updateBiller(editBiller.id, {
       name: editForm.name,
       type: editForm.type,
@@ -206,11 +216,13 @@ const BillerManagement = () => {
     } else {
       toast.error('Unable to update biller');
     }
-    setLoading(false);
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Unable to save changes"); }
+    finally { setLoading(false); }
   };
 
   const updateStatus = async (id: string, status: Biller['status'], reason?: string) => {
     setLoading(true);
+    try {
     const updated = await api.updateBillerStatus(id, status, reason);
     if (updated.data) {
       setBillerList((prev) => prev.map((b) => (b.id === id ? updated.data : b)));
@@ -219,7 +231,8 @@ const BillerManagement = () => {
       }
       toast.success(`Biller status updated to ${status}`);
     }
-    setLoading(false);
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Unable to save changes"); }
+    finally { setLoading(false); }
   };
 
   const activateBiller = async () => {
@@ -251,6 +264,8 @@ const BillerManagement = () => {
       toast.error(error instanceof Error ? error.message : 'Unable to offboard biller');
     } finally { setLoading(false); }
   };
+
+  if (loadError) return <QueryError message={loadError} />;
 
   return (
     <div className="space-y-6 animate-fade-in">

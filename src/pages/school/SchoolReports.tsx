@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/QueryError';
 import { StatCard } from '@/components/StatCard';
 import { api } from '@/lib/api';
 import { useApiQuery } from '@/hooks/useApiQuery';
@@ -8,11 +9,11 @@ import { formatPKR } from '@/lib/formatters';
 const CHART_COLORS = ['hsl(221, 83%, 53%)', 'hsl(160, 84%, 39%)', 'hsl(38, 92%, 50%)', 'hsl(271, 55%, 55%)', 'hsl(0, 72%, 51%)'];
 
 const SchoolReports = () => {
-  const { data: statsData, loading: lStats } = useApiQuery(() => api.getDashboardStats(), []);
-  const { data: monthlyTrendData, loading: lTrend } = useApiQuery(() => api.getMonthlyTrend(), []);
-  const { data: feeByPlanData, loading: lFee } = useApiQuery(() => api.getCollectionByFeePlan(), []);
+  const { data: statsData, loading: lStats, error: queryError0 } = useApiQuery(() => api.getDashboardStats(), []);
+  const { data: monthlyTrendData, loading: lTrend, error: queryError1 } = useApiQuery(() => api.getMonthlyTrend(), []);
+  const { data: feeByPlanData, loading: lFee, error: queryError2 } = useApiQuery(() => api.getCollectionByFeePlan(), []);
 
-  const stats = statsData || {};
+  const stats: Partial<Awaited<ReturnType<typeof api.getDashboardStats>>['data']> = statsData || {};
   const monthlyTrend = (monthlyTrendData || []) as { month: string; collected: number }[];
   const feeByPlan = (feeByPlanData || []) as { name: string; value: number }[];
 
@@ -32,6 +33,8 @@ const SchoolReports = () => {
     .map((item) => ({ ...item, className: item.className.replace('Class ', 'C') }));
 
   if (loading) return <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+
+  if (queryError0 || queryError1 || queryError2) return <QueryError message={queryError0 || queryError1 || queryError2} />;
 
   return (
     <div className="space-y-6 animate-fade-in">

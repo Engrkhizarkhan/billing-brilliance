@@ -1,3 +1,4 @@
+import { QueryError } from '@/components/QueryError';
 import { StatCard } from '@/components/StatCard';
 import { GraduationCap, Receipt, Wallet, Users, AlertTriangle, Calendar, TrendingUp, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -14,14 +15,14 @@ const SchoolDashboard = () => {
   const navigate = useNavigate();
   const paymentVersion = usePaymentStore((state) => state.version);
 
-  const { data: paymentHistoryData, loading: lp } = useApiQuery(() => api.fetchPaymentHistory({ pageSize: 5 }), [paymentVersion]);
-  const { data: feeByPlanData, loading: lFee } = useApiQuery(() => api.getCollectionByFeePlan(), [paymentVersion]);
-  const { data: monthlyTrendData, loading: lTrend } = useApiQuery(() => api.getMonthlyTrend(), [paymentVersion]);
-  const { data: dashStatsData, loading: lStats } = useApiQuery(() => api.getDashboardStats(), [paymentVersion]);
+  const { data: paymentHistoryData, loading: lp, error: queryError0 } = useApiQuery(() => api.fetchPaymentHistory({ pageSize: 5 }), [paymentVersion]);
+  const { data: feeByPlanData, loading: lFee, error: queryError1 } = useApiQuery(() => api.getCollectionByFeePlan(), [paymentVersion]);
+  const { data: monthlyTrendData, loading: lTrend, error: queryError2 } = useApiQuery(() => api.getMonthlyTrend(), [paymentVersion]);
+  const { data: dashStatsData, loading: lStats, error: queryError3 } = useApiQuery(() => api.getDashboardStats(), [paymentVersion]);
 
   const paymentHistory = useMemo(() => (paymentHistoryData || []) as Array<{ id: string; studentName: string; amount: number; date: string; note: string }>, [paymentHistoryData]);
   const feeByPlan = (feeByPlanData || []) as { name: string; value: number }[];
-  const stats = dashStatsData || {};
+  const stats: Partial<Awaited<ReturnType<typeof api.getDashboardStats>>['data']> = dashStatsData || {};
   const totalStudents = stats.totalStudents ?? 0;
   const collectedThisMonth = stats.collectedThisMonth ?? 0;
   const totalOutstanding = stats.pendingAmount ?? 0;
@@ -48,6 +49,8 @@ const SchoolDashboard = () => {
   const recentPayments = paymentHistory.slice(0, 5);
 
   if (loading) return <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+
+  if (queryError0 || queryError1 || queryError2 || queryError3) return <QueryError message={queryError0 || queryError1 || queryError2 || queryError3} />;
 
   return (
     <div className="space-y-6 animate-fade-in">
