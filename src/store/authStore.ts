@@ -13,7 +13,7 @@ interface AuthState {
   logout: () => void;
   restoreSession: () => Promise<void>;
   startImpersonation: (userId: string) => Promise<void>;
-  exitImpersonation: () => void;
+  exitImpersonation: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -66,15 +66,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
     }
   },
-  exitImpersonation: () => {
+  exitImpersonation: async () => {
     const { _adminToken } = get();
-    if (_adminToken) {
-      setTokens(_adminToken, '');
+    if (!_adminToken) throw new Error('Administrator session is unavailable. Please sign in again.');
+    const maintenanceToken = getAccessToken();
+    setTokens(_adminToken);
+    try {
+      const response = await api.getProfile();
+      if (!response.data || response.data.role !== 'admin') throw new Error('Administrator session could not be restored.');
+      set({ user: response.data, impersonating: false, impersonatedUser: null, _adminToken: null });
+    } catch (error) {
+      // Keep the maintenance banner and original administrator token so a
+      // transient outage does not strand the user or lose the exit action.
+      if (maintenanceToken) setTokens(maintenanceToken);
+      throw error;
     }
-    // Restore admin profile from server
-    api.getProfile().then((r) => {
-      if (r.data) set({ user: r.data });
-    });
-    set({ impersonating: false, impersonatedUser: null, _adminToken: null });
   },
 }));

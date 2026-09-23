@@ -14,6 +14,7 @@ import {
   PanelLeftClose, PanelLeftOpen, Hash
 } from 'lucide-react';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface NavItem {
@@ -126,7 +127,10 @@ const DashboardLayout = () => {
             size="sm"
             variant="ghost"
             className="text-white hover:bg-orange-600 h-7 text-xs"
-            onClick={() => { exitImpersonation(); navigate('/admin'); }}
+            onClick={async () => {
+              try { await exitImpersonation(); navigate('/admin'); }
+              catch { toast.error('Could not restore your administrator session. Please retry.'); }
+            }}
           >
             Exit Session
           </Button>
