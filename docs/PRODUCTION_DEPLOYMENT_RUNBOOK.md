@@ -37,7 +37,7 @@ Install `deploy/fintap-github-deploy` as the restricted forced command for the d
 
 CI sends its exact GITHUB_SHA. The script verifies the commit is on fetched main, stages it into a new release directory, installs dependencies and builds there, then applies forward migrations. Before activation, the live application tree is untouched.
 
-An atomic symlink replacement activates the staged release. PM2 reloads API and worker with the shared environment file. The release is successful only when `/api/ready` returns the target revision and fresh production worker heartbeat, and both PM2 processes report online from the staged directory. Only then is deployed-revision replaced and PM2 saved.
+An atomic symlink replacement activates the staged release. PM2 replaces only the named Fintap API and worker processes (a brief reconnect window is expected) with the shared environment file. The release is successful only when `/api/ready` returns the target revision and fresh production worker heartbeat, and both PM2 processes report online from the staged directory. Only then is deployed-revision replaced and PM2 saved.
 
 Any build/install/migration error stops before activation. Any post-activation error attempts to restore the previous symlink and processes. The prior build is retained, so rollback does not require another install/build. Inspect rollback logs and readiness manually after a failure. Forward database migrations remain applied; incompatible/destructive migrations require a separate reviewed rollout strategy.
 
