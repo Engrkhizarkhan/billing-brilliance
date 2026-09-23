@@ -28,6 +28,8 @@ mkdir -p "$RELEASES"
 exec > >(tee -a /var/log/fintap-deploy.log) 2>&1
 previous_release="$(readlink -f "$APP_DIR")"
 release="$(mktemp -d "$RELEASES/${target_revision}.XXXXXX")"
+# mktemp directories are 0700; Nginx must traverse the release to serve dist.
+chmod 755 "$release"
 activated=false
 
 activate() {
@@ -94,6 +96,18 @@ if ! verify_readiness "$HEALTH_URL"; then
   echo "Production readiness did not confirm the target revision." >&2
   rollback 1
 fi
+# API readiness does not prove Nginx can read the frontend release.
+if ! /usr/bin/curl --fail --silent --show-error --max-time 10 "https://app.fintap.pk/login" | \
+  /usr/bin/node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{const fs=require("fs");const expected=fs.readFileSync("dist/index.html","utf8");const assets=[...expected.matchAll(/(?:src|href)="([^" ]*\/assets\/[^" ]+)"/g)].map(m=>m[1]);process.exit(s.includes("id=\"root\"")&&assets.length>0&&assets.every(a=>s.includes(a))?0:1);})'; then
+  echo "Frontend HTML did not confirm the staged build." >&2
+  rollback 1
+fi
+while IFS= read -r asset; do
+  if ! /usr/bin/curl --fail --silent --show-error --max-time 10 "https://app.fintap.pk${asset}" -o /dev/null; then
+    echo "Frontend asset is unavailable." >&2
+    rollback 1
+  fi
+done < <(/usr/bin/node -e 'const fs=require("fs");const s=fs.readFileSync("dist/index.html","utf8");console.log([...s.matchAll(/(?:src|href)="(\/assets\/[^" ]+)"/g)].map(m=>m[1]).join("\n"))')
 expected_processes="Fintap-api-backend,Fintap-outbox-worker"
 if [[ -f "$SANDBOX_ENV_FILE" ]]; then
   if ! verify_readiness "https://sandbox.fintap.pk/api/ready"; then

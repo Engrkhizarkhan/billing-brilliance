@@ -10,8 +10,9 @@ const execute = (failure='') => {
   directory=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'fintap-deploy-test-')));
   fs.symlinkSync(process.execPath,path.join(directory,'runtime'));
   const app=path.join(directory,'app'), old=path.join(directory,'old'), bin=path.join(directory,'bin');
-  for(const name of ['old/server','repository','bin','artifact/server']) fs.mkdirSync(path.join(directory,name),{recursive:true});
+  for(const name of ['old/server','repository','bin','artifact/server','artifact/dist']) fs.mkdirSync(path.join(directory,name),{recursive:true});
   fs.writeFileSync(path.join(directory,'artifact/server/ecosystem.config.cjs'),'module.exports={}');
+  fs.writeFileSync(path.join(directory,'artifact/dist/index.html'),'<div id="root"></div><script src="/assets/test.js"></script>');
   fs.writeFileSync(path.join(directory,'environment'),'NODE_ENV=production');
   fs.symlinkSync(old,app);
   const tar=spawnSync('tar',['-cf',path.join(directory,'artifact.tar'),'-C',path.join(directory,'artifact'),'.']);
@@ -26,7 +27,11 @@ if(cmd==='node'){
  if(args.includes('server/src/db/migrate.js')){fs.writeFileSync(root+'/migration-ran','yes');if(process.env.FAIL_STAGE==='migration')process.exit(18);}
  else {const p=require('child_process').spawnSync(process.execPath,args,{stdio:'inherit'});process.exit(p.status??1);}
 }
-if(cmd==='curl'){process.stdout.write(JSON.stringify({status:'ready',revision:process.env.FAIL_STAGE==='ready'?'wrong':process.env.TEST_REVISION}));}
+if(cmd==='curl'){
+ if(args.some(a=>a.includes('/login'))){if(process.env.FAIL_STAGE==='frontend')process.exit(22);process.stdout.write(fs.readFileSync(root+'/artifact/dist/index.html'));}
+ else if(args.some(a=>a.includes('/assets/'))){if(process.env.FAIL_STAGE==='asset')process.exit(22);}
+ else process.stdout.write(JSON.stringify({status:'ready',revision:process.env.FAIL_STAGE==='ready'?'wrong':process.env.TEST_REVISION}));
+}
 if(cmd==='pm2'){
  if(args[0]==='startOrReload')process.exit(19);
  if(args[0]==='start')fs.writeFileSync(root+'/process-cwd',path.dirname(args[1]));
@@ -70,10 +75,11 @@ test('success activates and records the exact requested revision',()=>{
   const {result,app,old}=execute();
   if(result.status!==0)throw new Error(result.stdout+result.stderr);
   expect(fs.realpathSync(app)).not.toBe(old);
+  expect(fs.statSync(fs.realpathSync(app)).mode & 0o777).toBe(0o755);
   expect(fs.readFileSync(path.join(directory,'deployed-revision'),'utf8').trim()).toBe(revision);
 });
-test('readiness failure restores the previous release without rebuilding it',()=>{
-  const {result,app,old}=execute('ready');
+test.each(['ready','frontend','asset'])('%s failure restores the previous release without rebuilding it',failure=>{
+  const {result,app,old}=execute(failure);
   if(result.status===0)throw new Error(result.stdout+result.stderr);
   expect(result.status).not.toBe(0); expect(fs.realpathSync(app)).toBe(old);
   expect(fs.readFileSync(path.join(directory,'process-cwd'),'utf8')).toBe(path.join(old,'server'));
