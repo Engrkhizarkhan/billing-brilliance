@@ -103,7 +103,7 @@ if ! /usr/bin/curl --fail --silent --show-error --max-time 10 "https://app.finta
   rollback 1
 fi
 while IFS= read -r asset; do
-  if ! /usr/bin/curl --fail --silent --show-error --max-time 10 "https://app.fintap.pk${asset}" -o /dev/null; then
+  if ! /usr/bin/curl --fail --silent --show-error --max-time 10 "https://app.fintap.pk${asset}" | cmp -s - "$release/dist${asset}"; then
     echo "Frontend asset is unavailable." >&2
     rollback 1
   fi
