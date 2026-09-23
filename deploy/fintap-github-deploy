@@ -36,9 +36,13 @@ activate() {
   mv -Tf "${APP_DIR}.next" "$APP_DIR"
 }
 reload() {
-  FINTAP_ENV_FILE="$ENV_FILE" /usr/bin/pm2 startOrReload "$1/server/ecosystem.config.cjs" --update-env
+  # PM2 reload preserves the original executable/cwd across release directories.
+  # Replace only our named services so startup resolves the immutable new paths.
+  /usr/bin/pm2 delete Fintap-api-backend Fintap-outbox-worker >/dev/null 2>&1 || true
+  FINTAP_ENV_FILE="$ENV_FILE" /usr/bin/pm2 start "$1/server/ecosystem.config.cjs" --update-env
   if [[ -f "$SANDBOX_ENV_FILE" ]]; then
-    FINTAP_ENV_FILE="$SANDBOX_ENV_FILE" /usr/bin/pm2 startOrReload "$1/server/ecosystem.sandbox.config.cjs" --update-env
+    /usr/bin/pm2 delete Fintap-sandbox-api Fintap-sandbox-outbox-worker >/dev/null 2>&1 || true
+    FINTAP_ENV_FILE="$SANDBOX_ENV_FILE" /usr/bin/pm2 start "$1/server/ecosystem.sandbox.config.cjs" --update-env
   fi
 }
 rollback() {

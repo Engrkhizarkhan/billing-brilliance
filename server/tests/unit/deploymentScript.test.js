@@ -28,7 +28,8 @@ if(cmd==='node'){
 }
 if(cmd==='curl'){process.stdout.write(JSON.stringify({status:'ready',revision:process.env.FAIL_STAGE==='ready'?'wrong':process.env.TEST_REVISION}));}
 if(cmd==='pm2'){
- if(args[0]==='startOrReload')fs.writeFileSync(root+'/process-cwd',path.dirname(args[1]));
+ if(args[0]==='startOrReload')process.exit(19);
+ if(args[0]==='start')fs.writeFileSync(root+'/process-cwd',path.dirname(args[1]));
  if(args[0]==='jlist'){const cwd=fs.readFileSync(root+'/process-cwd','utf8');process.stdout.write(JSON.stringify(['Fintap-api-backend','Fintap-outbox-worker'].map(name=>({name,pm2_env:{status:'online',pm_cwd:cwd}}))));}
 }
 if(cmd==='mv'){const values=args.filter(a=>!a.startsWith('-'));fs.renameSync(values[0],values[1]);}
