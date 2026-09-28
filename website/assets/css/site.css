@@ -1,5 +1,5 @@
 /* FinTap marketing site. Shared across the standalone marketing site. */
-@import url('./fonts.css');
+@import url('./fonts.css?v=4f404cd76508b32b');
 :root {
   --navy: #f8f7f2;
   --obsidian: #fffefa;
