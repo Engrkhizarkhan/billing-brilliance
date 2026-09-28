@@ -3,42 +3,52 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin Control Panel — Payniva</title>
-  <meta name="description" content="The Payniva Admin Portal is your multi-tenant command center. Manage billers, users, platform-wide transactions, and audit events across all tenants.">
+  <title>Admin Control Panel: FinTap</title>
+  <meta name="description" content="The FinTap Admin Portal is your multi-tenant command center. Manage billers, users, platform-wide transactions, and audit events across all tenants.">
   <meta name="robots" content="index, follow">
-  <link rel="canonical" href="https://payniva.io/admin.html">
-  <meta property="og:title" content="Admin Control Panel — Payniva">
-  <meta property="og:description" content="Multi-tenant platform administration. Manage billers, users, API sandbox, and full audit trail across all school and ETEA tenants.">
+  <link rel="canonical" href="https://fintap.pk/admin.html">
+  <meta property="og:title" content="Admin Control Panel: FinTap">
+  <meta property="og:description" content="Multi-tenant platform administration. Manage billers, users, API sandbox, and full audit trail across all school and Organization tenants.">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://payniva.io/admin.html">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <meta property="og:url" content="https://fintap.pk/admin.html">
   <link rel="stylesheet" href="assets/css/base.css">
   <link rel="stylesheet" href="assets/css/components.css">
   <link rel="stylesheet" href="assets/css/animations.css">
+  <link rel="stylesheet" href="assets/css/site.css">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <script src="assets/js/site.js" defer></script>
 </head>
 <body>
 
-<nav class="navbar" role="navigation" aria-label="Main navigation">
-  <input type="checkbox" id="nav-toggle" class="sr-only">
-  <div class="navbar__inner">
-    <a href="index.html" class="navbar__logo"><span class="navbar__logo-mark">PN</span>Payniva</a>
-    <ul class="navbar__nav" role="list">
-      <li><a href="product.html">Product</a></li>
-      <li><a href="schools.html">Schools</a></li>
-      <li><a href="etea.html">ETEA</a></li>
-      <li><a href="how-it-works.html">How It Works</a></li>
-      <li><a href="integration.html">Integration</a></li>
-      <li><a href="docs.html">Docs</a></li>
-      <li><a href="pricing.html">Pricing</a></li>
-    </ul>
-    <div class="navbar__actions"><a href="contact.html" class="btn btn-primary btn-sm">Get Started</a></div>
-    <label for="nav-toggle" class="navbar__toggle"><span></span><span></span><span></span></label>
-  </div>
+<a class="skip-link" href="#main">Skip to content</a>
+<nav class="navbar" aria-label="Main navigation">
+<div class="navbar__inner">
+<a href="index.html" class="navbar__logo" aria-label="FinTap home"><span class="navbar__logo-mark" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 26 26" fill="none"><path d="M5 23V3h17M5 12h13" stroke="currentColor" stroke-width="5"/></svg></span>FinTap</a>
+<ul class="navbar__nav" id="main-menu">
+<li>
+<a href="product.html">Platform</a>
+</li>
+<li>
+<a href="schools.html">For schools</a>
+</li>
+<li>
+<a href="organizations.html">For organizations</a>
+</li>
+<li>
+<a href="pricing.html">Pricing</a>
+</li>
+<li class="mobile-contact">
+<a href="contact.html">Talk to our team ↗</a>
+</li>
+</ul>
+<div class="navbar__actions">
+<a href="contact.html" class="btn btn-primary btn-sm">Book a demo <span aria-hidden="true">↗</span></a>
+</div>
+<button class="menu-toggle" aria-expanded="false" aria-controls="main-menu" aria-label="Open navigation"><span></span><span></span></button>
+</div>
 </nav>
 
-<main>
+<main id="main">
 
   <!-- HERO -->
   <section class="hero hero--center bg-dots" aria-labelledby="admin-heading">
@@ -95,13 +105,21 @@
       <div class="section-header reveal-up">
         <span class="section-label">Biller States</span>
         <h2 id="biller-heading">Biller Lifecycle Diagram</h2>
-        <p class="section-sub">Every biller on the platform moves through a defined set of states — all transitions are audited.</p>
+        <p class="section-sub">Every biller on the platform moves through a defined set of states. All transitions are audited.</p>
       </div>
       <div class="flow-diagram reveal-up" role="img" aria-label="Biller lifecycle states">
-        <div class="flow-step"><div class="flow-step__box"><span class="flow-step__num">STATE</span>Created<br><span class="badge badge--active" style="margin-top:0.375rem;display:inline-flex;">New</span></div></div>
-        <div class="flow-step"><div class="flow-step__box"><span class="flow-step__num">STATE</span>Active<br><span class="badge badge--paid" style="margin-top:0.375rem;display:inline-flex;">Live</span></div></div>
-        <div class="flow-step"><div class="flow-step__box"><span class="flow-step__num">STATE</span>Suspended<br><span class="badge badge--pending" style="margin-top:0.375rem;display:inline-flex;">Paused</span></div></div>
-        <div class="flow-step"><div class="flow-step__box"><span class="flow-step__num">STATE</span>Banned<br><span class="badge badge--failed" style="margin-top:0.375rem;display:inline-flex;">Blocked</span></div></div>
+        <div class="flow-step">
+<div class="flow-step__box"><span class="flow-step__num">STATE</span>Created<br><span class="badge badge--active" style="margin-top:0.375rem;display:inline-flex;">New</span></div>
+</div>
+        <div class="flow-step">
+<div class="flow-step__box"><span class="flow-step__num">STATE</span>Active<br><span class="badge badge--paid" style="margin-top:0.375rem;display:inline-flex;">Live</span></div>
+</div>
+        <div class="flow-step">
+<div class="flow-step__box"><span class="flow-step__num">STATE</span>Suspended<br><span class="badge badge--pending" style="margin-top:0.375rem;display:inline-flex;">Paused</span></div>
+</div>
+        <div class="flow-step">
+<div class="flow-step__box"><span class="flow-step__num">STATE</span>Banned<br><span class="badge badge--failed" style="margin-top:0.375rem;display:inline-flex;">Blocked</span></div>
+</div>
       </div>
     </div>
   </section>
@@ -112,7 +130,7 @@
       <div class="section-header reveal-up">
         <span class="section-label">Audit Trail</span>
         <h2 id="audit-heading">Every Action, Logged.</h2>
-        <p class="section-sub">An immutable log of every platform operation — who did what, when, from where, and against which tenant.</p>
+        <p class="section-sub">An immutable log of every platform operation, including who did what, when, from where, and against which tenant.</p>
       </div>
       <div class="table-wrapper reveal-up">
         <table class="data-table" aria-label="Sample audit log entries">
@@ -129,7 +147,7 @@
           <tbody>
             <tr>
               <td style="font-size:0.75rem;">2026-04-20 08:42:11</td>
-              <td>admin@payniva.io</td>
+              <td>admin@fintap.pk</td>
               <td>BILLER_CREATED · BLR-00041</td>
               <td>Platform</td>
               <td style="font-family:var(--font-mono);font-size:0.75rem;">203.81.12.4</td>
@@ -145,15 +163,15 @@
             </tr>
             <tr>
               <td style="font-size:0.75rem;">2026-04-20 08:31:47</td>
-              <td>etea-ops@kpk.gov.pk</td>
+              <td>operations@example.org</td>
               <td>PAYMENT_CREATED · APP-2026-04192</td>
-              <td>ETEA-KPK</td>
+              <td>ORG-001</td>
               <td style="font-family:var(--font-mono);font-size:0.75rem;">39.48.201.7</td>
               <td><span class="badge badge--paid">OK</span></td>
             </tr>
             <tr>
               <td style="font-size:0.75rem;">2026-04-20 08:22:00</td>
-              <td>admin@payniva.io</td>
+              <td>admin@fintap.pk</td>
               <td>USER_SUSPENDED · USR-00198</td>
               <td>Platform</td>
               <td style="font-family:var(--font-mono);font-size:0.75rem;">203.81.12.4</td>
@@ -179,7 +197,7 @@
       <div class="section-header reveal-up">
         <span class="section-label">Access Control</span>
         <h2 id="roles-heading">Platform Role Definitions</h2>
-        <p class="section-sub">Each role is scoped — either to the entire platform, or to a single tenant.</p>
+        <p class="section-sub">Each role is scoped either to the entire platform, or to a single tenant.</p>
       </div>
       <div class="table-wrapper reveal-up">
         <table class="data-table" aria-label="Platform role definitions">
@@ -194,12 +212,12 @@
           </thead>
           <tbody>
             <tr><td>Platform Admin</td><td>Entire platform</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td><td><span class="check">✓</span></td></tr>
-            <tr><td>School Admin</td><td>Single school tenant</td><td><span class="check">Within tenant</span></td><td class="dash">—</td><td class="dash">—</td></tr>
-            <tr><td>Finance Manager</td><td>Single school tenant</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
-            <tr><td>School Staff</td><td>Single school tenant</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
-            <tr><td>Viewer</td><td>Single school tenant</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
-            <tr><td>ETEA Admin</td><td>Single ETEA tenant</td><td><span class="check">Within tenant</span></td><td class="dash">—</td><td class="dash">—</td></tr>
-            <tr><td>ETEA Operations</td><td>Single ETEA tenant</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td></tr>
+            <tr><td>School Admin</td><td>Single school tenant</td><td><span class="check">Within tenant</span></td><td class="dash">No</td><td class="dash">No</td></tr>
+            <tr><td>Finance Manager</td><td>Single school tenant</td><td class="dash">No</td><td class="dash">No</td><td class="dash">No</td></tr>
+            <tr><td>School Staff</td><td>Single school tenant</td><td class="dash">No</td><td class="dash">No</td><td class="dash">No</td></tr>
+            <tr><td>Viewer</td><td>Single school tenant</td><td class="dash">No</td><td class="dash">No</td><td class="dash">No</td></tr>
+            <tr><td>Organization Admin</td><td>Single Organization tenant</td><td><span class="check">Within tenant</span></td><td class="dash">No</td><td class="dash">No</td></tr>
+            <tr><td>Organization Operations</td><td>Single Organization tenant</td><td class="dash">No</td><td class="dash">No</td><td class="dash">No</td></tr>
           </tbody>
         </table>
       </div>
@@ -211,27 +229,78 @@
     <div class="container">
       <h2 class="reveal-up">Need full platform control?</h2>
       <p class="reveal-up" data-delay="0.1">Talk to us about onboarding your institution as a platform operator with full admin capabilities.</p>
-      <div class="reveal-up" data-delay="0.2"><a href="contact.html" class="btn btn-primary btn-lg">Get in Touch</a></div>
+      <div class="reveal-up" data-delay="0.2">
+<a href="contact.html" class="btn btn-primary btn-lg">Get in Touch</a>
+</div>
     </div>
   </div>
 
 </main>
 
-<footer class="footer" role="contentinfo">
-  <div class="container">
-    <div class="footer__grid">
-      <div class="footer__brand"><a href="index.html" class="navbar__logo"><span class="navbar__logo-mark">PN</span>Payniva</a><p>Multi-tenant education payment operating system. Built on 1LINK/1BILL rails.</p></div>
-      <div class="footer__col"><h5>Product</h5><ul role="list"><li><a href="product.html">Overview</a></li><li><a href="schools.html">For Schools</a></li><li><a href="etea.html">For ETEA</a></li><li><a href="admin.html">Admin Portal</a></li></ul></div>
-      <div class="footer__col"><h5>Developers</h5><ul role="list"><li><a href="how-it-works.html">How It Works</a></li><li><a href="integration.html">1LINK Integration</a></li><li><a href="security.html">Security</a></li><li><a href="docs.html">Documentation</a></li></ul></div>
-      <div class="footer__col"><h5>Company</h5><ul role="list"><li><a href="pricing.html">Pricing</a></li><li><a href="contact.html">Contact</a></li><li><a href="mailto:hello@payniva.io?subject=Privacy%20policy%20request">Request privacy policy</a></li><li><a href="mailto:hello@payniva.io?subject=Service%20terms%20request">Request service terms</a></li></ul></div>
-    </div>
-    <div class="footer__bottom"><p>© 2026 Payniva. All rights reserved.</p><span class="footer__badge">1LINK INTEGRATED</span></div>
-  </div>
+<footer class="footer">
+<div class="container">
+<div class="footer__grid">
+<div class="footer__brand">
+<a href="index.html" class="navbar__logo"><span class="navbar__logo-mark" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 26 26" fill="none"><path d="M5 23V3h17M5 12h13" stroke="currentColor" stroke-width="5"/></svg></span>FinTap</a>
+<p>Payment collection software for schools and organizations in Pakistan.</p>
+<a class="footer-email" href="mailto:hello@fintap.pk">hello@fintap.pk ↗</a>
+</div>
+<div class="footer__col">
+<h5>Solutions</h5>
+<ul>
+<li>
+<a href="schools.html">For schools</a>
+</li>
+<li>
+<a href="organizations.html">For organizations</a>
+</li>
+<li>
+<a href="pricing.html">Pricing</a>
+</li>
+</ul>
+</div>
+<div class="footer__col">
+<h5>Platform</h5>
+<ul>
+<li>
+<a href="product.html">Overview</a>
+</li>
+<li>
+<a href="how-it-works.html">How it works</a>
+</li>
+<li>
+<a href="security.html">Security &amp; privacy</a>
+</li>
+<li>
+<a href="integration.html">Integrations</a>
+</li>
+<li>
+<a href="docs.html">Documentation</a>
+</li>
+</ul>
+</div>
+<div class="footer__col">
+<h5>Get in touch</h5>
+<ul>
+<li>
+<a href="contact.html">Book a demo ↗</a>
+</li>
+<li>
+<a href="mailto:hello@fintap.pk?subject=Privacy%20policy%20request">Request privacy policy</a>
+</li>
+<li>
+<a href="mailto:hello@fintap.pk?subject=Service%20terms%20request">Request service terms</a>
+</li>
+</ul>
+<p class="footer-location">Built for Pakistan.</p>
+</div>
+</div>
+<div class="footer__bottom">
+<p>© 2026 FinTap. All rights reserved.</p>
+<p>FinTap.pk · Built for Pakistan.</p>
+</div>
+</div>
 </footer>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
 <script src="assets/js/copy-code.js" defer></script>
-<script src="assets/js/animations.js" defer></script>
 </body>
 </html>

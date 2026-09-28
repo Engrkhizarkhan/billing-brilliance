@@ -1,56 +1,61 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>How Payniva Works — Platform Overview</title>
-  <meta name="description" content="Payniva connects schools and organizations to Pakistan's national payment network. Two portals, every bank, real-time updates.">
+  <title>How FinTap Works: Platform Overview</title>
+  <meta name="description" content="FinTap connects schools and organizations to Pakistan's national payment network. Two portals, every bank, real-time updates.">
   <meta name="robots" content="index, follow">
-  <link rel="canonical" href="https://payniva.io/product.html">
-  <meta property="og:title" content="How Payniva Works — Platform Overview">
+  <link rel="canonical" href="https://fintap.pk/product.html">
+  <meta property="og:title" content="How FinTap Works: Platform Overview">
   <meta property="og:description" content="Two portals for schools and organizations, connected to every bank in Pakistan. Simple to use, powerful under the hood.">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://payniva.io/product.html">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <meta property="og:url" content="https://fintap.pk/product.html">
   <link rel="stylesheet" href="assets/css/base.css">
   <link rel="stylesheet" href="assets/css/components.css">
   <link rel="stylesheet" href="assets/css/animations.css">
-  <script src="assets/js/theme.js"></script>
+  <link rel="stylesheet" href="assets/css/site.css">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <script src="assets/js/site.js" defer></script>
 </head>
 <body>
 
-<nav class="navbar" role="navigation" aria-label="Main navigation">
-  <input type="checkbox" id="nav-toggle" class="sr-only">
-  <div class="navbar__inner">
-    <a href="index.html" class="navbar__logo"><span class="navbar__logo-mark" aria-hidden="true">PN</span>Payniva</a>
-    <ul class="navbar__nav" role="list">
-      <li><a href="product.html" class="active">How It Works</a></li>
-      <li><a href="schools.html">For Schools</a></li>
-      <li><a href="organizations.html">For Organizations</a></li>
-      <li><a href="security.html">Security</a></li>
-      <li><a href="pricing.html">Pricing</a></li>
-    </ul>
-    <div class="navbar__actions">
-      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark mode">
-        <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-      </button>
-      <a href="contact.html" class="btn btn-primary btn-sm">Get Started</a>
-    </div>
-    <label for="nav-toggle" class="navbar__toggle" aria-label="Toggle navigation"><span></span><span></span><span></span></label>
-  </div>
+<a class="skip-link" href="#main">Skip to content</a>
+<nav class="navbar" aria-label="Main navigation">
+<div class="navbar__inner">
+<a href="index.html" class="navbar__logo" aria-label="FinTap home"><span class="navbar__logo-mark" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 26 26" fill="none"><path d="M5 23V3h17M5 12h13" stroke="currentColor" stroke-width="5"/></svg></span>FinTap</a>
+<ul class="navbar__nav" id="main-menu">
+<li>
+<a href="product.html" aria-current="page">Platform</a>
+</li>
+<li>
+<a href="schools.html">For schools</a>
+</li>
+<li>
+<a href="organizations.html">For organizations</a>
+</li>
+<li>
+<a href="pricing.html">Pricing</a>
+</li>
+<li class="mobile-contact">
+<a href="contact.html">Talk to our team ↗</a>
+</li>
+</ul>
+<div class="navbar__actions">
+<a href="contact.html" class="btn btn-primary btn-sm">Book a demo <span aria-hidden="true">↗</span></a>
+</div>
+<button class="menu-toggle" aria-expanded="false" aria-controls="main-menu" aria-label="Open navigation"><span></span><span></span></button>
+</div>
 </nav>
 
-<main>
+<main id="main">
 
   <!-- HERO -->
   <section class="hero hero--center bg-dots" aria-labelledby="product-heading">
     <div class="container">
       <p class="hero__eyebrow">Platform Overview</p>
-      <h1 id="product-heading">One Platform.<br>Two Portals.<br>Every Bank in Pakistan.</h1>
-      <p class="section-sub">Payniva gives schools and organizations a simple way to collect payments through Pakistan's national banking network. No new apps for payers. No manual reconciliation for you.</p>
+      <h1 id="product-heading">Payment collection software.<br>Built for your institution.</h1>
+      <p class="section-sub">FinTap gives schools and organizations a simple way to collect payments through Pakistan's national banking network. No new apps for payers. No manual reconciliation for you.</p>
       <div class="hero__actions">
         <a href="contact.html" class="btn btn-primary">Request a Demo</a>
         <a href="how-it-works.html" class="btn btn-outline">See How It Works</a>
@@ -78,9 +83,9 @@
           </div>
         </div>
         <span class="arch-arrow--vert">↓</span>
-        <div class="arch-label">Payniva Platform (Secure Payment Layer)</div>
+        <div class="arch-label">FinTap Platform (Secure Payment Layer)</div>
         <div class="arch-row">
-          <div class="arch-box arch-box--amber" style="min-width:400px;">Payniva — Manages Vouchers, Tracks Payments, Stores Records</div>
+          <div class="arch-box arch-box--amber" style="min-width:400px;">FinTap: Manages Vouchers, Tracks Payments, Stores Records</div>
         </div>
         <span class="arch-arrow--vert">↕</span>
         <div class="arch-label">Pakistan's National Payment Network</div>
@@ -96,7 +101,7 @@
         <span class="arch-arrow--vert">↕</span>
         <div class="arch-label">Secure Data Storage</div>
         <div class="arch-row">
-          <div class="arch-box arch-box--slate">All Records Encrypted — Each Organization's Data Kept Separate</div>
+          <div class="arch-box arch-box--slate">All Records Encrypted. Each Organization's Data Kept Separate</div>
         </div>
       </div>
     </div>
@@ -109,14 +114,14 @@
         <div class="reveal-left">
           <span class="section-label">Your Data</span>
           <h2 id="privacy-heading">Your Data is Always Yours.<br>Nobody Else Can See It.</h2>
-          <p style="margin-bottom:1.5rem;">Every school and organization on Payniva has a completely separate space. There is no way for one organization to see another's data — not even accidentally.</p>
+          <p style="margin-bottom:1.5rem;">Every school and organization on FinTap has a completely separate space. There is no way for one organization to see another's data, including accidental access.</p>
           <div class="checklist">
             <div class="checklist__item">School A users can never see School B's students or payments</div>
             <div class="checklist__item">Each organization's records are stored and accessed separately</div>
             <div class="checklist__item">Every login is verified before accessing any data</div>
             <div class="checklist__item">Reports and exports only show your organization's own data</div>
             <div class="checklist__item">All data is encrypted in storage and in transit</div>
-            <div class="checklist__item">Access is controlled by role — staff only see what they need</div>
+            <div class="checklist__item">Access is controlled by role. Staff only see what they need</div>
           </div>
         </div>
         <div class="reveal-right">
@@ -132,7 +137,7 @@
                 <p style="font-size:.75rem;color:var(--text-dim);">Can see: their own students, fees, and payments only.</p>
               </div>
               <div style="background:rgba(201,151,58,.05);border:1px solid rgba(201,151,58,.2);padding:1rem;">
-                <p style="font-size:.8rem;color:var(--warm-white);font-weight:600;margin-bottom:.3rem;">ETEA (Exam Authority)</p>
+                <p style="font-size:.8rem;color:var(--warm-white);font-weight:600;margin-bottom:.3rem;">Example Organization</p>
                 <p style="font-size:.75rem;color:var(--text-dim);">Can see: their own applicants and fees only.</p>
               </div>
             </div>
@@ -167,11 +172,11 @@
             <tr><td>Generate receipts</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td></tr>
             <tr><td>Export payment reports</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td></tr>
             <tr><td>Manage staff access levels</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td></tr>
-            <tr><td>Fee plans by class or group</td><td><span class="check">✓</span></td><td class="dash">—</td></tr>
-            <tr><td>Scholarships &amp; concessions</td><td><span class="check">✓</span></td><td class="dash">—</td></tr>
-            <tr><td>Defaulter tracking</td><td><span class="check">✓</span></td><td class="dash">—</td></tr>
-            <tr><td>Connect existing software</td><td class="dash">—</td><td><span class="check">✓</span></td></tr>
-            <tr><td>Automatic payment notifications</td><td class="dash">—</td><td><span class="check">✓</span></td></tr>
+            <tr><td>Fee plans by class or group</td><td><span class="check">✓</span></td><td class="dash">No</td></tr>
+            <tr><td>Scholarships &amp; concessions</td><td><span class="check">✓</span></td><td class="dash">No</td></tr>
+            <tr><td>Defaulter tracking</td><td><span class="check">✓</span></td><td class="dash">No</td></tr>
+            <tr><td>Connect existing software</td><td class="dash">No</td><td><span class="check">✓</span></td></tr>
+            <tr><td>Automatic payment notifications</td><td class="dash">No</td><td><span class="check">✓</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -191,23 +196,69 @@
 
 </main>
 
-<footer class="footer" role="contentinfo">
-  <div class="container">
-    <div class="footer__grid">
-      <div class="footer__brand">
-        <a href="index.html" class="navbar__logo"><span class="navbar__logo-mark" aria-hidden="true">PN</span>Payniva</a>
-        <p>Payment collection platform for schools and organizations in Pakistan. Connected to the national 1LINK payment network.</p>
-      </div>
-      <div class="footer__col"><h5>Solutions</h5><ul role="list"><li><a href="schools.html">For Schools</a></li><li><a href="organizations.html">For Organizations</a></li><li><a href="pricing.html">Pricing</a></li><li><a href="contact.html">Get Started</a></li></ul></div>
-      <div class="footer__col"><h5>Platform</h5><ul role="list"><li><a href="product.html">How It Works</a></li><li><a href="security.html">Security &amp; Privacy</a></li><li><a href="integration.html">API Access</a></li><li><a href="docs.html">Documentation</a></li></ul></div>
-      <div class="footer__col"><h5>Company</h5><ul role="list"><li><a href="contact.html">Contact Us</a></li><li><a href="mailto:hello@payniva.io?subject=Privacy%20policy%20request">Request privacy policy</a></li><li><a href="mailto:hello@payniva.io?subject=Service%20terms%20request">Request service terms</a></li></ul></div>
-    </div>
-    <div class="footer__bottom"><p>&copy; 2026 Payniva. All rights reserved.</p><span class="footer__badge">1LINK INTEGRATED</span></div>
-  </div>
+<footer class="footer">
+<div class="container">
+<div class="footer__grid">
+<div class="footer__brand">
+<a href="index.html" class="navbar__logo"><span class="navbar__logo-mark" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 26 26" fill="none"><path d="M5 23V3h17M5 12h13" stroke="currentColor" stroke-width="5"/></svg></span>FinTap</a>
+<p>Payment collection software for schools and organizations in Pakistan.</p>
+<a class="footer-email" href="mailto:hello@fintap.pk">hello@fintap.pk ↗</a>
+</div>
+<div class="footer__col">
+<h5>Solutions</h5>
+<ul>
+<li>
+<a href="schools.html">For schools</a>
+</li>
+<li>
+<a href="organizations.html">For organizations</a>
+</li>
+<li>
+<a href="pricing.html">Pricing</a>
+</li>
+</ul>
+</div>
+<div class="footer__col">
+<h5>Platform</h5>
+<ul>
+<li>
+<a href="product.html">Overview</a>
+</li>
+<li>
+<a href="how-it-works.html">How it works</a>
+</li>
+<li>
+<a href="security.html">Security &amp; privacy</a>
+</li>
+<li>
+<a href="integration.html">Integrations</a>
+</li>
+<li>
+<a href="docs.html">Documentation</a>
+</li>
+</ul>
+</div>
+<div class="footer__col">
+<h5>Get in touch</h5>
+<ul>
+<li>
+<a href="contact.html">Book a demo ↗</a>
+</li>
+<li>
+<a href="mailto:hello@fintap.pk?subject=Privacy%20policy%20request">Request privacy policy</a>
+</li>
+<li>
+<a href="mailto:hello@fintap.pk?subject=Service%20terms%20request">Request service terms</a>
+</li>
+</ul>
+<p class="footer-location">Built for Pakistan.</p>
+</div>
+</div>
+<div class="footer__bottom">
+<p>© 2026 FinTap. All rights reserved.</p>
+<p>FinTap.pk · Built for Pakistan.</p>
+</div>
+</div>
 </footer>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
-<script src="assets/js/animations.js" defer></script>
 </body>
 </html>
