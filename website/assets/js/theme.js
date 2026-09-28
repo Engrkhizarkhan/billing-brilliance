@@ -1,4 +1,4 @@
-/* theme.js — Light/Dark mode toggle with localStorage persistence */
+/* theme.js - Light/Dark mode toggle with localStorage persistence */
 (function () {
   var html = document.documentElement;
   var saved = localStorage.getItem('pn-theme');

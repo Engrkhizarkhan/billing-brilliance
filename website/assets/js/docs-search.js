@@ -1,4 +1,4 @@
-/* docs-search.js — In-page search and active-link highlighting for docs */
+/* docs-search.js - In-page search and active-link highlighting for docs */
 document.addEventListener('DOMContentLoaded', () => {
   const input    = document.querySelector('.docs-search-input');
   const links    = document.querySelectorAll('.docs-nav__link');

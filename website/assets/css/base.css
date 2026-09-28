@@ -1,9 +1,8 @@
 /* =====================================================
-   base.css — Payniva Design System
+   base.css - FinTap Design System
    Variables, Reset, Typography, Layout Utilities
    ===================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 /* ============ DESIGN TOKENS ============ */
 :root {
@@ -19,8 +18,8 @@
   --green:        #2A9D5C;
   --blue:         #2D6BE4;
 
-  --font-heading: 'Space Grotesk', system-ui, sans-serif;
-  --font-body:    'Inter', system-ui, sans-serif;
+  --font-heading: 'DM Sans', system-ui, sans-serif;
+  --font-body:    'DM Sans', system-ui, sans-serif;
   --font-mono:    'JetBrains Mono', 'Courier New', monospace;
 
   --container-max:  1240px;

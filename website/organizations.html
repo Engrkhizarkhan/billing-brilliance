@@ -1,23 +1,19 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Payniva for Organizations — Connect Your System to Pakistan's Payment Network</title>
-  <meta name="description" content="Payniva connects your organization's existing system to Pakistan's national payment network. Collect application fees, service charges, and more — automatically, in real time.">
+  <title>FinTap for Organizations: Connect Your System to Pakistan's Payment Network</title>
+  <meta name="description" content="FinTap connects your organization's existing system to Pakistan's national payment network. Collect application fees, service charges, and more automatically, in real time.">
   <meta name="robots" content="index, follow">
-  <link rel="canonical" href="https://payniva.io/organizations.html">
-  <meta property="og:title" content="Payniva for Organizations — API Payment Access">
-  <meta property="og:description" content="Exam authorities, hospitals, government bodies — connect your existing software to collect payments through every bank in Pakistan.">
+  <link rel="canonical" href="https://fintap.pk/organizations.html">
+  <meta property="og:title" content="FinTap for Organizations: API Payment Access">
+  <meta property="og:description" content="Exam authorities, hospitals, and government bodies can connect their existing software to collect payments through every bank in Pakistan.">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://payniva.io/organizations.html">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <meta property="og:url" content="https://fintap.pk/organizations.html">
   <link rel="stylesheet" href="assets/css/base.css">
   <link rel="stylesheet" href="assets/css/components.css">
   <link rel="stylesheet" href="assets/css/animations.css">
-  <script src="assets/js/theme.js"></script>
   <style>
     .org-hero-visual { max-width:440px; }
     .connect-card { background:var(--obsidian); border:1px solid var(--border); padding:1.5rem; margin-bottom:1rem; }
@@ -67,32 +63,41 @@
     .faq-q { padding:1.25rem 1.5rem; font-weight:600; font-size:.95rem; display:flex; justify-content:space-between; align-items:center; }
     .faq-a { padding:0 1.5rem 1.25rem; font-size:.875rem; color:var(--text-dim); line-height:1.75; }
   </style>
+  <link rel="stylesheet" href="assets/css/site.css">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <script src="assets/js/site.js" defer></script>
 </head>
 <body>
 
-<nav class="navbar" role="navigation" aria-label="Main navigation">
-  <input type="checkbox" id="nav-toggle" class="sr-only">
-  <div class="navbar__inner">
-    <a href="index.html" class="navbar__logo"><span class="navbar__logo-mark" aria-hidden="true">PN</span>Payniva</a>
-    <ul class="navbar__nav" role="list">
-      <li><a href="product.html">How It Works</a></li>
-      <li><a href="schools.html">For Schools</a></li>
-      <li><a href="organizations.html" class="active">For Organizations</a></li>
-      <li><a href="security.html">Security</a></li>
-      <li><a href="pricing.html">Pricing</a></li>
-    </ul>
-    <div class="navbar__actions">
-      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle light/dark mode">
-        <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-      </button>
-      <a href="contact.html" class="btn btn-primary btn-sm">Get Started</a>
-    </div>
-    <label for="nav-toggle" class="navbar__toggle" aria-label="Toggle navigation"><span></span><span></span><span></span></label>
-  </div>
+<a class="skip-link" href="#main">Skip to content</a>
+<nav class="navbar" aria-label="Main navigation">
+<div class="navbar__inner">
+<a href="index.html" class="navbar__logo" aria-label="FinTap home"><span class="navbar__logo-mark" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 26 26" fill="none"><path d="M5 23V3h17M5 12h13" stroke="currentColor" stroke-width="5"/></svg></span>FinTap</a>
+<ul class="navbar__nav" id="main-menu">
+<li>
+<a href="product.html">Platform</a>
+</li>
+<li>
+<a href="schools.html">For schools</a>
+</li>
+<li>
+<a href="organizations.html" aria-current="page">For organizations</a>
+</li>
+<li>
+<a href="pricing.html">Pricing</a>
+</li>
+<li class="mobile-contact">
+<a href="contact.html">Talk to our team ↗</a>
+</li>
+</ul>
+<div class="navbar__actions">
+<a href="contact.html" class="btn btn-primary btn-sm">Book a demo <span aria-hidden="true">↗</span></a>
+</div>
+<button class="menu-toggle" aria-expanded="false" aria-controls="main-menu" aria-label="Open navigation"><span></span><span></span></button>
+</div>
 </nav>
 
-<main>
+<main id="main">
 
   <!-- HERO -->
   <section class="hero bg-dots" aria-labelledby="org-hero-heading">
@@ -100,8 +105,8 @@
       <div class="hero__grid">
         <div class="hero__content">
           <p class="hero__eyebrow">Organization Portal</p>
-          <h1 id="org-hero-heading">Your System.<br>Pakistan's Payment Network.<br>Connected.</h1>
-          <p class="section-sub">If your organization collects any kind of payment — exam fees, application charges, service fees, admission deposits — Payniva can plug your existing system into every bank in Pakistan.</p>
+          <h1 id="org-hero-heading">Collect payments.<br>Keep your business moving.</h1>
+          <p class="section-sub">If your organization collects any kind of payment, including exam fees, application charges, service fees, or admission deposits, FinTap can plug your existing system into every bank in Pakistan.</p>
           <div class="hero__actions">
             <a href="contact.html" class="btn btn-primary btn-lg">Talk to Our Team</a>
             <a href="integration.html" class="btn btn-outline btn-lg">Technical Details</a>
@@ -117,7 +122,7 @@
               <div class="connect-arrow-row">
                 <div class="connect-box">
                   <div class="connect-box__label">Your System</div>
-                  <div class="connect-box__name">ETEA Portal</div>
+                  <div class="connect-box__name">Organization Portal</div>
                 </div>
                 <div class="connect-arrow">⇄</div>
                 <div class="connect-box">
@@ -157,38 +162,38 @@
       <div class="section-header section-header--center reveal-up">
         <span class="section-label">Who Uses This</span>
         <h2 id="usecases-heading">Built for Any Organization<br>That Collects Payments.</h2>
-        <p class="section-sub" style="margin-left:auto;margin-right:auto;">If you have a system that creates invoices or payment requests, Payniva can connect it to Pakistan's banking network.</p>
+        <p class="section-sub" style="margin-left:auto;margin-right:auto;">If you have a system that creates invoices or payment requests, FinTap can connect it to Pakistan's banking network.</p>
       </div>
       <div class="usecase-grid stagger-children">
         <div class="usecase-card">
-          <span class="usecase-card__icon">📝</span>
+          <span class="usecase-card__icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></span>
           <h3>Exam &amp; Test Authorities</h3>
           <p>Collect application fees for admissions, entrance exams, or testing programs. Each applicant gets a unique payment voucher. You see payments instantly in your system.</p>
         </div>
         <div class="usecase-card">
-          <span class="usecase-card__icon">🏥</span>
+          <span class="usecase-card__icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></span>
           <h3>Hospitals &amp; Clinics</h3>
           <p>Accept patient payments, appointment deposits, or lab fees through any bank. Patients pay from their phone without coming to a counter.</p>
         </div>
         <div class="usecase-card">
-          <span class="usecase-card__icon">🏛️</span>
+          <span class="usecase-card__icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></span>
           <h3>Government Bodies</h3>
           <p>Collect application charges, license fees, registration payments, or fines through Pakistan's national payment infrastructure.</p>
         </div>
         <div class="usecase-card">
-          <span class="usecase-card__icon">🎓</span>
+          <span class="usecase-card__icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></span>
           <h3>Universities &amp; Institutes</h3>
-          <p>Admission fees, semester dues, hostel charges, exam forms — post any fee and let students pay through any bank app or ATM.</p>
+          <p>Post admission fees, semester dues, hostel charges, or exam fees and let students pay through any bank app or ATM.</p>
         </div>
         <div class="usecase-card">
-          <span class="usecase-card__icon">🔧</span>
+          <span class="usecase-card__icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></span>
           <h3>Service Providers</h3>
-          <p>Utility companies, subscription services, or any business with recurring billing can automate fee collection through Payniva.</p>
+          <p>Utility companies, subscription services, or any business with recurring billing can automate fee collection through FinTap.</p>
         </div>
         <div class="usecase-card">
-          <span class="usecase-card__icon">🏢</span>
+          <span class="usecase-card__icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></span>
           <h3>Professional Associations</h3>
-          <p>Membership fees, certification charges, renewal dues — streamline collection without building your own payment system.</p>
+          <p>Streamline collection for membership fees, certification charges, and renewal dues without building your own payment system.</p>
         </div>
       </div>
     </div>
@@ -199,8 +204,8 @@
     <div class="container">
       <div class="section-header reveal-up">
         <span class="section-label">The Connection</span>
-        <h2 id="connection-heading">How Your System Connects<br>to Payniva.</h2>
-        <p class="section-sub">You don't need to rebuild your software. Payniva sits between your existing system and Pakistan's banking network.</p>
+        <h2 id="connection-heading">How Your System Connects<br>to FinTap.</h2>
+        <p class="section-sub">You don't need to rebuild your software. FinTap sits between your existing system and Pakistan's banking network.</p>
       </div>
       <div class="how-org stagger-children">
         <div class="how-org__steps">
@@ -208,28 +213,28 @@
             <div class="how-org__step-num">01</div>
             <div class="how-org__step-body">
               <h4>Your system creates a payment request</h4>
-              <p>When someone needs to pay — an applicant, patient, student — your system tells Payniva: "This person owes PKR X." Payniva creates a unique payment voucher.</p>
+              <p>When an applicant, patient, or student needs to pay, your system tells FinTap: "This person owes PKR X." FinTap creates a unique payment voucher.</p>
             </div>
           </div>
           <div class="how-org__step">
             <div class="how-org__step-num">02</div>
             <div class="how-org__step-body">
               <h4>The person pays at any bank</h4>
-              <p>They take the voucher number to any bank — in person, online, or at an ATM. They enter the number, see the amount, and pay. No new app, no new account needed.</p>
+              <p>They take the voucher number to any bank in person, online, or at an ATM. They enter the number, see the amount, and pay. No new app, no new account needed.</p>
             </div>
           </div>
           <div class="how-org__step">
             <div class="how-org__step-num">03</div>
             <div class="how-org__step-body">
-              <h4>Payniva tells your system instantly</h4>
-              <p>The moment the bank confirms the payment, Payniva automatically notifies your system. Your system can then unlock the service, confirm the application, or update its records.</p>
+              <h4>FinTap tells your system instantly</h4>
+              <p>The moment the bank confirms the payment, FinTap automatically notifies your system. Your system can then unlock the service, confirm the application, or update its records.</p>
             </div>
           </div>
           <div class="how-org__step">
             <div class="how-org__step-num">04</div>
             <div class="how-org__step-body">
               <h4>Everything is tracked and reportable</h4>
-              <p>Every payment — successful, pending, or failed — is logged in the Organization Portal. You can search, filter, and export reports at any time.</p>
+              <p>Every payment is logged, whether successful, pending, or failed, in the Organization Portal. You can search, filter, and export reports at any time.</p>
             </div>
           </div>
         </div>
@@ -238,26 +243,38 @@
             <p style="font-size:.75rem;color:var(--text-dim);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.08em;margin-bottom:1.25rem;">Payment Flow</p>
             <div class="flow-node">
               <div class="flow-node__dot flow-node__dot--blue"></div>
-              <div><div class="flow-node__label">Your Organization's System</div><div class="flow-node__sub">Creates the payment request</div></div>
+              <div>
+<div class="flow-node__label">Your Organization's System</div>
+<div class="flow-node__sub">Creates the payment request</div>
+</div>
             </div>
-            <div class="flow-connector">↓ sends to Payniva</div>
+            <div class="flow-connector">↓ sends to FinTap</div>
             <div class="flow-node">
               <div class="flow-node__dot flow-node__dot--amber"></div>
-              <div><div class="flow-node__label">Payniva Platform</div><div class="flow-node__sub">Generates voucher, routes payment</div></div>
+              <div>
+<div class="flow-node__label">FinTap Platform</div>
+<div class="flow-node__sub">Generates voucher, routes payment</div>
+</div>
             </div>
             <div class="flow-connector">↓ routed to</div>
             <div class="flow-node">
               <div class="flow-node__dot flow-node__dot--green"></div>
-              <div><div class="flow-node__label">Pakistan's Banking Network</div><div class="flow-node__sub">HBL, UBL, MCB, ATMs, JazzCash &amp; more</div></div>
+              <div>
+<div class="flow-node__label">Pakistan's Banking Network</div>
+<div class="flow-node__sub">HBL, UBL, MCB, ATMs, JazzCash &amp; more</div>
+</div>
             </div>
             <div class="flow-connector">↓ confirmation sent back</div>
             <div class="flow-node">
               <div class="flow-node__dot flow-node__dot--blue"></div>
-              <div><div class="flow-node__label">Your System Updated</div><div class="flow-node__sub">Application marked as paid automatically</div></div>
+              <div>
+<div class="flow-node__label">Your System Updated</div>
+<div class="flow-node__sub">Application marked as paid automatically</div>
+</div>
             </div>
           </div>
           <div style="margin-top:1.5rem;padding:1.5rem;background:var(--obsidian);border:1px solid var(--border);">
-            <p style="font-size:.8rem;color:var(--text-dim);line-height:1.7;"><strong style="color:var(--warm-white);">Important:</strong> Payniva handles the payment processing. Your organization manages its own applicant data, user records, and business logic — we never touch or store that information.</p>
+            <p style="font-size:.8rem;color:var(--text-dim);line-height:1.7;"><strong style="color:var(--warm-white);">Important:</strong> FinTap handles the payment processing. Your organization manages its own applicant data, user records, and business logic. We never touch or store that information.</p>
           </div>
         </div>
       </div>
@@ -270,34 +287,34 @@
       <div class="section-header reveal-up">
         <span class="section-label">For Your IT Team</span>
         <h2 id="api-heading">A Clean Connection<br>for Your Developers.</h2>
-        <p class="section-sub">Your IT team connects your system to Payniva using a standard, well-documented interface. No custom builds, no special hardware — just a secure web connection.</p>
+        <p class="section-sub">Your IT team connects your system to FinTap using a standard, well-documented interface. You only need a secure web connection, with no custom builds or special hardware.</p>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;" class="stagger-children">
         <div class="api-plain">
           <div class="api-plain__title">What Your System Can Do</div>
           <div class="api-capability">
-            <div class="api-capability__icon">💳</div>
+            <div class="api-capability__icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></div>
             <div class="api-capability__body">
               <h5>Create a payment request</h5>
-              <p>Tell Payniva a specific person owes a specific amount. A unique payment voucher is returned immediately.</p>
+              <p>Tell FinTap a specific person owes a specific amount. A unique payment voucher is returned immediately.</p>
             </div>
           </div>
           <div class="api-capability">
-            <div class="api-capability__icon">🔍</div>
+            <div class="api-capability__icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></div>
             <div class="api-capability__body">
               <h5>Check payment status</h5>
               <p>At any time, query whether a specific payment has been made, is still pending, or was cancelled.</p>
             </div>
           </div>
           <div class="api-capability">
-            <div class="api-capability__icon">🔔</div>
+            <div class="api-capability__icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></div>
             <div class="api-capability__body">
               <h5>Receive automatic alerts</h5>
-              <p>When a payment completes, Payniva instantly notifies your system — so you can update your records without polling.</p>
+              <p>When a payment completes, FinTap instantly notifies your system so you can update your records without polling.</p>
             </div>
           </div>
           <div class="api-capability">
-            <div class="api-capability__icon">📊</div>
+            <div class="api-capability__icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg></div>
             <div class="api-capability__body">
               <h5>Track your payment history</h5>
               <p>All transactions are logged and searchable via the Organization Portal or programmatically from your system.</p>
@@ -316,7 +333,7 @@
             </ul>
           </div>
           <div style="background:rgba(45,107,228,.08);border:1px solid rgba(45,107,228,.25);padding:1.5rem;">
-            <p style="font-size:.875rem;color:var(--warm-white);line-height:1.7;">Your developers can read the full technical specification on our <a href="docs.html" style="color:var(--blue);">documentation page</a>. If your team has questions before you sign up, <a href="contact.html" style="color:var(--blue);">get in touch</a> — we're happy to talk through the integration.</p>
+            <p style="font-size:.875rem;color:var(--warm-white);line-height:1.7;">Your developers can read the full technical specification on our <a href="docs.html" style="color:var(--blue);">documentation page</a>. If your team has questions before you sign up, <a href="contact.html" style="color:var(--blue);">get in touch</a>. We're happy to talk through the integration.</p>
           </div>
         </div>
       </div>
@@ -333,7 +350,7 @@
       <div class="reveal-up">
         <div class="faq-pair">
           <div class="faq-q">Do we need to rebuild our existing software? <span>→</span></div>
-          <div class="faq-a">No. Payniva is designed to work alongside your existing software. Your IT team adds a connection to Payniva — the rest of your system stays exactly as it is.</div>
+          <div class="faq-a">No. FinTap is designed to work alongside your existing software. Your IT team adds a connection to FinTap. The rest of your system stays exactly as it is.</div>
         </div>
         <div class="faq-pair">
           <div class="faq-q">How long does integration take? <span>→</span></div>
@@ -341,15 +358,15 @@
         </div>
         <div class="faq-pair">
           <div class="faq-q">Do applicants or customers need a special account? <span>→</span></div>
-          <div class="faq-a">No. They only need a standard bank account, which most people already have. They pay using internet banking, a mobile app, ATM, or bank branch — exactly how they pay utility bills today.</div>
+          <div class="faq-a">No. They only need a standard bank account, which most people already have. They pay using internet banking, a mobile app, ATM, or bank branch, exactly how they pay utility bills today.</div>
         </div>
         <div class="faq-pair">
-          <div class="faq-q">Is our applicant/customer data shared with Payniva? <span>→</span></div>
-          <div class="faq-a">Payniva only receives what is needed to create a payment request — typically an ID and an amount. We do not store personal records, application data, or business logic. Your data remains in your system.</div>
+          <div class="faq-q">Is our applicant/customer data shared with FinTap? <span>→</span></div>
+          <div class="faq-a">FinTap only receives what is needed to create a payment request, typically an ID and an amount. We do not store personal records, application data, or business logic. Your data remains in your system.</div>
         </div>
         <div class="faq-pair">
           <div class="faq-q">What happens if a payment fails or is reversed? <span>→</span></div>
-          <div class="faq-a">Failed and reversed payments are tracked and your system is notified automatically. You can also view all transaction statuses — successful, pending, failed — in the Organization Portal at any time.</div>
+          <div class="faq-a">Failed and reversed payments are tracked and your system is notified automatically. You can also view all transaction statuses (successful, pending, or failed) in the Organization Portal at any time.</div>
         </div>
       </div>
     </div>
@@ -360,7 +377,7 @@
     <div class="container">
       <span class="section-label" style="justify-content:center;">Connect Your Organization</span>
       <h2 class="reveal-up">Ready to plug into<br>Pakistan's payment network?</h2>
-      <p class="reveal-up" data-delay="0.1">Talk to our team. We'll walk you through how Payniva fits into your existing system and get your technical team started.</p>
+      <p class="reveal-up" data-delay="0.1">Talk to our team. We'll walk you through how FinTap fits into your existing system and get your technical team started.</p>
       <div class="reveal-up" data-delay="0.2" style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;">
         <a href="contact.html" class="btn btn-primary btn-lg">Talk to Our Team</a>
         <a href="docs.html" class="btn btn-outline btn-lg">View Documentation</a>
@@ -370,23 +387,69 @@
 
 </main>
 
-<footer class="footer" role="contentinfo">
-  <div class="container">
-    <div class="footer__grid">
-      <div class="footer__brand">
-        <a href="index.html" class="navbar__logo"><span class="navbar__logo-mark" aria-hidden="true">PN</span>Payniva</a>
-        <p>Payment collection platform for schools and organizations in Pakistan. Connected to the national 1LINK payment network.</p>
-      </div>
-      <div class="footer__col"><h5>Solutions</h5><ul role="list"><li><a href="schools.html">For Schools</a></li><li><a href="organizations.html">For Organizations</a></li><li><a href="pricing.html">Pricing</a></li><li><a href="contact.html">Get Started</a></li></ul></div>
-      <div class="footer__col"><h5>Platform</h5><ul role="list"><li><a href="product.html">How It Works</a></li><li><a href="security.html">Security &amp; Privacy</a></li><li><a href="integration.html">API Access</a></li><li><a href="docs.html">Documentation</a></li></ul></div>
-      <div class="footer__col"><h5>Company</h5><ul role="list"><li><a href="contact.html">Contact Us</a></li><li><a href="mailto:hello@payniva.io?subject=Privacy%20policy%20request">Request privacy policy</a></li><li><a href="mailto:hello@payniva.io?subject=Service%20terms%20request">Request service terms</a></li></ul></div>
-    </div>
-    <div class="footer__bottom"><p>&copy; 2026 Payniva. All rights reserved.</p><span class="footer__badge">1LINK INTEGRATED</span></div>
-  </div>
+<footer class="footer">
+<div class="container">
+<div class="footer__grid">
+<div class="footer__brand">
+<a href="index.html" class="navbar__logo"><span class="navbar__logo-mark" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 26 26" fill="none"><path d="M5 23V3h17M5 12h13" stroke="currentColor" stroke-width="5"/></svg></span>FinTap</a>
+<p>Payment collection software for schools and organizations in Pakistan.</p>
+<a class="footer-email" href="mailto:hello@fintap.pk">hello@fintap.pk ↗</a>
+</div>
+<div class="footer__col">
+<h5>Solutions</h5>
+<ul>
+<li>
+<a href="schools.html">For schools</a>
+</li>
+<li>
+<a href="organizations.html">For organizations</a>
+</li>
+<li>
+<a href="pricing.html">Pricing</a>
+</li>
+</ul>
+</div>
+<div class="footer__col">
+<h5>Platform</h5>
+<ul>
+<li>
+<a href="product.html">Overview</a>
+</li>
+<li>
+<a href="how-it-works.html">How it works</a>
+</li>
+<li>
+<a href="security.html">Security &amp; privacy</a>
+</li>
+<li>
+<a href="integration.html">Integrations</a>
+</li>
+<li>
+<a href="docs.html">Documentation</a>
+</li>
+</ul>
+</div>
+<div class="footer__col">
+<h5>Get in touch</h5>
+<ul>
+<li>
+<a href="contact.html">Book a demo ↗</a>
+</li>
+<li>
+<a href="mailto:hello@fintap.pk?subject=Privacy%20policy%20request">Request privacy policy</a>
+</li>
+<li>
+<a href="mailto:hello@fintap.pk?subject=Service%20terms%20request">Request service terms</a>
+</li>
+</ul>
+<p class="footer-location">Built for Pakistan.</p>
+</div>
+</div>
+<div class="footer__bottom">
+<p>© 2026 FinTap. All rights reserved.</p>
+<p>FinTap.pk · Built for Pakistan.</p>
+</div>
+</div>
 </footer>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js" defer></script>
-<script src="assets/js/animations.js" defer></script>
 </body>
 </html>

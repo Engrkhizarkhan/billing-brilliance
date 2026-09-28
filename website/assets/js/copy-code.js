@@ -1,4 +1,4 @@
-/* copy-code.js — Copy-to-clipboard for code blocks */
+/* copy-code.js - Copy-to-clipboard for code blocks */
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.code-block__copy').forEach((btn) => {
     btn.addEventListener('click', () => {
