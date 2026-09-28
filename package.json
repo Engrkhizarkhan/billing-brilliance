@@ -4,6 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "website:version": "node scripts/version-website-assets.mjs --write",
+    "website:check": "node scripts/version-website-assets.mjs --check",
     "dev": "vite",
     "build": "npm run typecheck && vite build",
     "build:dev": "vite build --mode development",

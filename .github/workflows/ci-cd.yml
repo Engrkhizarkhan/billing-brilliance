@@ -37,6 +37,9 @@ jobs:
       - name: Run lint
         run: npm run lint
 
+      - name: Check marketing website asset versions
+        run: npm run website:check
+
       - name: Build production frontend
         run: npm run build
 
