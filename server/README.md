@@ -134,3 +134,7 @@ Payment commits enqueue `outbox_events`. The worker signs the exact JSON body wi
 - [`../docs/PRODUCTION_DEPLOYMENT_RUNBOOK.md`](../docs/PRODUCTION_DEPLOYMENT_RUNBOOK.md)
 - [`../docs/1BILL_HANDOVER_AND_COMPLIANCE_2026-09-08.md`](../docs/1BILL_HANDOVER_AND_COMPLIANCE_2026-09-08.md)
 - [`src/db/SCHEMA.md`](src/db/SCHEMA.md)
+
+Invalid/not-found and other unsuccessful Inquiry responses also use one ASCII
+space in `bill_status`, including authentication errors and admin previews.
+The response code continues to identify the reason; successful U/P states remain.

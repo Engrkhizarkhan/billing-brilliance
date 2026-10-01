@@ -261,3 +261,24 @@ outside this requested correction. Tests assert the exact space for inactive
 students and failed organization requests, including preview and payment-denial
 checks. Deploy through CI, then verify both existing blocked UAT consumers
 using full and shortened identifiers without changing consumer data.
+
+**Verified deployment at 12:26 PKT:** PR #12 merged as
+`3467dcefce1ebab75bc5a39c3941eebfa6a0932b`; production run `36829979542`
+passed and public readiness reported this revision. Both blocked UAT consumers
+(`10010018`, `10010019`) returned code `02` and a one-character status whose
+ASCII code is 32, in full and shortened forms. Both admin previews matched and
+remained nonpayable. Read-only controls returned `P` for `10010001` and
+`10010002`, and `U` for `10010003`. The first control check's old unpaid
+expectation for `10010002` was outdated; it is now paid. No consumer state was
+changed by these checks; payment count remained four. Provider-origin retest of
+the blocked response remains for 1BILL to confirm.
+
+## 1 October 2026 — blank status for invalid Inquiry responses
+
+User requested invalid consumers also return a blank status and explicitly asked
+to skip testing and push for deployment. All unsuccessful Inquiry responses now
+use one ASCII space, including missing consumers, invalid requests, internal
+errors and authentication failures, with matching admin previews. Response codes
+and successful U/P states are unchanged. Updated existing test expectations but
+did not run local tests or live probes; required CI/deployment checks remain
+enabled.

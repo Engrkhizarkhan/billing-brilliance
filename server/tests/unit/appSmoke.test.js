@@ -13,7 +13,7 @@ describe('public service contracts', () => {
       .set('username', 'wrong').set('password', 'wrong').send({});
     expect(response.status).toBe(401);
     expect(response.body).toEqual({
-      response_Code:'04',consumer_Detail:' '.repeat(30),bill_status:'B',due_date:' '.repeat(8),
+      response_Code:'04',consumer_Detail:' '.repeat(30),bill_status:' ',due_date:' '.repeat(8),
       amount_within_dueDate:'+0000000000000',amount_after_dueDate:'+0000000000000',
       billing_month:' '.repeat(4),date_paid:' '.repeat(8),amount_paid:' '.repeat(12),tran_auth_Id:' '.repeat(6),reserved:'',
     });
