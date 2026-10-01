@@ -25,7 +25,7 @@ test('testing organization sees guidance and cannot create a production payment 
 
     await page.goto('/login');
     await page.getByLabel(/email/i).fill(userEmail);
-    await page.getByLabel(/password/i).fill(userPassword);
+    await page.getByLabel('Password', { exact: true }).fill(userPassword);
     await page.getByRole('button', { name: /sign in/i }).click();
     await expect(page).toHaveURL(/\/org(?:\/)?$/);
     await expect(page.getByText(/Testing phase — you may prepare people and settings/i)).toBeVisible();

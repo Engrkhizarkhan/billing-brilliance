@@ -3,6 +3,7 @@ import { useAuthStore } from '@/store/authStore';
 import { UserRole } from '@/types';
 import { Button } from '@/components/ui/button';
 import { NotificationCenter } from '@/components/NotificationCenter';
+import { FinTapMark } from '@/components/FinTapMark';
 import { useSessionTimeout } from '@/hooks/useSessionTimeout';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { usePaymentEvents } from '@/hooks/usePaymentEvents';
@@ -156,11 +157,9 @@ const DashboardLayout = () => {
 
       <aside className={`fixed lg:static inset-y-0 left-0 z-50 h-screen w-[260px] ${sidebarCollapsed ? 'lg:w-[76px]' : 'lg:w-[260px]'} bg-sidebar text-sidebar-foreground flex flex-col transition-[width,transform] duration-300 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className={`h-16 flex items-center gap-3 border-b border-sidebar-border ${sidebarCollapsed ? 'px-3 lg:justify-center' : 'px-5'}`}>
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
-            <Building2 className="w-4 h-4 text-primary-foreground" />
-          </div>
+          <FinTapMark className="w-8 h-8" />
           <div className={`flex-1 min-w-0 ${sidebarCollapsed ? 'lg:hidden' : ''}`}>
-            <span className="font-bold text-[15px] tracking-tight">Fintap</span>
+            <span className="font-bold text-[15px] tracking-tight">FinTap</span>
             <p className="text-[10px] text-sidebar-muted leading-none mt-0.5">{roleLabels[user.role]}</p>
           </div>
           <button className="lg:hidden p-1.5 hover:bg-sidebar-accent rounded-lg" onClick={() => setSidebarOpen(false)}>

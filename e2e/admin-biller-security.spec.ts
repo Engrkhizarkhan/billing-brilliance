@@ -10,7 +10,7 @@ test('admin key reveal, regeneration, and biller offboarding require the privile
 
   await page.goto('/login');
   await page.getByLabel(/email/i).fill(process.env.E2E_ADMIN_EMAIL || 'admin@example.com');
-  await page.getByLabel(/password/i).fill(password);
+  await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: /sign in/i }).click();
   await expect(page).toHaveURL(/\/admin(?:\/)?$/);
   await page.getByRole('button', { name: 'Billers' }).click();
