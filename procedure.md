@@ -236,3 +236,28 @@ therefore failed; formatting and full/short equivalence passed. The local check
 made no payment (count remained three). This establishes an observed provider
 payment, not completed provider certification. Preserve the payment evidence and
 use another unpaid consumer for subsequent unpaid-case testing.
+
+**Final format deployment verification, 1 October at 12:07 PKT:** PR #11 merged
+as `03015672e77a688cc97b593d94560fb438d19dbb`; production run `36828252733`
+passed and public readiness confirmed this revision. Forty server-local HTTP
+Inquiries (20 consumers, both input forms) passed exact key/space-width and
+current-state checks. Four admin previews and an Inquiry authentication error
+also passed. Payment authentication-error and authenticated invalid-body probes
+both returned exactly `{"response_Code":"04","reserved":"","identification_parameter":""}`
+(HTTP 401 and 200 respectively). Successful Payment format is covered by the
+disposable MySQL regressions; no production payment was generated for this check.
+Production payment count remained three. User should ask 1BILL to verify the
+updated format through its gateway; `10010002` remains an unpaid PKR 4,999 case,
+while `10010001` is paid following its provider-origin payment.
+
+## 1 October 2026 — blank status for blocked/inactive consumers
+
+The user relayed a further provider requirement: blocked/inactive Inquiry
+responses must contain one ASCII space in `bill_status`, instead of `B`.
+Apply this to code `02` school and organization responses and admin previews.
+Keep response code `02`, all previously agreed field widths and casing, and
+payment rejection unchanged. Unpaid/paid remain `U`/`P`; other error codes are
+outside this requested correction. Tests assert the exact space for inactive
+students and failed organization requests, including preview and payment-denial
+checks. Deploy through CI, then verify both existing blocked UAT consumers
+using full and shortened identifiers without changing consumer data.

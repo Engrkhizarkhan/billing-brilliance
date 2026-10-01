@@ -85,6 +85,11 @@ The provider-confirmed Payment envelope uses `response_Code`, `reserved`, then
 identification value (at most 20 characters); errors leave it empty. Do not
 hard-code the example value `5299` or add padding absent from that example.
 
+For blocked/inactive consumers (Inquiry response code `02`), the provider requires
+`bill_status` to be exactly one ASCII space (`" "`), not `B` or an empty string.
+This also applies to blocked organization bills and admin previews. Payment
+eligibility is unchanged; blocked consumers still cannot pay.
+
 ## Core APIs
 
 | Area | Base route | Access |
