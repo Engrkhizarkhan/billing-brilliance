@@ -1,22 +1,24 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { FinTapMark } from '@/components/FinTapMark';
 import { toast } from 'sonner';
-import { Lock, Mail, Building2, ArrowRight } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
+import styles from './LoginPage.module.css';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const login = useAuthStore((s) => s.login);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setLoading(true);
+    setShowPassword(false);
     const success = await login(email, password);
     setLoading(false);
     if (success) {
@@ -30,109 +32,80 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex bg-background">
-      {/* Left — Branding panel */}
-      <div className="hidden lg:flex lg:w-[520px] xl:w-[580px] bg-sidebar text-sidebar-foreground flex-col justify-between p-12 relative overflow-hidden">
-        {/* Decorative elements */}
-        <div className="absolute inset-0 opacity-[0.03]" style={{
-          backgroundImage: `radial-gradient(circle at 2px 2px, currentColor 1px, transparent 0)`,
-          backgroundSize: '32px 32px',
-        }} />
-        <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
-        <div className="absolute -top-20 -left-20 w-72 h-72 bg-primary/5 rounded-full blur-3xl" />
+    <div className={styles.page}>
+      <header className={styles.header}>
+        <a href="https://fintap.pk/" className={styles.brand} aria-label="FinTap home">
+          <FinTapMark className="h-8 w-8" />
+          <span aria-hidden="true">FinTap</span>
+        </a>
+        <a href="https://fintap.pk/" className={styles.backLink}>
+          Back to website <span aria-hidden="true">↗</span>
+        </a>
+      </header>
 
-        <div className="relative">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-xl shadow-primary/30">
-              <Building2 className="w-5 h-5 text-primary-foreground" />
+      <main className={styles.main}>
+        <section className={styles.signIn} aria-labelledby="login-heading">
+          <p className={styles.eyebrow}>YOUR WORKSPACE</p>
+          <h1 id="login-heading">Sign in to FinTap</h1>
+          <p className={styles.intro}>Your bills, payments and records in one place.</p>
+
+          <form onSubmit={handleSubmit} className={styles.form} aria-busy={loading}>
+            <div className={styles.field}>
+              <label htmlFor="login-email">Email address</label>
+              <input
+                id="login-email"
+                name="email"
+                type="email"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                required
+              />
             </div>
-            <span className="font-bold text-xl tracking-tight">Fintap</span>
-          </div>
-        </div>
 
-        <div className="relative space-y-8">
-          <div>
-            <h1 className="text-4xl font-bold tracking-tight leading-[1.1]">
-              Billing infrastructure
-              <br />
-              <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                built for scale.
-              </span>
-            </h1>
-            <p className="mt-5 text-sidebar-foreground/50 text-[15px] leading-relaxed max-w-md">
-              End-to-end payment orchestration for educational institutions and government agencies. Process thousands of transactions seamlessly.
-            </p>
-          </div>
-        </div>
-
-        <div className="relative">
-          <p className="text-[11px] text-sidebar-muted">© 2026 Fintap. Enterprise Billing Platform</p>
-        </div>
-      </div>
-
-      {/* Right — Form */}
-      <div className="flex-1 flex items-center justify-center p-6 md:p-12">
-        <div className="w-full max-w-[420px] animate-fade-in">
-          <div className="lg:hidden flex items-center gap-3 mb-10">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
-              <Building2 className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <span className="font-bold text-xl tracking-tight">Fintap</span>
-          </div>
-
-          <h2 className="text-2xl font-bold tracking-tight">Welcome back</h2>
-          <p className="text-sm text-muted-foreground mt-1.5 mb-8">Sign in to access your dashboard</p>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="login-email" className="text-xs font-semibold">Email address</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="login-email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="your@email.com"
-                    className="pl-10 h-11 text-sm rounded-xl"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="login-password" className="text-xs font-semibold">Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="login-password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="pl-10 h-11 text-sm rounded-xl"
-                    required
-                  />
-                </div>
+            <div className={styles.field}>
+              <label htmlFor="login-password">Password</label>
+              <div className={styles.passwordField}>
+                <input
+                  id="login-password"
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  className={styles.visibilityButton}
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-controls="login-password"
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={19} aria-hidden="true" /> : <Eye size={19} aria-hidden="true" />}
+                </button>
               </div>
             </div>
 
-            <Button type="submit" className="w-full h-11 text-sm font-semibold rounded-xl shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 transition-all" disabled={loading}>
-              {loading ? 'Signing in…' : (
-                <>Sign in <ArrowRight className="w-4 h-4 ml-2" /></>
-              )}
-            </Button>
-
-            <div className="rounded-xl bg-muted/60 border border-border p-4">
-              <p className="text-[11px] font-semibold text-foreground mb-1.5">Access</p>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Use the credentials provided by your administrator. For support, contact your Fintap platform administrator.
-              </p>
-            </div>
+            <button type="submit" className={styles.submit} disabled={loading}>
+              {loading ? 'Signing in…' : 'Sign in'}
+            </button>
           </form>
-        </div>
-      </div>
+
+          <p className={styles.help}>
+            Need access? Contact your institution’s administrator.
+          </p>
+        </section>
+      </main>
+
+      <footer className={styles.footer}>
+        <span>© {new Date().getFullYear()} FinTap</span>
+        <span>Payment collection, made simpler.</span>
+      </footer>
     </div>
   );
 };
