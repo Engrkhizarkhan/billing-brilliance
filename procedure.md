@@ -132,3 +132,34 @@ For each future event, append a dated entry recording: **symptom → evidence �
 | 29 September 2026, read-only double-check | Supplied credentials matched production; running-app HTTP checks using local trusted-proxy source simulation passed all 20 inquiries and both allowed source addresses. Invalid password/source and public forged-source checks returned 401. BillPayment invalid-body validation returned 04 without posting. Protected HTTPS and public readiness passed; VPN current inbound counters remained zero. Existing consumer namespaces had no collisions; all four accounting reconciliation checks were clear. | No system changes. Flagged paid authorization fields, tenant API summaries omitting the late fee, newest-invoice-only status semantics, default 24-digit new-tenant policy vs provider maximum ambiguity, and unchanged server-hardening gaps. Actual provider-origin HTTP access still requires observation. Details in the meeting brief. |
 
 For the next row, use: `date | symptom, observation, action, and verification | owner, open item, or accepted result`. Do not close an item based only on an email draft, a healthy local test, or a VPN security association when 1BILL's own confirmation is required.
+
+## 1 October 2026 — 1BILL removes the routing prefix
+
+**Symptom:** 1BILL reported `10517210010001` as blocked while Fintap showed unpaid.
+Read-only production checks confirmed an active student, active/live tenant, pending
+PKR 2,500 invoice due 5 October, and full-number Inquiry response `00/U`.
+The invoice month is September (`2609`), distinct from its October due date.
+
+**Evidence and cause:** Nginx recorded a provider-origin inquiry from `10.95.8.92`
+at 11:12:24 PKT, HTTP 200, 269 response bytes. IPsec inbound/outbound traffic was
+present. The provider screenshot showed response code `01`, internal mapping `118`,
+`CONSUMER_NO=10010001`, and the full utility account number `10517210010001`.
+The user subsequently confirmed with 1BILL that it removes the six-digit routing
+prefix before sending `consumer_number`. Local HTTP probes reproduced `00/U` for
+the full number and `01/B` for the shortened number. Our generic error response's
+`B` field explained the blocked appearance; this was not an inactive consumer.
+The earlier missing-bank-mnemonic hypothesis was not the actual diagnosis.
+
+**Authorized correction:** Normalize at the 1BILL boundary in both Inquiry and
+Payment using configured `FINTECH_PREFIX`. Continue accepting full numbers; use
+the full number for accounting and duplicate detection. Reject ambiguous matches
+instead of choosing a financial account. No consumer identifiers, balances,
+invoice dates, credentials or VPN settings need changing.
+
+**Verification plan/status:** Unit coverage checks prefix restoration, leading
+zeros, full-number compatibility, namespace validation and ambiguous matches.
+Disposable-database regressions cover full/short 14-, 20- and 24-digit consumers,
+mixed-format concurrent duplicate payments, paid, blocked, overdue, suspended and
+expired cases, plus organization payments. CI and live read-only Inquiry checks
+must pass before reporting deployment complete. Payment tests use disposable
+fixtures; provider-origin retry and joint UAT confirmation remain separate steps.

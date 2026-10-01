@@ -3,6 +3,7 @@ const { payableQuote } = require('../services/billingRules');
 const { pool } = require('../config/database');
 const logger = require('../config/logger');
 const { postPayment } = require('../services/paymentPostingService');
+const { resolveOneBillConsumer } = require('../services/oneBillConsumerService');
 
 const fmtAmountInquiry = (amount) => {
   const minor = Math.round(Math.abs(Number(amount) || 0) * 100);
@@ -64,12 +65,14 @@ const paidInquiry = (detail, dueDate, billingMonth, payment) => ({
 
 const billInquiry1Link = async (req, res) => {
   try {
-    const consumerNumber = String(req.body.consumer_number || '').trim();
+    const suppliedConsumer = String(req.body.consumer_number || '').trim();
     const bankMnemonic = String(req.body.bank_mnemonic || '').trim();
     const reserved = String(req.body.reserved || '');
-    if (!validConsumerNumber(consumerNumber) || !validBankMnemonic(bankMnemonic) || reserved.length > 400) {
+    if (!validConsumerNumber(suppliedConsumer) || !validBankMnemonic(bankMnemonic) || reserved.length > 400) {
       return res.json(inquiryError('04'));
     }
+    const consumerNumber = await resolveOneBillConsumer(suppliedConsumer);
+    if (!consumerNumber) return res.json(inquiryError('01'));
 
     const [students] = await pool.query(
       `SELECT s.id, s.tenant_id, s.name, s.status
@@ -157,6 +160,7 @@ const billInquiry1Link = async (req, res) => {
       date_paid: '', amount_paid: '', tran_auth_Id: '', reserved: '',
     });
   } catch (err) {
+    if (err.code === 'AMBIGUOUS_CONSUMER_NUMBER') return res.json(inquiryError('04'));
     logger.error('1LINK BillInquiry error:', err);
     return res.json(inquiryError('03'));
   }
@@ -164,13 +168,13 @@ const billInquiry1Link = async (req, res) => {
 
 const billPayment1Link = async (req, res) => {
   try {
-    const consumerNumber = String(req.body.consumer_number || '').trim();
+    const suppliedConsumer = String(req.body.consumer_number || '').trim();
     const tranAuthId = String(req.body.tran_auth_id || '').trim();
     const tranDate = String(req.body.tran_date || '').trim();
     const tranTime = String(req.body.tran_time || '').trim();
     const bankMnemonic = String(req.body.bank_mnemonic || '').trim();
     const reserved = String(req.body.reserved || '');
-    if (!validConsumerNumber(consumerNumber) || !/^\d{6}$/.test(tranAuthId)
+    if (!validConsumerNumber(suppliedConsumer) || !/^\d{6}$/.test(tranAuthId)
       || !/^\d{12}$/.test(String(req.body.transaction_amount || ''))
       || !/^\d{8}$/.test(tranDate) || !/^\d{6}$/.test(tranTime)
       || !validBankMnemonic(bankMnemonic) || reserved.length > 515) {
@@ -182,6 +186,9 @@ const billPayment1Link = async (req, res) => {
       || receivedAt.toISOString().slice(0, 19).replace(/[-T:]/g, '') !== `${tranDate}${tranTime}`) {
       return res.json(paymentError('04'));
     }
+
+    const consumerNumber = await resolveOneBillConsumer(suppliedConsumer);
+    if (!consumerNumber) return res.json(paymentError('01'));
 
     // A completed bill may no longer appear in the payable-target query. Detect
     // an exact 1LINK replay first so the gateway receives the duplicate code
@@ -240,6 +247,7 @@ const billPayment1Link = async (req, res) => {
       TENANT_NOT_LIVE: '01', CONSUMER_BLOCKED: '01', BILL_EXPIRED: '01',
       BILL_NOT_PAYABLE: '01', ALREADY_PAID: '06', DUPLICATE_PAYMENT: '03', ER_DUP_ENTRY: '03',
       AMOUNT_MISMATCH: '04', INVALID_AMOUNT: '04', INVALID_RECEIVED_AT: '04',
+      AMBIGUOUS_CONSUMER_NUMBER: '04',
     };
     logger.warn(`1LINK BillPayment rejected: ${err.code || err.message}`);
     return res.json(paymentError(mapping[err.code] || '02'));
