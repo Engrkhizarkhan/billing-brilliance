@@ -80,6 +80,11 @@ field widths apply to error/authentication responses and admin inquiry previews.
 Actual customer names, amounts and billing dates come from stored records; the
 provider's sample values are not replacement data.
 
+The provider-confirmed Payment envelope uses `response_Code`, `reserved`, then
+`identification_parameter` (lowercase i). Success preserves the existing dynamic
+identification value (at most 20 characters); errors leave it empty. Do not
+hard-code the example value `5299` or add padding absent from that example.
+
 ## Core APIs
 
 | Area | Base route | Access |

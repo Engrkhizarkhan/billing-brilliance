@@ -211,3 +211,28 @@ authentication-error cases. MySQL regressions check key sets and fixed widths
 on every tested Inquiry, including school/organization, full/short number,
 paid/overdue/expired and admin-preview cases. Deployment and live character-count
 verification follow the normal CI gates; provider retry remains required.
+
+The Inquiry format fix deployed successfully in PR #10, revision
+`bddd249a9676b787c63e78f724a2ebea3b3f91ca`, production run `36827510376`.
+All 88 unit tests and 32 MySQL regressions passed, alongside frontend/browser
+checks and audits.
+
+**Follow-up Payment format confirmation:** The user supplied the exact envelope
+`{"response_Code":"00","reserved":"","identification_parameter":"5299"}`.
+Use lowercase `identification_parameter` in both successful and failed Payment
+responses, including authentication errors, and preserve this key order.
+The historic generic document uses capital I, but the provider-confirmed example
+controls this integration. Preserve the existing dynamic identification value;
+`5299` is a sample, not a replacement voucher for every payment. Payment errors
+keep this optional field empty. No financial data changes or production payments
+are needed to validate formatting.
+
+Live Inquiry verification after PR #10 confirmed exact key/space widths for all
+20 consumers (full and short inputs), four admin preview cases, and an auth error.
+`10010001` now correctly returns `00/P`: a provider-origin payment arrived from
+`10.95.8.92` at 11:52:33 PKT, and production records show a posted `onelink`
+PKR 2,500 payment with voucher `354644`. The check's former unpaid expectation
+therefore failed; formatting and full/short equivalence passed. The local check
+made no payment (count remained three). This establishes an observed provider
+payment, not completed provider certification. Preserve the payment evidence and
+use another unpaid consumer for subsequent unpaid-case testing.

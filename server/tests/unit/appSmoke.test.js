@@ -35,8 +35,8 @@ describe('public service contracts', () => {
     expect(response.status).toBe(401);
     expect(response.body).toEqual({
       response_Code: '04',
-      Identification_parameter: '',
       reserved: '',
+      identification_parameter: '',
     });
   });
 });

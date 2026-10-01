@@ -47,7 +47,7 @@ const inquiryError = (code) => ({
   tran_auth_Id: ' '.repeat(6),
   reserved: '',
 });
-const paymentError = (code) => ({ response_Code: code, Identification_parameter: '', reserved: '' });
+const paymentError = (code) => ({ response_Code: code, reserved: '', identification_parameter: '' });
 const paidInquiry = (detail, dueDate, billingMonth, payment) => ({
   response_Code: '00',
   consumer_Detail: padRight(detail, 30),
@@ -238,8 +238,8 @@ const billPayment1Link = async (req, res) => {
     });
     return res.json({
       response_Code: '00',
-      Identification_parameter: String(target.detail || result.consumerNumber).slice(0, 20),
       reserved: '',
+      identification_parameter: String(target.detail || result.consumerNumber).slice(0, 20),
     });
   } catch (err) {
     const mapping = {
