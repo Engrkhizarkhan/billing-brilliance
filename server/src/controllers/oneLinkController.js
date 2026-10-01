@@ -37,7 +37,7 @@ const validBankMnemonic = (value) => /^[A-Za-z0-9]{1,8}$/.test(value);
 const inquiryError = (code) => ({
   response_Code: code,
   consumer_Detail: padRight('', 30),
-  bill_status: 'B',
+  bill_status: code === '02' ? ' ' : 'B',
   due_date: ' '.repeat(8),
   amount_within_dueDate: '+0000000000000',
   amount_after_dueDate: '+0000000000000',
