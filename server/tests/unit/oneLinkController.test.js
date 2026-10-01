@@ -24,7 +24,7 @@ describe('1LINK invoice contract', () => {
     await billInquiry1Link({ body: { consumer_number: '10517210010001', bank_mnemonic: 'UBL00001', reserved: '' } }, res);
 
     expect(res.body).toMatchObject({
-      response_Code: '00', bill_status: 'P', due_date: '20261005', billing_month: '2609',
+      response_Code: '06', bill_status: 'P', due_date: '20261005', billing_month: '2609',
       consumer_Detail: 'Test Student'.padEnd(30, ' '),
       tran_auth_Id: '123456', amount_paid: '000000500000',
     });
@@ -74,7 +74,7 @@ describe('1LINK invoice contract', () => {
       .mockResolvedValueOnce([[]]);
     const res=response();
     await billInquiry1Link({body:{consumer_number:'10517210010001',bank_mnemonic:'MDL'}},res);
-    expect(res.body).toMatchObject({bill_status:'P',due_date:' '.repeat(8),date_paid:' '.repeat(8),amount_paid:' '.repeat(12),tran_auth_Id:' '.repeat(6)});
+    expect(res.body).toMatchObject({response_Code:'06',bill_status:'P',due_date:' '.repeat(8),date_paid:' '.repeat(8),amount_paid:' '.repeat(12),tran_auth_Id:' '.repeat(6)});
   });
 
   test.each(['10517210010001', '10010001'])('posts %s using the full number and the same duplicate key', async (suppliedConsumer) => {

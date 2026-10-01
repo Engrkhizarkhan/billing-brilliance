@@ -138,3 +138,9 @@ Payment commits enqueue `outbox_events`. The worker signs the exact JSON body wi
 Invalid/not-found and other unsuccessful Inquiry responses also use one ASCII
 space in `bill_status`, including authentication errors and admin previews.
 The response code continues to identify the reason; successful U/P states remain.
+
+Provider-confirmed paid Inquiry behavior: return `response_Code: "06"` with
+`bill_status: "P"`, preserving payment date, amount and authorization metadata.
+School/organization inquiries and admin previews use the same code. Unpaid
+Inquiry and a newly accepted Payment still return `00`; exact payment replays
+remain `03` and attempts to pay an already settled bill remain `06`.

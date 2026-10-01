@@ -49,7 +49,7 @@ const inquiryError = (code) => ({
 });
 const paymentError = (code) => ({ response_Code: code, reserved: '', identification_parameter: '' });
 const paidInquiry = (detail, dueDate, billingMonth, payment) => ({
-  response_Code: '00',
+  response_Code: '06',
   consumer_Detail: padRight(detail, 30),
   bill_status: 'P',
   due_date: dueDate ? fmtDate(dueDate) : ' '.repeat(8),

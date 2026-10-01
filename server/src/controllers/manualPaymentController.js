@@ -33,7 +33,7 @@ const unavailableResponse = (code = '01') => ({
   reserved: '',
 });
 const paidResponse = (label, dueDate, payment) => ({
-  response_Code: '00',
+  response_Code: '06',
   consumer_Detail: detail(label),
   bill_status: 'P',
   due_date: dueDate ? formatDate(dueDate) : ' '.repeat(8),
