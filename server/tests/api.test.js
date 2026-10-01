@@ -22,7 +22,7 @@ describe('current public API contracts', () => {
       .send({});
     expect(response.status).toBe(401);
     expect(response.body.response_Code).toBe('04');
-    expect(response.body.bill_status).toBe('B');
+    expect(response.body.bill_status).toBe(' ');
   });
 });
 

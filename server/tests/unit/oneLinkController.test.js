@@ -58,7 +58,7 @@ describe('1LINK invoice contract', () => {
     await billInquiry1Link({body:{consumer_number:'10517210010001',bank_mnemonic:scenario === 'invalid' ? '' : 'MDL'}},res);
     expect(res.body).toEqual({
       response_Code: {missing:'01',blocked:'02',invalid:'04',failure:'03'}[scenario],
-      consumer_Detail:' '.repeat(30),bill_status:scenario === 'blocked' ? ' ' : 'B',due_date:' '.repeat(8),
+      consumer_Detail:' '.repeat(30),bill_status:' ',due_date:' '.repeat(8),
       amount_within_dueDate:'+0000000000000',amount_after_dueDate:'+0000000000000',
       billing_month:' '.repeat(4),date_paid:' '.repeat(8),amount_paid:' '.repeat(12),
       tran_auth_Id:' '.repeat(6),reserved:'',

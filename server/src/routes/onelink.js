@@ -45,7 +45,7 @@ const oneLinkAuth = (req, res, next) => {
     return res.status(401).json({
       response_Code: '04',
       consumer_Detail: ''.padEnd(30, ' '),
-      bill_status: 'B',
+      bill_status: ' ',
       due_date: ' '.repeat(8),
       amount_within_dueDate: '+0000000000000',
       amount_after_dueDate:  '+0000000000000',
