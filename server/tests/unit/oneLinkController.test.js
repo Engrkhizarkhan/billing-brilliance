@@ -103,7 +103,8 @@ describe('1LINK invoice contract', () => {
     }));
     expect(resolveOneBillConsumer).toHaveBeenCalledWith(suppliedConsumer);
     expect(pool.query.mock.calls[0][1]).toEqual(['10517210010001', '10517210010001:123456:20260908:101112']);
-    expect(res.body).toEqual({ response_Code: '00', Identification_parameter: 'Test Student', reserved: '' });
+    expect(res.body).toEqual({ response_Code: '00', reserved: '', identification_parameter: 'Test Student' });
+    expect(JSON.stringify(res.body)).toBe('{"response_Code":"00","reserved":"","identification_parameter":"Test Student"}');
   });
 
   test('rejects an ambiguous number before posting or selecting payment targets', async () => {
@@ -130,6 +131,7 @@ describe('1LINK invoice contract', () => {
     }, res);
 
     expect(res.body.response_Code).toBe('03');
+    expect(res.body).toEqual({response_Code:'03',reserved:'',identification_parameter:''});
     expect(postPayment).not.toHaveBeenCalled();
   });
 });

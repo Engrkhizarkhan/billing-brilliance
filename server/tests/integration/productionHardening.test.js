@@ -243,7 +243,16 @@ const expectInquiryWireFormat = (body) => {
 };
 const providerRequest = (operation, body, credentials=onebillCredentials) => request(app)
   .post(`/api/1.0/Payments/${operation}`).set(credentials).send({consumer_number:consumerNumber,bank_mnemonic:'UBL',reserved:'',...body})
-  .then(response=>{if(operation==='BillInquiry')expectInquiryWireFormat(response.body);return response;});
+  .then(response=>{
+    if(operation==='BillInquiry')expectInquiryWireFormat(response.body);
+    else {
+      expect(Object.keys(response.body)).toEqual(['response_Code','reserved','identification_parameter']);
+      expect(response.body.reserved).toBe('');
+      expect(typeof response.body.identification_parameter).toBe('string');
+      expect(response.body.identification_parameter.length).toBeLessThanOrEqual(20);
+    }
+    return response;
+  });
 const providerPayment = (overrides={}) => ({tran_auth_id:'123456',transaction_amount:'000000010000',tran_date:'20260923',tran_time:'123456',...overrides});
 
 test('admin inquiry preview uses the agreed provider casing and absent-field widths',async()=>{

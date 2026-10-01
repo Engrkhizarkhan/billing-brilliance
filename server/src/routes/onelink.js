@@ -38,8 +38,8 @@ const oneLinkAuth = (req, res, next) => {
     if (req.path.endsWith('/BillPayment')) {
       return res.status(401).json({
         response_Code: '04',
-        Identification_parameter: '',
         reserved: '',
+        identification_parameter: '',
       });
     }
     return res.status(401).json({
