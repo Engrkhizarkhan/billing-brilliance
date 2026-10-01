@@ -7,7 +7,7 @@ const openPortal = async (browser: Browser, login: Login) => {
   const page = await context.newPage();
   await page.goto('/login');
   await page.getByLabel(/email/i).fill(login.email);
-  await page.getByLabel(/password/i).fill(login.password);
+  await page.getByLabel('Password', { exact: true }).fill(login.password);
   await page.getByRole('button', { name: /sign in/i }).click();
   await expect(page).not.toHaveURL(/\/login$/);
   return { context, page };
