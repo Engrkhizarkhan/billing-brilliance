@@ -282,3 +282,14 @@ errors and authentication failures, with matching admin previews. Response codes
 and successful U/P states are unchanged. Updated existing test expectations but
 did not run local tests or live probes; required CI/deployment checks remain
 enabled.
+
+## 1 October 2026 — paid Inquiry code 06
+
+The user confirmed that paid consumers must return response code `06` rather
+than `00`, and requested testing/deployment. Change paid school and organization
+Inquiry responses and admin previews to `06/P`, preserving payment metadata.
+Unpaid Inquiry and newly accepted Payment remain `00`; duplicate payment remains
+`03`. The blank status for all unsuccessful inquiries from PR #13 is retained
+(no `B` output). PR #13 production run `36831131224` completed successfully.
+Unit and database regressions cover paid metadata, full/short consumer forms,
+school/organization previews, new payment/replay behavior and blank error status.

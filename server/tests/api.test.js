@@ -296,7 +296,7 @@ databaseDescribe('disposable-database authenticated workflows', () => {
     });
     expect(response.body.data.tenantId).toBeTruthy();
     expect(response.body.data.oneBillResponse).toEqual(expect.objectContaining({
-      response_Code: '00',
+      response_Code: response.body.data.oneBillResponse.bill_status === 'P' ? '06' : '00',
       bill_status: expect.stringMatching(/^[UP]$/),
       reserved: '',
     }));
@@ -394,6 +394,7 @@ databaseDescribe('disposable-database authenticated workflows', () => {
         .send({ consumerNumber });
       expect(refreshed.body.data.payable).toBe(false);
       expect(refreshed.body.data.oneBillResponse.bill_status).toBe('P');
+      expect(refreshed.body.data.oneBillResponse.response_Code).toBe('06');
     } finally {
       await pool.query('DELETE FROM notifications WHERE tenant_id = ?', [tenantId]);
       await pool.query('DELETE FROM outbox_events WHERE tenant_id = ?', [tenantId]);

@@ -240,7 +240,9 @@ const expectInquiryWireFormat = (body) => {
     expect(body.date_paid).toBe(' '.repeat(8));expect(body.amount_paid).toBe(' '.repeat(12));expect(body.tran_auth_Id).toBe(' '.repeat(6));
   }
   expect(body.reserved).toBe('');
-  if(body.response_Code==='02')expect(body.bill_status).toBe(' ');
+  if(body.bill_status==='P')expect(body.response_Code).toBe('06');
+  else if(body.bill_status==='U')expect(body.response_Code).toBe('00');
+  else expect(body.bill_status).toBe(' ');
 };
 const providerRequest = (operation, body, credentials=onebillCredentials) => request(app)
   .post(`/api/1.0/Payments/${operation}`).set(credentials).send({consumer_number:consumerNumber,bank_mnemonic:'UBL',reserved:'',...body})
@@ -277,7 +279,10 @@ test('1BILL exact payment, concurrent replay, paid inquiry and already-paid reje
   const payments=await Promise.all(Array.from({length:6},()=>providerRequest('BillPayment',providerPayment())));
   expect(payments.filter(r=>r.body.response_Code==='00')).toHaveLength(1);
   expect(payments.filter(r=>r.body.response_Code==='03')).toHaveLength(5);
-  expect((await providerRequest('BillInquiry',{})).body).toMatchObject({response_Code:'00',bill_status:'P',date_paid:'20260923',amount_paid:'000000010000',tran_auth_Id:'123456'});
+  expect((await providerRequest('BillInquiry',{})).body).toMatchObject({response_Code:'06',bill_status:'P',date_paid:'20260923',amount_paid:'000000010000',tran_auth_Id:'123456'});
+  const preview=await tenantRequest('post','/api/manual-payments/inquiry').send({consumerNumber});
+  expect(preview.body.data.oneBillResponse).toMatchObject({response_Code:'06',bill_status:'P'});
+  expect(preview.body.data.payable).toBe(false);
   expect((await providerRequest('BillPayment',providerPayment({tran_auth_id:'123457'}))).body.response_Code).toBe('06');
   for(const table of ['payments','transactions','payment_allocations','outbox_events']){
     const [[r]]=await pool.query(`SELECT COUNT(*) AS n FROM ${table} WHERE tenant_id=?`,[tenantId]);expect(r.n).toBe(1);
@@ -374,7 +379,7 @@ test.each([14,20,24])('1BILL shortened %i-digit consumer and full number share i
   const attempts=await Promise.all(Array.from({length:6},(_,i)=>providerRequest('BillPayment',providerPayment({consumer_number:i%2?consumerNumber:shortened}))));
   expect(attempts.filter(r=>r.body.response_Code==='00')).toHaveLength(1);
   expect(attempts.filter(r=>r.body.response_Code==='03')).toHaveLength(5);
-  expect((await providerRequest('BillInquiry',{consumer_number:shortened})).body).toMatchObject({response_Code:'00',bill_status:'P',tran_auth_Id:'123456'});
+  expect((await providerRequest('BillInquiry',{consumer_number:shortened})).body).toMatchObject({response_Code:'06',bill_status:'P',tran_auth_Id:'123456'});
   expect((await providerRequest('BillPayment',providerPayment({consumer_number:shortened,tran_auth_id:'654321'}))).body.response_Code).toBe('06');
   const [payments]=await pool.query('SELECT consumer_number,idempotency_key FROM payments WHERE tenant_id=?',[tenantId]);
   expect(payments).toHaveLength(1);
@@ -424,7 +429,10 @@ test('1BILL 24-digit organization consumer accepts shortened inquiry and payment
   await pool.query("UPDATE org_payment_records SET expiry_date='2099-01-02' WHERE id=?",[recordId]);
   expect((await providerRequest('BillPayment',providerPayment(short))).body.response_Code).toBe('00');
   expect((await providerRequest('BillPayment',providerPayment())).body.response_Code).toBe('03');
-  expect((await providerRequest('BillInquiry',short)).body).toMatchObject({response_Code:'00',bill_status:'P'});
+  expect((await providerRequest('BillInquiry',short)).body).toMatchObject({response_Code:'06',bill_status:'P'});
+  const paidPreview=await tenantRequest('post','/api/manual-payments/inquiry').send({consumerNumber});
+  expect(paidPreview.body.data.oneBillResponse).toMatchObject({response_Code:'06',bill_status:'P'});
+  expect(paidPreview.body.data.payable).toBe(false);
   const [payments]=await pool.query('SELECT consumer_number FROM payments WHERE tenant_id=?',[tenantId]);
   expect(payments).toHaveLength(1);expect(payments[0].consumer_number).toBe(consumerNumber);
 });
