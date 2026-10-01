@@ -163,3 +163,11 @@ mixed-format concurrent duplicate payments, paid, blocked, overdue, suspended an
 expired cases, plus organization payments. CI and live read-only Inquiry checks
 must pass before reporting deployment complete. Payment tests use disposable
 fixtures; provider-origin retry and joint UAT confirmation remain separate steps.
+
+Predeployment checks: all 82 backend unit tests and backend lint passed. The first
+CI run passed the MySQL regression step but exposed newly reported vulnerabilities
+in the existing frontend dependency lockfile. Applied compatible patch updates to
+`brace-expansion` and `dompurify`; the resulting dependency audit reports zero
+vulnerabilities. The complete pipeline is rerun on the patched revision. A
+read-only production namespace scan found 20 stored consumers and no ambiguous
+full/short pairs.
