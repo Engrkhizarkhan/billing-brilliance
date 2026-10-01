@@ -325,3 +325,75 @@ test.each([14,20,24])('1BILL supports an existing %i digit consumer without trun
   await charge();
   expect((await providerRequest('BillInquiry',{})).body.response_Code).toBe('00');
 });
+
+test.each([14,20,24])('1BILL shortened %i-digit consumer and full number share inquiry, payment and replay identity',async(length)=>{
+  Object.assign(config.onebill,onebillCredentials);
+  consumerNumber=consumerNumber.slice(0,length);
+  await pool.query('UPDATE students SET consumer_number=? WHERE id=?',[consumerNumber,studentId]);
+  await charge();
+  const shortened=consumerNumber.slice(config.fintechPrefix.length);
+  const full=await providerRequest('BillInquiry',{});
+  const short=await providerRequest('BillInquiry',{consumer_number:shortened});
+  expect(short.body).toEqual(full.body);
+  expect(short.body).toMatchObject({response_Code:'00',bill_status:'U'});
+  const attempts=await Promise.all(Array.from({length:6},(_,i)=>providerRequest('BillPayment',providerPayment({consumer_number:i%2?consumerNumber:shortened}))));
+  expect(attempts.filter(r=>r.body.response_Code==='00')).toHaveLength(1);
+  expect(attempts.filter(r=>r.body.response_Code==='03')).toHaveLength(5);
+  expect((await providerRequest('BillInquiry',{consumer_number:shortened})).body).toMatchObject({response_Code:'00',bill_status:'P',tran_auth_Id:'123456'});
+  expect((await providerRequest('BillPayment',providerPayment({consumer_number:shortened,tran_auth_id:'654321'}))).body.response_Code).toBe('06');
+  const [payments]=await pool.query('SELECT consumer_number,idempotency_key FROM payments WHERE tenant_id=?',[tenantId]);
+  expect(payments).toHaveLength(1);
+  expect(payments[0]).toMatchObject({consumer_number:consumerNumber,idempotency_key:`${consumerNumber}:123456:20260923:123456`});
+  for(const table of ['transactions','payment_allocations','outbox_events']){
+    const [[r]]=await pool.query(`SELECT COUNT(*) n FROM ${table} WHERE tenant_id=?`,[tenantId]);expect(r.n).toBe(1);
+  }
+});
+
+test('1BILL shortened numbers preserve blocked, overdue, invalid and suspended behavior',async()=>{
+  Object.assign(config.onebill,onebillCredentials);
+  await charge(100,{dueDate:'2020-01-01',lateFee:25});
+  await pool.query('UPDATE invoices SET late_fee=25 WHERE tenant_id=?',[tenantId]);
+  const short={consumer_number:consumerNumber.slice(config.fintechPrefix.length)};
+  await pool.query("UPDATE students SET status='inactive' WHERE id=?",[studentId]);
+  expect((await providerRequest('BillInquiry',short)).body).toMatchObject({response_Code:'02',bill_status:'B'});
+  expect((await providerRequest('BillPayment',providerPayment(short))).body.response_Code).toBe('01');
+  await pool.query("UPDATE students SET status='active' WHERE id=?",[studentId]);
+  expect((await providerRequest('BillInquiry',short)).body).toMatchObject({response_Code:'00',bill_status:'U',amount_after_dueDate:'+0000000012500'});
+  expect((await providerRequest('BillPayment',providerPayment(short))).body.response_Code).toBe('04');
+  await pool.query("UPDATE tenants SET status='suspended' WHERE id=?",[tenantId]);
+  expect((await providerRequest('BillInquiry',short)).body.response_Code).toBe('01');
+  expect((await providerRequest('BillPayment',providerPayment({...short,transaction_amount:'000000012500'}))).body.response_Code).toBe('01');
+  for(const value of ['abc','1'.repeat(25)]){
+    expect((await providerRequest('BillInquiry',{consumer_number:value})).body.response_Code).toBe('04');
+  }
+  const [[r]]=await pool.query('SELECT COUNT(*) n FROM payments WHERE tenant_id=?',[tenantId]);expect(r.n).toBe(0);
+});
+
+test('1BILL 24-digit organization consumer accepts shortened inquiry and payment with shared replay detection',async()=>{
+  Object.assign(config.onebill,onebillCredentials);
+  await pool.query('DELETE FROM students WHERE id=?',[studentId]);
+  const recordId=uuid();
+  await pool.query("INSERT INTO org_payment_records (id,tenant_id,application_id,applicant_id,posting_id,bill_id,consumer_number,amount,status,due_date,expiry_date) VALUES (?,?,?,?,?,?,?,100,'pending','2099-01-01','2099-01-02 00:00:00')",[recordId,tenantId,uuid(),uuid(),uuid(),uuid(),consumerNumber]);
+  const short={consumer_number:consumerNumber.slice(config.fintechPrefix.length)};
+  expect((await providerRequest('BillInquiry',short)).body).toEqual((await providerRequest('BillInquiry',{})).body);
+  await pool.query("UPDATE org_payment_records SET expiry_date='2020-01-01' WHERE id=?",[recordId]);
+  expect((await providerRequest('BillInquiry',short)).body.response_Code).toBe('01');
+  expect((await providerRequest('BillPayment',providerPayment(short))).body.response_Code).toBe('01');
+  await pool.query("UPDATE org_payment_records SET expiry_date='2099-01-02' WHERE id=?",[recordId]);
+  expect((await providerRequest('BillPayment',providerPayment(short))).body.response_Code).toBe('00');
+  expect((await providerRequest('BillPayment',providerPayment())).body.response_Code).toBe('03');
+  expect((await providerRequest('BillInquiry',short)).body).toMatchObject({response_Code:'00',bill_status:'P'});
+  const [payments]=await pool.query('SELECT consumer_number FROM payments WHERE tenant_id=?',[tenantId]);
+  expect(payments).toHaveLength(1);expect(payments[0].consumer_number).toBe(consumerNumber);
+});
+
+test('1BILL fails closed when a supplied full number also identifies another shortened consumer',async()=>{
+  Object.assign(config.onebill,onebillCredentials);
+  consumerNumber=consumerNumber.slice(0,14);
+  await pool.query('UPDATE students SET consumer_number=? WHERE id=?',[consumerNumber,studentId]);
+  await charge();
+  await pool.query("INSERT INTO students (id,tenant_id,name,father_name,class,consumer_number,bill_id,status) VALUES (?,?,'Other Student','Parent','12',?,?,'inactive')",[uuid(),tenantId,config.fintechPrefix+consumerNumber,uuid()]);
+  expect((await providerRequest('BillInquiry',{})).body.response_Code).toBe('04');
+  expect((await providerRequest('BillPayment',providerPayment())).body.response_Code).toBe('04');
+  const [[r]]=await pool.query('SELECT COUNT(*) n FROM payments WHERE tenant_id=?',[tenantId]);expect(r.n).toBe(0);
+});

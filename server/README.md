@@ -59,6 +59,16 @@ POST /api/1.0/Payments/BillInquiry
 POST /api/1.0/Payments/BillPayment
 ```
 
+1BILL strips the six-digit fintech prefix before forwarding `consumer_number`.
+Both endpoints restore the configured `FINTECH_PREFIX`: for example, `10010001`
+resolves to stored consumer `10517210010001`. Full numbers remain accepted.
+Keep the value as a string to preserve leading zeros and long consumer numbers.
+The full stored number is used for every lookup, payment record and duplicate key,
+so switching between the two input formats cannot create a second payment.
+If both interpretations identify different stored consumers, the API rejects the
+request with code `04` rather than choosing an account. Authentication, source-IP
+restrictions, tenant eligibility, expiry and exact-amount checks still apply.
+
 ## Core APIs
 
 | Area | Base route | Access |

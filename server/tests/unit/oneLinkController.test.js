@@ -1,8 +1,10 @@
 jest.mock('../../src/config/database', () => ({ pool: { query: jest.fn() } }));
 jest.mock('../../src/services/paymentPostingService', () => ({ postPayment: jest.fn() }));
+jest.mock('../../src/services/oneBillConsumerService', () => ({ resolveOneBillConsumer: jest.fn(async (number) => number) }));
 
 const { pool } = require('../../src/config/database');
 const { postPayment } = require('../../src/services/paymentPostingService');
+const { resolveOneBillConsumer } = require('../../src/services/oneBillConsumerService');
 const { billInquiry1Link, billPayment1Link } = require('../../src/controllers/oneLinkController');
 
 const response = () => ({ json: jest.fn(function json(body) { this.body = body; return this; }) });
@@ -44,7 +46,8 @@ describe('1LINK invoice contract', () => {
     });
   });
 
-  test('posts the exact 1LINK amount and preserves the four-field duplicate key', async () => {
+  test.each(['10517210010001', '10010001'])('posts %s using the full number and the same duplicate key', async (suppliedConsumer) => {
+    resolveOneBillConsumer.mockResolvedValueOnce('10517210010001');
     pool.query
       .mockResolvedValueOnce([[]])
       .mockResolvedValueOnce([[{
@@ -54,19 +57,34 @@ describe('1LINK invoice contract', () => {
     const res = response();
     await billPayment1Link({
       body: {
-        consumer_number: '10517210010001', tran_auth_id: '123456', transaction_amount: '000000500000',
+        consumer_number: suppliedConsumer, tran_auth_id: '123456', transaction_amount: '000000500000',
         tran_date: '20260908', tran_time: '101112', bank_mnemonic: 'UBL00001', reserved: '',
       },
       ip: '10.95.8.92', headers: {},
     }, res);
 
     expect(postPayment).toHaveBeenCalledWith(expect.objectContaining({
+      consumerNumber: '10517210010001',
       amount: 5000,
       transactionId: '123456',
       idempotencyKey: '10517210010001:123456:20260908:101112',
       source: 'onelink',
     }));
+    expect(resolveOneBillConsumer).toHaveBeenCalledWith(suppliedConsumer);
+    expect(pool.query.mock.calls[0][1]).toEqual(['10517210010001', '10517210010001:123456:20260908:101112']);
     expect(res.body).toEqual({ response_Code: '00', Identification_parameter: 'Test Student', reserved: '' });
+  });
+
+  test('rejects an ambiguous number before posting or selecting payment targets', async () => {
+    resolveOneBillConsumer.mockRejectedValueOnce({ code: 'AMBIGUOUS_CONSUMER_NUMBER' });
+    const res = response();
+    await billPayment1Link({ body: {
+      consumer_number: '10517210010001', tran_auth_id: '123456', transaction_amount: '000000500000',
+      tran_date: '20260908', tran_time: '101112', bank_mnemonic: 'UBL',
+    } }, res);
+    expect(res.body.response_Code).toBe('04');
+    expect(postPayment).not.toHaveBeenCalled();
+    expect(pool.query).not.toHaveBeenCalled();
   });
 
   test('maps a duplicate payment to response code 03', async () => {
