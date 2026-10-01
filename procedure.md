@@ -171,3 +171,43 @@ in the existing frontend dependency lockfile. Applied compatible patch updates t
 vulnerabilities. The complete pipeline is rerun on the patched revision. A
 read-only production namespace scan found 20 stored consumers and no ambiguous
 full/short pairs.
+
+**Deployment and live verification, 1 October 2026 at 11:38 PKT:**
+[PR #9](https://github.com/Engrkhizarkhan/billing-brilliance/pull/9) merged as
+`6f47dcfa483ab2b01d3e3d2fab9c2c6b52e67832`.
+[Production run 36825594662](https://github.com/Engrkhizarkhan/billing-brilliance/actions/runs/36825594662)
+completed successfully, including 82 backend unit tests, 31 MySQL regressions,
+frontend and browser checks, security audits and deployment. Public readiness
+reported that exact revision. Forty read-only HTTP inquiries against the running
+production app compared all 20 emailed consumers in full and prefix-stripped
+form. Every pair was identical and matched the expected unpaid/paid/blocked
+state, including the overdue and 24-digit organization cases. `10010001` returned
+`00/U`, PKR 2,500, due `20261005`; `100200000000000001` returned `00/U`, PKR
+6,000,000. Production payment count remained two before and after verification.
+These were server-local requests simulating the trusted proxy's provider source;
+they verify the deployed HTTP handler, not a new provider-origin transaction.
+1BILL must retry through its own gateway to confirm end-to-end success. The
+original provider VPN request is independently evidenced above.
+
+## 1 October 2026 — provider-confirmed Inquiry response formatting
+
+**Symptom/evidence:** 1BILL supplied an expected/actual response comparison and
+confirmed that `consumer_Detail` must have a capital D. Absent paid fields must
+contain their exact fixed number of spaces, not empty strings. The archived
+generic document's parameter table uses lowercase `consumer_detail`, while its
+sample uses `consumer_Detail`; the provider's explicit confirmation resolves
+this inconsistency for this integration.
+
+**Correction:** Use `consumer_Detail` across provider Inquiry success/error/auth
+responses and admin previews. Pad absent dates to 8 ASCII spaces, paid amount to
+12, authorization ID to 6, and absent billing month to 4. Consumer names remain
+30 characters. Keep `reserved` empty as in the confirmed example; preserve
+actual dates, amounts and paid transaction metadata. No customer/payment data
+or prefix handling changes are needed.
+
+**Verification:** Unit tests assert exact response keys and spaces for unpaid,
+paid with missing metadata, invalid, blocked, not-found, database-error and
+authentication-error cases. MySQL regressions check key sets and fixed widths
+on every tested Inquiry, including school/organization, full/short number,
+paid/overdue/expired and admin-preview cases. Deployment and live character-count
+verification follow the normal CI gates; provider retry remains required.

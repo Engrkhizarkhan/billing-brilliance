@@ -44,15 +44,15 @@ const oneLinkAuth = (req, res, next) => {
     }
     return res.status(401).json({
       response_Code: '04',
-      consumer_detail: ''.padEnd(30, ' '),
+      consumer_Detail: ''.padEnd(30, ' '),
       bill_status: 'B',
-      due_date: '',
+      due_date: ' '.repeat(8),
       amount_within_dueDate: '+0000000000000',
       amount_after_dueDate:  '+0000000000000',
-      billing_month: '',
-      date_paid: '',
-      amount_paid: '',
-      tran_auth_Id: '',
+      billing_month: ' '.repeat(4),
+      date_paid: ' '.repeat(8),
+      amount_paid: ' '.repeat(12),
+      tran_auth_Id: ' '.repeat(6),
       reserved: '',
     });
   }
