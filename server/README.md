@@ -69,6 +69,17 @@ If both interpretations identify different stored consumers, the API rejects the
 request with code `04` rather than choosing an account. Authentication, source-IP
 restrictions, tenant eligibility, expiry and exact-amount checks still apply.
 
+The provider-confirmed Inquiry JSON contract (1 October 2026) uses the exact key
+`consumer_Detail` (capital D) and `tran_auth_Id` (capital I). Consumer names are
+right-padded to 30 characters. Missing fixed-width values are ordinary ASCII
+spaces: `due_date`/`date_paid` 8, `billing_month` 4, `amount_paid` 12 and
+`tran_auth_Id` 6. Unpaid responses always blank the three paid fields this way.
+Amounts retain their existing zero-padded numeric encoding; `reserved` remains
+an empty string as confirmed by the provider example. The same casing and absent
+field widths apply to error/authentication responses and admin inquiry previews.
+Actual customer names, amounts and billing dates come from stored records; the
+provider's sample values are not replacement data.
+
 ## Core APIs
 
 | Area | Base route | Access |

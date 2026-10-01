@@ -232,16 +232,38 @@ test('transport billing does not require a tuition assignment and is idempotent 
 });
 
 const onebillCredentials = { username:'isolated-provider-test', password:'isolated-provider-password' };
+const expectInquiryWireFormat = (body) => {
+  const widths={response_Code:2,consumer_Detail:30,bill_status:1,due_date:8,amount_within_dueDate:14,amount_after_dueDate:14,billing_month:4,date_paid:8,amount_paid:12,tran_auth_Id:6};
+  expect(Object.keys(body).sort()).toEqual([...Object.keys(widths),'reserved'].sort());
+  for(const [field,width] of Object.entries(widths))expect(body[field]).toHaveLength(width);
+  if(body.bill_status !== 'P'){
+    expect(body.date_paid).toBe(' '.repeat(8));expect(body.amount_paid).toBe(' '.repeat(12));expect(body.tran_auth_Id).toBe(' '.repeat(6));
+  }
+  expect(body.reserved).toBe('');
+};
 const providerRequest = (operation, body, credentials=onebillCredentials) => request(app)
-  .post(`/api/1.0/Payments/${operation}`).set(credentials).send({consumer_number:consumerNumber,bank_mnemonic:'UBL',reserved:'',...body});
+  .post(`/api/1.0/Payments/${operation}`).set(credentials).send({consumer_number:consumerNumber,bank_mnemonic:'UBL',reserved:'',...body})
+  .then(response=>{if(operation==='BillInquiry')expectInquiryWireFormat(response.body);return response;});
 const providerPayment = (overrides={}) => ({tran_auth_id:'123456',transaction_amount:'000000010000',tran_date:'20260923',tran_time:'123456',...overrides});
+
+test('admin inquiry preview uses the agreed provider casing and absent-field widths',async()=>{
+  await charge();
+  const preview=await tenantRequest('post','/api/manual-payments/inquiry').send({consumerNumber});
+  expect(preview.status).toBe(200);
+  expectInquiryWireFormat(preview.body.data.oneBillResponse);
+  expect(preview.body.data.oneBillResponse.bill_status).toBe('U');
+  const missing=await tenantRequest('post','/api/manual-payments/inquiry').send({consumerNumber:'1'.repeat(20)});
+  expect(missing.status).toBe(200);
+  expectInquiryWireFormat(missing.body.data.oneBillResponse);
+  expect(missing.body.data.oneBillResponse.response_Code).toBe('01');
+});
 
 test('1BILL exact payment, concurrent replay, paid inquiry and already-paid rejection preserve one accounting bundle',async()=>{
   Object.assign(config.onebill,onebillCredentials);
   await charge();
   const inquiry=await providerRequest('BillInquiry',{});
   expect(inquiry.body).toMatchObject({response_Code:'00',bill_status:'U',amount_within_dueDate:'+0000000010000',due_date:'20990930',billing_month:'2609'});
-  expect(inquiry.body.consumer_detail).toHaveLength(30);
+  expect(inquiry.body.consumer_Detail).toHaveLength(30);
   const payments=await Promise.all(Array.from({length:6},()=>providerRequest('BillPayment',providerPayment())));
   expect(payments.filter(r=>r.body.response_Code==='00')).toHaveLength(1);
   expect(payments.filter(r=>r.body.response_Code==='03')).toHaveLength(5);

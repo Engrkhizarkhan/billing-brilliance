@@ -21,28 +21,28 @@ const paidAmount = (amount) => String(Math.round((Number(amount) || 0) * 100)).p
 const detail = (value) => String(value || '').slice(0, 30).padEnd(30, ' ');
 const unavailableResponse = (code = '01') => ({
   response_Code: code,
-  consumer_detail: detail(''),
+  consumer_Detail: detail(''),
   bill_status: 'B',
-  due_date: '',
+  due_date: ' '.repeat(8),
   amount_within_dueDate: '+0000000000000',
   amount_after_dueDate: '+0000000000000',
-  billing_month: '',
-  date_paid: '',
-  amount_paid: '',
-  tran_auth_Id: '',
+  billing_month: ' '.repeat(4),
+  date_paid: ' '.repeat(8),
+  amount_paid: ' '.repeat(12),
+  tran_auth_Id: ' '.repeat(6),
   reserved: '',
 });
 const paidResponse = (label, dueDate, payment) => ({
   response_Code: '00',
-  consumer_detail: detail(label),
+  consumer_Detail: detail(label),
   bill_status: 'P',
-  due_date: dueDate ? formatDate(dueDate) : '',
+  due_date: dueDate ? formatDate(dueDate) : ' '.repeat(8),
   amount_within_dueDate: '+0000000000000',
   amount_after_dueDate: '+0000000000000',
   billing_month: dueDate ? formatMonth(dueDate) : formatMonth(new Date()),
-  date_paid: payment?.received_at || payment?.date ? formatDate(payment.received_at || payment.date) : '',
-  amount_paid: payment ? paidAmount(payment.amount) : '',
-  tran_auth_Id: /^\d{6}$/.test(String(payment?.transaction_id || '')) ? String(payment.transaction_id) : '',
+  date_paid: payment?.received_at || payment?.date ? formatDate(payment.received_at || payment.date) : ' '.repeat(8),
+  amount_paid: payment ? paidAmount(payment.amount) : ' '.repeat(12),
+  tran_auth_Id: /^\d{6}$/.test(String(payment?.transaction_id || '')) ? String(payment.transaction_id) : ' '.repeat(6),
   reserved: '',
 });
 
@@ -97,12 +97,12 @@ const inquirePayment = async (req, res, next) => {
         oneBillResponse = paidResponse(student.name, null, payments[0]);
       } else {
         oneBillResponse = {
-          response_Code: '00', consumer_detail: detail(student.name), bill_status: 'U',
-          due_date: oldest?.due_date ? formatDate(oldest.due_date) : '',
+          response_Code: '00', consumer_Detail: detail(student.name), bill_status: 'U',
+          due_date: oldest?.due_date ? formatDate(oldest.due_date) : ' '.repeat(8),
           amount_within_dueDate: inquiryAmount(baseDue),
           amount_after_dueDate: inquiryAmount(baseDue + lateFees),
           billing_month: oldest?.due_date ? formatMonth(oldest.due_date) : formatMonth(now),
-          date_paid: '', amount_paid: '', tran_auth_Id: '', reserved: '',
+          date_paid: ' '.repeat(8), amount_paid: ' '.repeat(12), tran_auth_Id: ' '.repeat(6), reserved: '',
         };
       }
       return res.json({
@@ -148,11 +148,11 @@ const inquirePayment = async (req, res, next) => {
     );
     else if (!payable) oneBillResponse = unavailableResponse(record.status === 'failed' ? '02' : '01');
     else oneBillResponse = {
-      response_Code: '00', consumer_detail: detail(record.description || record.application_id),
-      bill_status: 'U', due_date: record.due_date ? formatDate(record.due_date) : '',
+      response_Code: '00', consumer_Detail: detail(record.description || record.application_id),
+      bill_status: 'U', due_date: record.due_date ? formatDate(record.due_date) : ' '.repeat(8),
       amount_within_dueDate: inquiryAmount(record.amount), amount_after_dueDate: inquiryAmount(record.amount),
       billing_month: record.due_date ? formatMonth(record.due_date) : formatMonth(new Date()),
-      date_paid: '', amount_paid: '', tran_auth_Id: '', reserved: '',
+      date_paid: ' '.repeat(8), amount_paid: ' '.repeat(12), tran_auth_Id: ' '.repeat(6), reserved: '',
     };
     return res.json({
       data: {

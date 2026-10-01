@@ -36,30 +36,30 @@ const validBankMnemonic = (value) => /^[A-Za-z0-9]{1,8}$/.test(value);
 
 const inquiryError = (code) => ({
   response_Code: code,
-  consumer_detail: padRight('', 30),
+  consumer_Detail: padRight('', 30),
   bill_status: 'B',
-  due_date: '',
+  due_date: ' '.repeat(8),
   amount_within_dueDate: '+0000000000000',
   amount_after_dueDate: '+0000000000000',
-  billing_month: '',
-  date_paid: '',
-  amount_paid: '',
-  tran_auth_Id: '',
+  billing_month: ' '.repeat(4),
+  date_paid: ' '.repeat(8),
+  amount_paid: ' '.repeat(12),
+  tran_auth_Id: ' '.repeat(6),
   reserved: '',
 });
 const paymentError = (code) => ({ response_Code: code, Identification_parameter: '', reserved: '' });
 const paidInquiry = (detail, dueDate, billingMonth, payment) => ({
   response_Code: '00',
-  consumer_detail: padRight(detail, 30),
+  consumer_Detail: padRight(detail, 30),
   bill_status: 'P',
-  due_date: dueDate ? fmtDate(dueDate) : '',
+  due_date: dueDate ? fmtDate(dueDate) : ' '.repeat(8),
   amount_within_dueDate: '+0000000000000',
   amount_after_dueDate: '+0000000000000',
   billing_month: fmtBillingMonth(billingMonth || dueDate || new Date()),
-  date_paid: payment?.received_at || payment?.date ? fmtDate(payment.received_at || payment.date) : '',
-  amount_paid: payment ? fmtAmountPaid(payment.amount) : '',
+  date_paid: payment?.received_at || payment?.date ? fmtDate(payment.received_at || payment.date) : ' '.repeat(8),
+  amount_paid: payment ? fmtAmountPaid(payment.amount) : ' '.repeat(12),
   tran_auth_Id: payment && /^\d{6}$/.test(String(payment.transaction_id || ''))
-    ? String(payment.transaction_id) : '',
+    ? String(payment.transaction_id) : ' '.repeat(6),
   reserved: '',
 });
 
@@ -122,13 +122,13 @@ const billInquiry1Link = async (req, res) => {
 
       return res.json({
         response_Code: '00',
-        consumer_detail: padRight(student.name, 30),
+        consumer_Detail: padRight(student.name, 30),
         bill_status: 'U',
-        due_date: oldest?.due_date ? fmtDate(oldest.due_date) : '',
+        due_date: oldest?.due_date ? fmtDate(oldest.due_date) : ' '.repeat(8),
         amount_within_dueDate: fmtAmountInquiry(baseDue),
         amount_after_dueDate: fmtAmountInquiry(baseDue + lateFees),
         billing_month: fmtBillingMonth(oldest?.month || oldest?.due_date || new Date()),
-        date_paid: '', amount_paid: '', tran_auth_Id: '', reserved: '',
+        date_paid: ' '.repeat(8), amount_paid: ' '.repeat(12), tran_auth_Id: ' '.repeat(6), reserved: '',
       });
     }
 
@@ -151,13 +151,13 @@ const billInquiry1Link = async (req, res) => {
     }
     return res.json({
       response_Code: '00',
-      consumer_detail: padRight(record.description || record.application_id, 30),
+      consumer_Detail: padRight(record.description || record.application_id, 30),
       bill_status: 'U',
-      due_date: record.due_date ? fmtDate(record.due_date) : '',
+      due_date: record.due_date ? fmtDate(record.due_date) : ' '.repeat(8),
       amount_within_dueDate: fmtAmountInquiry(record.amount),
       amount_after_dueDate: fmtAmountInquiry(record.amount),
       billing_month: record.due_date ? fmtBillingMonth(record.due_date) : fmtBillingMonth(new Date()),
-      date_paid: '', amount_paid: '', tran_auth_Id: '', reserved: '',
+      date_paid: ' '.repeat(8), amount_paid: ' '.repeat(12), tran_auth_Id: ' '.repeat(6), reserved: '',
     });
   } catch (err) {
     if (err.code === 'AMBIGUOUS_CONSUMER_NUMBER') return res.json(inquiryError('04'));

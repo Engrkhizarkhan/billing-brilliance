@@ -25,6 +25,7 @@ describe('1LINK invoice contract', () => {
 
     expect(res.body).toMatchObject({
       response_Code: '00', bill_status: 'P', due_date: '20261005', billing_month: '2609',
+      consumer_Detail: 'Test Student'.padEnd(30, ' '),
       tran_auth_Id: '123456', amount_paid: '000000500000',
     });
     expect(pool.query.mock.calls[3][0]).toContain('voucher_number AS transaction_id');
@@ -41,9 +42,39 @@ describe('1LINK invoice contract', () => {
 
     await billInquiry1Link({ body: { consumer_number: '10517210010001', bank_mnemonic: 'UBL00001', reserved: '' } }, res);
 
-    expect(res.body).toMatchObject({
-      response_Code: '00', bill_status: 'U', due_date: '20261005', billing_month: '2609',
+    expect(res.body).toEqual({
+      response_Code: '00', consumer_Detail: 'Test Student'.padEnd(30, ' '),
+      bill_status: 'U', due_date: '20261005', billing_month: '2609',
+      amount_within_dueDate: '+0000000250000', amount_after_dueDate: '+0000000250000',
+      date_paid: ' '.repeat(8), amount_paid: ' '.repeat(12), tran_auth_Id: ' '.repeat(6), reserved: '',
     });
+  });
+
+  test.each(['missing', 'blocked', 'invalid', 'failure'])('pads every absent field in %s inquiries', async (scenario) => {
+    if (scenario === 'missing') pool.query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[]]);
+    if (scenario === 'blocked') pool.query.mockResolvedValueOnce([[{ status: 'inactive' }]]);
+    if (scenario === 'failure') pool.query.mockRejectedValueOnce(new Error('Database unavailable'));
+    const res = response();
+    await billInquiry1Link({body:{consumer_number:'10517210010001',bank_mnemonic:scenario === 'invalid' ? '' : 'MDL'}},res);
+    expect(res.body).toEqual({
+      response_Code: {missing:'01',blocked:'02',invalid:'04',failure:'03'}[scenario],
+      consumer_Detail:' '.repeat(30),bill_status:'B',due_date:' '.repeat(8),
+      amount_within_dueDate:'+0000000000000',amount_after_dueDate:'+0000000000000',
+      billing_month:' '.repeat(4),date_paid:' '.repeat(8),amount_paid:' '.repeat(12),
+      tran_auth_Id:' '.repeat(6),reserved:'',
+    });
+  });
+
+  test('paid inquiry pads unavailable metadata without inventing payment details', async () => {
+    pool.query
+      .mockResolvedValueOnce([[{id:'student-1',tenant_id:'tenant-1',name:'Test',status:'active'}]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[{debit:0,credit:0}]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[]]);
+    const res=response();
+    await billInquiry1Link({body:{consumer_number:'10517210010001',bank_mnemonic:'MDL'}},res);
+    expect(res.body).toMatchObject({bill_status:'P',due_date:' '.repeat(8),date_paid:' '.repeat(8),amount_paid:' '.repeat(12),tran_auth_Id:' '.repeat(6)});
   });
 
   test.each(['10517210010001', '10010001'])('posts %s using the full number and the same duplicate key', async (suppliedConsumer) => {
