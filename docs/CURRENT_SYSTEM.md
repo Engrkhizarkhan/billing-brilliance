@@ -23,6 +23,10 @@ Tenant API keys are checked centrally for scope, lifecycle and source IP. Produc
 - Dashboard totals are database aggregates, independent of display pagination. Signed reversal entries offset the original receipt. Exports explicitly contain the displayed rows.
 - Existing historical discrepancies are not silently rewritten. Run the read-only reconciliation report and review corrections with financial evidence.
 
+## 1BILL inquiry status clarification — 7 October 2026
+
+Per the latest UAT instruction, blocked/inactive consumer inquiries return `response_Code: "02"` with `bill_status: "B"`. The admin inquiry preview uses the same mapping. Invalid/not-found (`01`), authentication/validation (`04`) and processing errors (`03`) keep a single ASCII space for `bill_status`. Paid responses remain `06/P` and unpaid responses `00/U`. Other fixed-width blank fields remain unchanged. This supersedes the earlier instruction to leave blocked statuses blank; payment acceptance rules are unchanged.
+
 ## Sessions and live updates
 
 Access and refresh tokens contain a user authentication version. Password replacement increments that version and revokes refresh sessions atomically. Refresh tokens have random identifiers and are single-use; rotation occurs inside a transaction. Password changes sign the user out.
