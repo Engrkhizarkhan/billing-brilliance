@@ -242,6 +242,7 @@ const expectInquiryWireFormat = (body) => {
   expect(body.reserved).toBe('');
   if(body.bill_status==='P')expect(body.response_Code).toBe('06');
   else if(body.bill_status==='U')expect(body.response_Code).toBe('00');
+  else if(body.response_Code==='02')expect(body.bill_status).toBe('B');
   else expect(body.bill_status).toBe(' ');
 };
 const providerRequest = (operation, body, credentials=onebillCredentials) => request(app)
@@ -306,9 +307,9 @@ test('1BILL blocked consumer cannot pay and overdue payment must include the quo
   // Set persisted late fee explicitly to exercise the provider quote independently of charge defaults.
   await pool.query('UPDATE invoices SET late_fee=25 WHERE tenant_id=?',[tenantId]);
   await pool.query("UPDATE students SET status='inactive' WHERE id=?",[studentId]);
-  expect((await providerRequest('BillInquiry',{})).body).toMatchObject({response_Code:'02',bill_status:' '});
+  expect((await providerRequest('BillInquiry',{})).body).toMatchObject({response_Code:'02',bill_status:'B'});
   const preview=await tenantRequest('post','/api/manual-payments/inquiry').send({consumerNumber});
-  expect(preview.body.data.oneBillResponse).toMatchObject({response_Code:'02',bill_status:' '});
+  expect(preview.body.data.oneBillResponse).toMatchObject({response_Code:'02',bill_status:'B'});
   expect(preview.body.data.payable).toBe(false);
   expect((await providerRequest('BillPayment',providerPayment())).body.response_Code).toBe('01');
   await pool.query("UPDATE students SET status='active' WHERE id=?",[studentId]);
@@ -395,7 +396,7 @@ test('1BILL shortened numbers preserve blocked, overdue, invalid and suspended b
   await pool.query('UPDATE invoices SET late_fee=25 WHERE tenant_id=?',[tenantId]);
   const short={consumer_number:consumerNumber.slice(config.fintechPrefix.length)};
   await pool.query("UPDATE students SET status='inactive' WHERE id=?",[studentId]);
-  expect((await providerRequest('BillInquiry',short)).body).toMatchObject({response_Code:'02',bill_status:' '});
+  expect((await providerRequest('BillInquiry',short)).body).toMatchObject({response_Code:'02',bill_status:'B'});
   expect((await providerRequest('BillPayment',providerPayment(short))).body.response_Code).toBe('01');
   await pool.query("UPDATE students SET status='active' WHERE id=?",[studentId]);
   expect((await providerRequest('BillInquiry',short)).body).toMatchObject({response_Code:'00',bill_status:'U',amount_after_dueDate:'+0000000012500'});
@@ -417,9 +418,9 @@ test('1BILL 24-digit organization consumer accepts shortened inquiry and payment
   const short={consumer_number:consumerNumber.slice(config.fintechPrefix.length)};
   expect((await providerRequest('BillInquiry',short)).body).toEqual((await providerRequest('BillInquiry',{})).body);
   await pool.query("UPDATE org_payment_records SET status='failed' WHERE id=?",[recordId]);
-  expect((await providerRequest('BillInquiry',short)).body).toMatchObject({response_Code:'02',bill_status:' '});
+  expect((await providerRequest('BillInquiry',short)).body).toMatchObject({response_Code:'02',bill_status:'B'});
   const preview=await tenantRequest('post','/api/manual-payments/inquiry').send({consumerNumber});
-  expect(preview.body.data.oneBillResponse).toMatchObject({response_Code:'02',bill_status:' '});
+  expect(preview.body.data.oneBillResponse).toMatchObject({response_Code:'02',bill_status:'B'});
   expect(preview.body.data.payable).toBe(false);
   expect((await providerRequest('BillPayment',providerPayment(short))).body.response_Code).toBe('01');
   await pool.query("UPDATE org_payment_records SET status='pending' WHERE id=?",[recordId]);

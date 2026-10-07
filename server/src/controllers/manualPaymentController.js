@@ -22,7 +22,7 @@ const detail = (value) => String(value || '').slice(0, 30).padEnd(30, ' ');
 const unavailableResponse = (code = '01') => ({
   response_Code: code,
   consumer_Detail: detail(''),
-  bill_status: ' ',
+  bill_status: code === '02' ? 'B' : ' ',
   due_date: ' '.repeat(8),
   amount_within_dueDate: '+0000000000000',
   amount_after_dueDate: '+0000000000000',
