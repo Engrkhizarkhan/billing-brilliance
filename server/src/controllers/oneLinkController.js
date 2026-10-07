@@ -205,7 +205,7 @@ const billPayment1Link = async (req, res) => {
     const [targets] = await pool.query(
       `SELECT s.tenant_id, NULL AS target_id, 'invoice' AS target_type, s.name AS detail
        FROM students s JOIN tenants t ON t.id = s.tenant_id
-       WHERE s.consumer_number = ? AND s.deleted_at IS NULL AND s.status = 'active'
+       WHERE s.consumer_number = ? AND s.deleted_at IS NULL
          AND t.deleted_at IS NULL AND t.status = 'active' AND t.lifecycle_stage = 'live'
        UNION ALL
        SELECT o.tenant_id, o.id AS target_id, 'org_payment' AS target_type,
@@ -244,7 +244,7 @@ const billPayment1Link = async (req, res) => {
   } catch (err) {
     const mapping = {
       BILL_NOT_FOUND: '01', TENANT_NOT_FOUND: '01', TENANT_SUSPENDED: '01',
-      TENANT_NOT_LIVE: '01', CONSUMER_BLOCKED: '01', BILL_EXPIRED: '01',
+      TENANT_NOT_LIVE: '01', CONSUMER_BLOCKED: '02', BILL_EXPIRED: '01',
       BILL_NOT_PAYABLE: '01', ALREADY_PAID: '06', DUPLICATE_PAYMENT: '03', ER_DUP_ENTRY: '03',
       AMOUNT_MISMATCH: '04', INVALID_AMOUNT: '04', INVALID_RECEIVED_AT: '04',
       AMBIGUOUS_CONSUMER_NUMBER: '04',

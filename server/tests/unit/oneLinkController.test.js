@@ -119,6 +119,23 @@ describe('1LINK invoice contract', () => {
     expect(pool.query).not.toHaveBeenCalled();
   });
 
+  test.each([
+    ['CONSUMER_BLOCKED', '02'], ['BILL_NOT_FOUND', '01'],
+    ['BILL_EXPIRED', '01'], ['BILL_NOT_PAYABLE', '01'],
+    ['TENANT_SUSPENDED', '01'], ['ALREADY_PAID', '06'],
+  ])('maps payment rejection %s to %s', async (code, expected) => {
+    pool.query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{
+      tenant_id: 'tenant-1', target_id: null, target_type: 'invoice', detail: 'Test Student',
+    }]]);
+    postPayment.mockRejectedValueOnce({ code });
+    const res = response();
+    await billPayment1Link({ body: {
+      consumer_number: '10010018', tran_auth_id: '123456', transaction_amount: '000000500000',
+      tran_date: '20261007', tran_time: '101112', bank_mnemonic: 'UBL', reserved: '',
+    }, ip: '10.95.8.92', headers: {} }, res);
+    expect(res.body).toEqual({ response_Code: expected, reserved: '', identification_parameter: '' });
+  });
+
   test('maps a duplicate payment to response code 03', async () => {
     pool.query.mockResolvedValueOnce([[{ id: 'existing-payment' }]]);
     const res = response();

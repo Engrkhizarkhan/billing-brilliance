@@ -95,6 +95,7 @@ const postOrgPayment = async (connection, input, tenant, paidAt) => {
   if (!rows.length) throw new AppError('Payment request not found', 404, 'BILL_NOT_FOUND');
   const record = rows[0];
   if (record.status === 'paid') throw new AppError('Bill is already paid', 409, 'ALREADY_PAID');
+  if (record.status === 'failed') throw new AppError('Consumer is blocked', 409, 'CONSUMER_BLOCKED');
   if (record.status !== 'pending') throw new AppError('Bill is not payable', 409, 'BILL_NOT_PAYABLE');
   if (record.expiry_date && new Date(`${String(record.expiry_date).replace(' ', 'T')}Z`) <= new Date(paidAt.replace(' ', 'T') + 'Z')) {
     throw new AppError('Bill has expired', 409, 'BILL_EXPIRED');
