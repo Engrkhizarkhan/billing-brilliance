@@ -27,6 +27,8 @@ Tenant API keys are checked centrally for scope, lifecycle and source IP. Produc
 
 Per the latest UAT instruction, blocked/inactive consumer inquiries return `response_Code: "02"` with `bill_status: "B"`. The admin inquiry preview uses the same mapping. Invalid/not-found (`01`), authentication/validation (`04`) and processing errors (`03`) keep a single ASCII space for `bill_status`. Paid responses remain `06/P` and unpaid responses `00/U`. Other fixed-width blank fields remain unchanged. This supersedes the earlier instruction to leave blocked statuses blank; payment acceptance rules are unchanged.
 
+The same day's payment clarification requires BillPayment to return `{"response_Code":"02","reserved":"","identification_parameter":""}` for blocked consumers. Inactive students now reach the existing locked blocked-consumer check instead of being excluded as not found. Failed organization requests (already represented as blocked in inquiry) receive the same blocked error under the transaction lock. Both remain unpayable; missing, expired and other unavailable bills keep their existing codes.
+
 ## Sessions and live updates
 
 Access and refresh tokens contain a user authentication version. Password replacement increments that version and revokes refresh sessions atomically. Refresh tokens have random identifiers and are single-use; rotation occurs inside a transaction. Password changes sign the user out.
