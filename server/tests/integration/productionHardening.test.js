@@ -294,11 +294,17 @@ test('1BILL invalid credentials, amounts, calendar dates and malformed fields ca
   Object.assign(config.onebill,onebillCredentials);
   await charge();
   expect((await providerRequest('BillInquiry',{}, {username:'wrong',password:'wrong'})).status).toBe(401);
-  for(const body of [providerPayment({transaction_amount:'000000009999'}),providerPayment({transaction_amount:'000000010001'}),providerPayment({tran_date:'20260230'}),providerPayment({tran_time:'240000'}),providerPayment({tran_auth_id:'12345'}),providerPayment({bank_mnemonic:'TOO-LONG-MNEMONIC'}),providerPayment({consumer_number:'1'.repeat(25)})]){
+  for(const transaction_amount of ['000000009999','000000010001']){
+    expect((await providerRequest('BillPayment',providerPayment({transaction_amount}))).body).toEqual({response_Code:'02',reserved:'',identification_parameter:''});
+  }
+  for(const body of [providerPayment({transaction_amount:'000000000000'}),providerPayment({transaction_amount:'bad-amount'}),providerPayment({tran_date:'20260230'}),providerPayment({tran_time:'240000'}),providerPayment({tran_auth_id:'12345'}),providerPayment({bank_mnemonic:'TOO-LONG-MNEMONIC'}),providerPayment({consumer_number:'1'.repeat(25)})]){
     expect((await providerRequest('BillPayment',body)).body.response_Code).toBe('04');
   }
   expect((await providerRequest('BillInquiry',{consumer_number:'1'.repeat(20)})).body.response_Code).toBe('01');
-  const [[r]]=await pool.query('SELECT COUNT(*) AS n FROM payments WHERE tenant_id=?',[tenantId]);expect(r.n).toBe(0);
+  for(const table of ['payments','transactions','payment_allocations','outbox_events']){
+    const [[r]]=await pool.query(`SELECT COUNT(*) AS n FROM ${table} WHERE tenant_id=?`,[tenantId]);expect(r.n).toBe(0);
+  }
+  const [[unchanged]]=await pool.query('SELECT balance FROM students WHERE id=?',[studentId]);expect(Number(unchanged.balance)).toBe(100);
 });
 
 test('1BILL blocked consumer cannot pay and overdue payment must include the quoted late fee',async()=>{
@@ -319,7 +325,7 @@ test('1BILL blocked consumer cannot pay and overdue payment must include the quo
   expect(blockedStudent.status).toBe('inactive');expect(Number(blockedStudent.balance)).toBe(100);
   await pool.query("UPDATE students SET status='active' WHERE id=?",[studentId]);
   expect((await providerRequest('BillInquiry',{})).body).toMatchObject({amount_within_dueDate:'+0000000010000',amount_after_dueDate:'+0000000012500'});
-  expect((await providerRequest('BillPayment',providerPayment())).body.response_Code).toBe('04');
+  expect((await providerRequest('BillPayment',providerPayment())).body.response_Code).toBe('02');
   expect((await providerRequest('BillPayment',providerPayment({transaction_amount:'000000012500'}))).body.response_Code).toBe('00');
   const [[r]]=await pool.query('SELECT balance FROM students WHERE id=?',[studentId]);expect(Number(r.balance)).toBe(0);
 });
@@ -405,7 +411,7 @@ test('1BILL shortened numbers preserve blocked, overdue, invalid and suspended b
   expect((await providerRequest('BillPayment',providerPayment(short))).body).toEqual({response_Code:'02',reserved:'',identification_parameter:''});
   await pool.query("UPDATE students SET status='active' WHERE id=?",[studentId]);
   expect((await providerRequest('BillInquiry',short)).body).toMatchObject({response_Code:'00',bill_status:'U',amount_after_dueDate:'+0000000012500'});
-  expect((await providerRequest('BillPayment',providerPayment(short))).body.response_Code).toBe('04');
+  expect((await providerRequest('BillPayment',providerPayment(short))).body.response_Code).toBe('02');
   await pool.query("UPDATE tenants SET status='suspended' WHERE id=?",[tenantId]);
   expect((await providerRequest('BillInquiry',short)).body.response_Code).toBe('01');
   expect((await providerRequest('BillPayment',providerPayment({...short,transaction_amount:'000000012500'}))).body.response_Code).toBe('01');
@@ -439,6 +445,16 @@ test('1BILL 24-digit organization consumer accepts shortened inquiry and payment
   expect((await providerRequest('BillInquiry',short)).body.response_Code).toBe('01');
   expect((await providerRequest('BillPayment',providerPayment(short))).body.response_Code).toBe('01');
   await pool.query("UPDATE org_payment_records SET expiry_date='2099-01-02' WHERE id=?",[recordId]);
+  for(const transaction_amount of ['000000009999','000000010001']){
+    for(const consumer_number of [consumerNumber,short.consumer_number]){
+      expect((await providerRequest('BillPayment',providerPayment({consumer_number,transaction_amount}))).body).toEqual({response_Code:'02',reserved:'',identification_parameter:''});
+    }
+  }
+  for(const table of ['payments','transactions','payment_allocations','outbox_events','org_payment_notifications']){
+    const [[row]]=await pool.query(`SELECT COUNT(*) n FROM ${table} WHERE tenant_id=?`,[tenantId]);expect(row.n).toBe(0);
+  }
+  const [[unpaidRecord]]=await pool.query('SELECT status,paid_at FROM org_payment_records WHERE id=?',[recordId]);
+  expect(unpaidRecord.status).toBe('pending');expect(unpaidRecord.paid_at).toBeNull();
   expect((await providerRequest('BillPayment',providerPayment(short))).body.response_Code).toBe('00');
   expect((await providerRequest('BillPayment',providerPayment())).body.response_Code).toBe('03');
   expect((await providerRequest('BillInquiry',short)).body).toMatchObject({response_Code:'06',bill_status:'P'});

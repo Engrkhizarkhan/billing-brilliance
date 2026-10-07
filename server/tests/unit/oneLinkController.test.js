@@ -123,6 +123,7 @@ describe('1LINK invoice contract', () => {
     ['CONSUMER_BLOCKED', '02'], ['BILL_NOT_FOUND', '01'],
     ['BILL_EXPIRED', '01'], ['BILL_NOT_PAYABLE', '01'],
     ['TENANT_SUSPENDED', '01'], ['ALREADY_PAID', '06'],
+    ['AMOUNT_MISMATCH', '02'], ['INVALID_AMOUNT', '04'],
   ])('maps payment rejection %s to %s', async (code, expected) => {
     pool.query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{
       tenant_id: 'tenant-1', target_id: null, target_type: 'invoice', detail: 'Test Student',

@@ -246,7 +246,7 @@ const billPayment1Link = async (req, res) => {
       BILL_NOT_FOUND: '01', TENANT_NOT_FOUND: '01', TENANT_SUSPENDED: '01',
       TENANT_NOT_LIVE: '01', CONSUMER_BLOCKED: '02', BILL_EXPIRED: '01',
       BILL_NOT_PAYABLE: '01', ALREADY_PAID: '06', DUPLICATE_PAYMENT: '03', ER_DUP_ENTRY: '03',
-      AMOUNT_MISMATCH: '04', INVALID_AMOUNT: '04', INVALID_RECEIVED_AT: '04',
+      AMOUNT_MISMATCH: '02', INVALID_AMOUNT: '04', INVALID_RECEIVED_AT: '04',
       AMBIGUOUS_CONSUMER_NUMBER: '04',
     };
     logger.warn(`1LINK BillPayment rejected: ${err.code || err.message}`);
