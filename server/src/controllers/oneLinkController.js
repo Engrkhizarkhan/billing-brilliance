@@ -175,17 +175,26 @@ const billPayment1Link = async (req, res) => {
     const bankMnemonic = String(req.body.bank_mnemonic || '').trim();
     const reserved = String(req.body.reserved || '');
     if (!validConsumerNumber(suppliedConsumer) || !/^\d{6}$/.test(tranAuthId)
-      || !/^\d{12}$/.test(String(req.body.transaction_amount || ''))
       || !/^\d{8}$/.test(tranDate) || !/^\d{6}$/.test(tranTime)
       || !validBankMnemonic(bankMnemonic) || reserved.length > 515) {
       return res.json(paymentError('04'));
     }
-    const amount = parsePaymentAmount(req.body.transaction_amount);
     const receivedAt = parseTranDateTime(tranDate, tranTime);
-    if (!Number.isFinite(amount) || amount <= 0 || Number.isNaN(receivedAt.getTime())
+    if (Number.isNaN(receivedAt.getTime())
       || receivedAt.toISOString().slice(0, 19).replace(/[-T:]/g, '') !== `${tranDate}${tranTime}`) {
       return res.json(paymentError('04'));
     }
+
+    // Provider UAT requires blank/zero amounts to be declined with 02.
+    // Other malformed amounts remain invalid data; neither case posts a payment.
+    const suppliedAmount = req.body.transaction_amount;
+    if (suppliedAmount == null || suppliedAmount === 0
+      || (typeof suppliedAmount === 'string' && /^(?:0+)?$/.test(suppliedAmount.trim()))) {
+      return res.json(paymentError('02'));
+    }
+    if (!/^\d{12}$/.test(String(suppliedAmount))) return res.json(paymentError('04'));
+    const amount = parsePaymentAmount(suppliedAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return res.json(paymentError('04'));
 
     const consumerNumber = await resolveOneBillConsumer(suppliedConsumer);
     if (!consumerNumber) return res.json(paymentError('01'));

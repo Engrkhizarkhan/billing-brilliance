@@ -294,10 +294,10 @@ test('1BILL invalid credentials, amounts, calendar dates and malformed fields ca
   Object.assign(config.onebill,onebillCredentials);
   await charge();
   expect((await providerRequest('BillInquiry',{}, {username:'wrong',password:'wrong'})).status).toBe(401);
-  for(const transaction_amount of ['000000009999','000000010001']){
+  for(const transaction_amount of ['000000009999','000000010001','000000000000','', '            ', null, 0, undefined]){
     expect((await providerRequest('BillPayment',providerPayment({transaction_amount}))).body).toEqual({response_Code:'02',reserved:'',identification_parameter:''});
   }
-  for(const body of [providerPayment({transaction_amount:'000000000000'}),providerPayment({transaction_amount:'bad-amount'}),providerPayment({tran_date:'20260230'}),providerPayment({tran_time:'240000'}),providerPayment({tran_auth_id:'12345'}),providerPayment({bank_mnemonic:'TOO-LONG-MNEMONIC'}),providerPayment({consumer_number:'1'.repeat(25)})]){
+  for(const body of [providerPayment({transaction_amount:'bad-amount'}),providerPayment({tran_date:'20260230'}),providerPayment({tran_time:'240000'}),providerPayment({tran_auth_id:'12345'}),providerPayment({bank_mnemonic:'TOO-LONG-MNEMONIC'}),providerPayment({consumer_number:'1'.repeat(25)})]){
     expect((await providerRequest('BillPayment',body)).body.response_Code).toBe('04');
   }
   expect((await providerRequest('BillInquiry',{consumer_number:'1'.repeat(20)})).body.response_Code).toBe('01');
@@ -445,7 +445,7 @@ test('1BILL 24-digit organization consumer accepts shortened inquiry and payment
   expect((await providerRequest('BillInquiry',short)).body.response_Code).toBe('01');
   expect((await providerRequest('BillPayment',providerPayment(short))).body.response_Code).toBe('01');
   await pool.query("UPDATE org_payment_records SET expiry_date='2099-01-02' WHERE id=?",[recordId]);
-  for(const transaction_amount of ['000000009999','000000010001']){
+  for(const transaction_amount of ['000000009999','000000010001','000000000000','', '            ', null, 0, undefined]){
     for(const consumer_number of [consumerNumber,short.consumer_number]){
       expect((await providerRequest('BillPayment',providerPayment({consumer_number,transaction_amount}))).body).toEqual({response_Code:'02',reserved:'',identification_parameter:''});
     }
