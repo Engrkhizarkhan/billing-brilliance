@@ -4,7 +4,7 @@ const config = require('../config');
 const { AppError } = require('../middleware/errorHandler');
 const { emitPaymentEvent } = require('./paymentEventBus');
 
-const { money, payableQuote, lateFeeFor } = require('./billingRules');
+const { money, payableQuote, lateFeeFor, orgPayableQuote, assertMoney } = require('./billingRules');
 const mysqlDateTime = (value) => {
   const date = value ? new Date(value) : new Date();
   if (Number.isNaN(date.getTime())) throw new AppError('Invalid received date/time', 400, 'INVALID_RECEIVED_AT');
@@ -100,7 +100,7 @@ const postOrgPayment = async (connection, input, tenant, paidAt) => {
   if (record.expiry_date && new Date(`${String(record.expiry_date).replace(' ', 'T')}Z`) <= new Date(paidAt.replace(' ', 'T') + 'Z')) {
     throw new AppError('Bill has expired', 409, 'BILL_EXPIRED');
   }
-  const expected = money(record.amount);
+  const expected = orgPayableQuote(record, new Date(paidAt.replace(' ', 'T') + 'Z')).amount;
   const received = money(input.amount);
   if (received !== expected) throw new AppError(`Exact payment of PKR ${expected.toFixed(2)} is required`, 422, 'AMOUNT_MISMATCH');
 
@@ -109,9 +109,9 @@ const postOrgPayment = async (connection, input, tenant, paidAt) => {
   await insertEvidence(connection, { ...input, studentId: null }, tenant, paymentId, receiptNumber,
     record.consumer_number, received, paidAt, tenant.name);
   await connection.query(
-    `UPDATE org_payment_records SET status = 'paid', transaction_id = ?, paid_at = ?
+    `UPDATE org_payment_records SET status = 'paid', transaction_id = ?, paid_at = ?, paid_amount = ?
      WHERE id = ? AND tenant_id = ?`,
-    [input.transactionId || input.externalReference, paidAt, record.id, input.tenantId]
+    [input.transactionId || input.externalReference, paidAt, received, record.id, input.tenantId]
   );
   await connection.query(
     `INSERT INTO payment_allocations (id, tenant_id, payment_id, target_type, target_id, amount)
@@ -155,7 +155,12 @@ const postStudentPayment = async (connection, input, tenant, paidAt) => {
   );
   const ledgerOutstanding = Math.max(0, money(Number(prePaymentTotals.debit) - Number(prePaymentTotals.credit)));
   if (!invoices.length && ledgerOutstanding === 0) {
-    throw new AppError('Bill is already paid or not found', 409, 'ALREADY_PAID');
+    const [[history]] = await connection.query(
+      `SELECT (EXISTS(SELECT 1 FROM invoices WHERE tenant_id = ? AND student_id = ? AND status = 'paid' AND deleted_at IS NULL)
+       OR EXISTS(SELECT 1 FROM payments WHERE tenant_id = ? AND student_id = ? AND status = 'posted' AND reversal_of_payment_id IS NULL)) AS paid`,
+      [input.tenantId, student.id, input.tenantId, student.id]);
+    if (!Number(history.paid)) throw new AppError('No bill has been issued for this consumer', 404, 'BILL_NOT_FOUND');
+    throw new AppError('Bill is already paid', 409, 'ALREADY_PAID');
   }
   const { invoiceDue: baseDue, baseDue: payableBase, amount: expected } = payableQuote(invoices, prePaymentTotals, paidDate, Boolean(input.invoiceId));
   if (ledgerOutstanding < baseDue) throw new AppError('Invoice charges do not reconcile with the ledger; financial review is required before collection', 409, 'LEDGER_RECONCILIATION_REQUIRED');
@@ -234,7 +239,7 @@ const postPayment = async (input) => {
   if (!input.tenantId) throw new AppError('Tenant is required', 400, 'TENANT_REQUIRED');
   if (!input.externalReference?.trim()) throw new AppError('External reference is required', 400, 'REFERENCE_REQUIRED');
   if (!input.note?.trim() && input.source === 'manual') throw new AppError('Reason is required for manual payments', 400, 'REASON_REQUIRED');
-  if (!Number.isFinite(Number(input.amount)) || Number(input.amount) <= 0) throw new AppError('Amount must be greater than zero', 400, 'INVALID_AMOUNT');
+  assertMoney(input.amount);
   const paidAt = mysqlDateTime(input.receivedAt);
   const connection = await pool.getConnection();
   try {
@@ -265,6 +270,7 @@ const postPayment = async (input) => {
 };
 
 const reverseManualPayment = async (input) => {
+  if (config.appEnvironment === 'production') throw new AppError('Payment reversals are disabled in production', 403, 'REVERSALS_DISABLED');
   if (!input.tenantId) throw new AppError('Tenant is required', 400, 'TENANT_REQUIRED');
   if (!input.reason || input.reason.trim().length < 5) throw new AppError('A reversal reason is required', 400, 'REASON_REQUIRED');
   const connection = await pool.getConnection();
@@ -331,7 +337,7 @@ const reverseManualPayment = async (input) => {
         await connection.query(
           `UPDATE org_payment_records
            SET status = CASE WHEN expiry_date <= UTC_TIMESTAMP() THEN 'expired' ELSE 'pending' END,
-               paid_at = NULL, transaction_id = NULL
+               paid_at = NULL, transaction_id = NULL, paid_amount = NULL
            WHERE id = ? AND tenant_id = ?`,
           [allocation.target_id, input.tenantId]
         );

@@ -1,5 +1,16 @@
 const { AppError } = require('../middleware/errorHandler');
 const money = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+const MAX_PAYMENT_AMOUNT = 9999999999.99; // 1BILL N12 paisa field.
+const assertMoney = (value, { allowZero = false, label = 'Amount' } = {}) => {
+  if (!['string', 'number'].includes(typeof value) || !/^\d+(\.\d{1,2})?$/.test(String(value))
+    || !Number.isFinite(Number(value)) || Number(value) > MAX_PAYMENT_AMOUNT
+    || Number(value) < (allowZero ? 0 : 0.01)) {
+    throw new AppError(`${label} must be ${allowZero ? 'zero or ' : ''}a positive PKR amount with at most two decimal places, up to ${MAX_PAYMENT_AMOUNT}`, 400, 'INVALID_AMOUNT');
+  }
+  return Number(value);
+};
+const pakistanDate = (at = new Date()) => new Date(new Date(at).getTime() + 5 * 3600000).toISOString().slice(0, 10);
+const dueDayEnd = (date) => new Date(`${String(date).slice(0, 10)}T23:59:59.999+05:00`);
 const validDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value))
   && !Number.isNaN(Date.parse(`${value}T00:00:00Z`))
   && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
@@ -33,7 +44,7 @@ const billingDueDate = (assignment, month) => {
   return due < assigned || due < anchor ? null : due;
 };
 const lateFeeFor = (invoice, at = new Date()) => !invoice.late_fee_applied
-  && new Date(`${String(invoice.due_date).slice(0, 10)}T23:59:59.999Z`) < new Date(at)
+  && dueDayEnd(invoice.due_date) < new Date(at)
   ? money(invoice.late_fee || 0) : 0;
 const payableQuote = (invoices, ledger, at = new Date(), invoiceOnly = false) => {
   const invoiceDue = money(invoices.reduce((sum, row) => sum + Number(row.amount), 0));
@@ -42,4 +53,9 @@ const payableQuote = (invoices, ledger, at = new Date(), invoiceOnly = false) =>
   const lateFees = money(invoices.reduce((sum, row) => sum + lateFeeFor(row, at), 0));
   return { invoiceDue, ledgerDue, baseDue, lateFees, amount: money(baseDue + lateFees) };
 };
-module.exports = { money, validDate, assertDate, computeNextDueDate, billingDueDate, lateFeeFor, payableQuote };
+const orgPayableQuote = (record, at = new Date()) => {
+  const baseDue = money(record.amount);
+  const lateFees = record.status === 'paid' ? money(Number(record.paid_amount ?? record.amount) - baseDue) : lateFeeFor(record, at);
+  return { baseDue, lateFees, amount: money(baseDue + lateFees) };
+};
+module.exports = { money, assertMoney, MAX_PAYMENT_AMOUNT, pakistanDate, dueDayEnd, orgPayableQuote, validDate, assertDate, computeNextDueDate, billingDueDate, lateFeeFor, payableQuote };

@@ -25,6 +25,7 @@ const OrgPayments = () => {
   const paymentVersion = usePaymentStore((state) => state.version);
 
   const { data: notificationsData, error: queryError0 } = useApiQuery(() => api.listOrgPaymentNotifications(), [paymentVersion]);
+  const { data: postings, error: postingsError } = useApiQuery(() => api.fetchPostings(), []);
   const notifications = (notificationsData || []) as OrgPaymentNotification[];
   const [searchParams] = useSearchParams();
 
@@ -37,6 +38,8 @@ const OrgPayments = () => {
     application_id: queryApplicationId,
     posting_id: '',
     amount: 0,
+    late_fee: 0,
+    due_date: '',
     expires_in_minutes: 0,
     never_expires: false,
     description: '',
@@ -66,6 +69,8 @@ const OrgPayments = () => {
         applicationId: createForm.application_id,
         postingId: createForm.posting_id,
         amount: createForm.amount,
+        lateFee: createForm.late_fee,
+        dueDate: createForm.due_date || undefined,
         neverExpires: createForm.never_expires,
         expireAt: (!createForm.never_expires && createForm.expires_in_minutes > 0)
           ? new Date(Date.now() + createForm.expires_in_minutes * 60 * 1000).toISOString()
@@ -113,6 +118,8 @@ const OrgPayments = () => {
         consumer_number: createResult.consumerNumber ?? null,
         status: createResult.status,
         amount: createResult.oneBillRequest.amount,
+        late_fee: createResult.payment.lateFee,
+        due_date: createResult.payment.dueDate,
         expires: (createResult.oneBillRequest as unknown as Record<string, unknown>).expires ?? null,
         never_expires: (createResult.oneBillRequest as unknown as Record<string, unknown>).neverExpires ?? false,
         customer_name: createResult.oneBillRequest.customerName,
@@ -132,7 +139,7 @@ const OrgPayments = () => {
     </div>
   );
 
-  if (queryError0) return <QueryError message={queryError0} />;
+  if (queryError0 || postingsError) return <QueryError message={queryError0 || postingsError} />;
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -181,26 +188,38 @@ const OrgPayments = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <p className="text-xs text-muted-foreground">A late fee applies once, after the due date ends in Pakistan. Choose Never expires or a later expiry to allow overdue payments. Otherwise, the request expires at the end of its due date; without a due date, the default is 48 hours.</p>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">applicant_id</Label>
-                  <Input value={createForm.applicant_id} onChange={(e) => setCreateForm({ ...createForm, applicant_id: e.target.value })} className="rounded-lg" placeholder="STU-9981" />
+                  <Label htmlFor="payment-applicant_id" className="text-xs">applicant_id</Label>
+                  <Input id="payment-applicant_id" value={createForm.applicant_id} onChange={(e) => setCreateForm({ ...createForm, applicant_id: e.target.value })} className="rounded-lg" placeholder="STU-9981" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">application_id</Label>
-                  <Input value={createForm.application_id} onChange={(e) => setCreateForm({ ...createForm, application_id: e.target.value })} className="rounded-lg" placeholder="APP-44521" />
+                  <Label htmlFor="payment-application_id" className="text-xs">application_id</Label>
+                  <Input id="payment-application_id" value={createForm.application_id} onChange={(e) => setCreateForm({ ...createForm, application_id: e.target.value })} className="rounded-lg" placeholder="APP-44521" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">posting_id</Label>
-                  <Input value={createForm.posting_id} onChange={(e) => setCreateForm({ ...createForm, posting_id: e.target.value })} className="rounded-lg" placeholder="LECTURER-2026" />
+                  <Label htmlFor="payment-posting" className="text-xs">Posting</Label>
+                  <select id="payment-posting" value={createForm.posting_id} onChange={(e) => setCreateForm({ ...createForm, posting_id: e.target.value })} className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm">
+                    <option value="">Select an active posting</option>
+                    {(postings || []).filter(posting => posting.status === 'active').map(posting => <option key={posting.id} value={posting.id}>{posting.title}</option>)}
+                  </select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">amount (PKR)</Label>
-                  <Input type="number" value={createForm.amount} onChange={(e) => setCreateForm({ ...createForm, amount: Number(e.target.value) || 0 })} className="rounded-lg" placeholder="1200" />
+                  <Label htmlFor="payment-amount" className="text-xs">amount (PKR)</Label>
+                  <Input id="payment-amount" type="number" min="0.01" step="0.01" value={createForm.amount} onChange={(e) => setCreateForm({ ...createForm, amount: Number(e.target.value) || 0 })} className="rounded-lg" placeholder="1200" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">expires_in_minutes (0 = default 48 hours)</Label>
-                  <Input type="number" min={0} disabled={createForm.never_expires} value={createForm.expires_in_minutes} onChange={(e) => setCreateForm({ ...createForm, expires_in_minutes: Number(e.target.value) || 0 })} className="rounded-lg" placeholder="e.g. 30" />
+                  <Label htmlFor="payment-due-date" className="text-xs">Due date (Pakistan time)</Label>
+                  <Input id="payment-due-date" type="date" value={createForm.due_date} onChange={(e) => setCreateForm({ ...createForm, due_date: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="payment-late-fee" className="text-xs">Late fee (PKR)</Label>
+                  <Input id="payment-late-fee" type="number" min="0" step="0.01" value={createForm.late_fee} onChange={(e) => setCreateForm({ ...createForm, late_fee: Number(e.target.value) || 0 })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="payment-expires_in_minutes" className="text-xs">Expires in minutes (optional)</Label>
+                  <Input id="payment-expires_in_minutes" type="number" min={0} disabled={createForm.never_expires} value={createForm.expires_in_minutes} onChange={(e) => setCreateForm({ ...createForm, expires_in_minutes: Number(e.target.value) || 0 })} className="rounded-lg" placeholder="e.g. 30" />
                 </div>
                 <div className="flex items-center gap-2 pt-4">
                   <Checkbox id="never_expires" checked={createForm.never_expires} onCheckedChange={(checked) => setCreateForm({ ...createForm, never_expires: Boolean(checked), expires_in_minutes: 0 })} />
@@ -209,12 +228,12 @@ const OrgPayments = () => {
                   </Label>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">description</Label>
-                  <Input value={createForm.description} onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })} className="rounded-lg" placeholder="Application fee" />
+                  <Label htmlFor="payment-description" className="text-xs">description</Label>
+                  <Input id="payment-description" value={createForm.description} onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })} className="rounded-lg" placeholder="Application fee" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">customer_name (required)</Label>
-                  <Input value={createForm.customer_name} onChange={(e) => setCreateForm({ ...createForm, customer_name: e.target.value })} className="rounded-lg" placeholder="T-Groups (Ali Khan)" />
+                  <Label htmlFor="payment-customer_name" className="text-xs">customer_name (required)</Label>
+                  <Input id="payment-customer_name" value={createForm.customer_name} onChange={(e) => setCreateForm({ ...createForm, customer_name: e.target.value })} className="rounded-lg" placeholder="T-Groups (Ali Khan)" />
                 </div>
               </div>
 

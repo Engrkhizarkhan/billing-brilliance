@@ -483,6 +483,9 @@ export interface BillPaymentResult {
 export type OrgPaymentStatus = 'pending' | 'paid' | 'failed' | 'expired';
 
 export interface OrgPaymentRecord {
+  lateFee?: number;
+  paidAmount?: number;
+  payableAmount?: number;
   id: string;
   applicationId: string;
   applicantId: string;
@@ -505,6 +508,9 @@ export interface OrgPaymentRecord {
 }
 
 export interface OrgCreatePaymentRequest {
+  lateFee?: number;
+  neverExpires?: boolean;
+  expireAt?: string;
   applicantId: string;
   applicationId: string;
   postingId: string;

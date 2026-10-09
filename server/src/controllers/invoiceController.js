@@ -3,7 +3,7 @@ const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const { auditLog } = require('../middleware/auditLog');
 const { lockBillingTenant, createInvoiceCharges } = require('../services/invoiceAccountingService');
-const { billingDueDate, money } = require('../services/billingRules');
+const { billingDueDate, money, assertMoney } = require('../services/billingRules');
 const { createRequestNotification } = require('../services/notificationService');
 
 const fetchInvoices = async (req, res, next) => {
@@ -71,12 +71,13 @@ const createInvoice = async (req, res, next) => {
   try {
     const tenantId = req.tenantId || req.body.tenantId;
     if (!tenantId) throw new AppError('Tenant ID is required', 400);
-    const { studentId, month, amount, dueDate } = req.body;
+    const { studentId, month, amount, dueDate, lateFee = 0 } = req.body;
+    assertMoney(amount);
     if (!studentId || !Number.isFinite(Number(amount)) || Number(amount) <= 0) throw new AppError('Student and positive amount are required', 400, 'INVALID_AMOUNT');
     connection = await pool.getConnection();
     await connection.beginTransaction();
     await lockBillingTenant(connection, tenantId);
-    const [invoice] = await createInvoiceCharges(connection, tenantId, [{ studentId, month, amount, dueDate }]);
+    const [invoice] = await createInvoiceCharges(connection, tenantId, [{ studentId, month, amount, dueDate, lateFee }]);
     await connection.commit();
     await auditLog(req, 'create', 'invoice', invoice.id, `Invoice ${invoice.invoiceNumber} for ${invoice.amount}`);
     const [[row]] = await pool.query('SELECT * FROM invoices WHERE id = ? AND tenant_id = ?', [invoice.id, tenantId]);

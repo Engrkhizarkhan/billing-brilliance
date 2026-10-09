@@ -1,4 +1,4 @@
-const { payableQuote } = require('../services/billingRules');
+const { payableQuote, orgPayableQuote } = require('../services/billingRules');
 /** 1LINK / 1BILL Generic REST invoice endpoints. */
 const { pool } = require('../config/database');
 const logger = require('../config/logger');
@@ -111,6 +111,7 @@ const billInquiry1Link = async (req, res) => {
            ORDER BY paid_at DESC, due_date DESC LIMIT 1`,
           [student.tenant_id, consumerNumber]
         );
+        if (!payments.length && !paidInvoices.length) return res.json(inquiryError('01'));
         return res.json(paidInquiry(
           student.name,
           paidInvoices[0]?.due_date || null,
@@ -142,8 +143,8 @@ const billInquiry1Link = async (req, res) => {
     if (!records.length) return res.json(inquiryError('01'));
     const record = records[0];
     if (record.status === 'paid') {
-      return res.json(paidInquiry(record.description || record.application_id, record.due_date, null, {
-        amount: record.amount, received_at: record.paid_at, transaction_id: record.transaction_id,
+      return res.json(paidInquiry(record.customer_name || record.description || record.application_id, record.due_date, null, {
+        amount: record.paid_amount ?? record.amount, received_at: record.paid_at, transaction_id: record.transaction_id,
       }));
     }
     if (record.status !== 'pending' || (record.expiry_date && asDate(record.expiry_date) <= new Date())) {
@@ -151,11 +152,11 @@ const billInquiry1Link = async (req, res) => {
     }
     return res.json({
       response_Code: '00',
-      consumer_Detail: padRight(record.description || record.application_id, 30),
+      consumer_Detail: padRight(record.customer_name || record.description || record.application_id, 30),
       bill_status: 'U',
       due_date: record.due_date ? fmtDate(record.due_date) : ' '.repeat(8),
       amount_within_dueDate: fmtAmountInquiry(record.amount),
-      amount_after_dueDate: fmtAmountInquiry(record.amount),
+      amount_after_dueDate: fmtAmountInquiry(orgPayableQuote(record).amount),
       billing_month: record.due_date ? fmtBillingMonth(record.due_date) : fmtBillingMonth(new Date()),
       date_paid: ' '.repeat(8), amount_paid: ' '.repeat(12), tran_auth_Id: ' '.repeat(6), reserved: '',
     });
@@ -218,7 +219,7 @@ const billPayment1Link = async (req, res) => {
          AND t.deleted_at IS NULL AND t.status = 'active' AND t.lifecycle_stage = 'live'
        UNION ALL
        SELECT o.tenant_id, o.id AS target_id, 'org_payment' AS target_type,
-              COALESCE(o.description, o.application_id) AS detail
+              COALESCE(o.customer_name, o.description, o.application_id) AS detail
        FROM org_payment_records o JOIN tenants t ON t.id = o.tenant_id
        WHERE o.consumer_number = ?
          AND t.deleted_at IS NULL AND t.status = 'active' AND t.lifecycle_stage = 'live'

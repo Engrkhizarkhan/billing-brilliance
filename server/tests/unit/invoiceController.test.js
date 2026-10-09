@@ -24,6 +24,7 @@ describe('manual invoice creation', () => {
         .mockResolvedValueOnce([[{ id: 'tenant-1', status: 'active', lifecycle_stage: 'live' }]])
         .mockResolvedValueOnce([[{ id: 'student-1', name: 'Verified Student', consumer_number: '10517210010001' }]])
         .mockResolvedValueOnce([[]])
+        .mockResolvedValueOnce([[]])
         .mockResolvedValueOnce([[{ max_seq: 10000 }]])
         .mockResolvedValue([{}]),
     };
@@ -47,7 +48,7 @@ describe('manual invoice creation', () => {
 
     expect(next).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(201);
-    expect(connection.query.mock.calls[4][1][0][0]).toEqual(expect.arrayContaining([
+    expect(connection.query.mock.calls[5][1][0][0]).toEqual(expect.arrayContaining([
       'student-1', 'Verified Student', '10517210010001', '2026-09', 4999, '2026-10-05',
     ]));
   });

@@ -15,3 +15,12 @@ describe('payment posting primitives', () => {
     expect(() => mysqlDateTime('not-a-date')).toThrow('Invalid received date/time');
   });
 });
+
+ test('production cannot reverse even a manually recorded payment', async () => {
+   const config = require('../../src/config');
+   const { reverseManualPayment } = require('../../src/services/paymentPostingService');
+   const original = config.appEnvironment;
+   config.appEnvironment = 'production';
+   try { await expect(reverseManualPayment({})).rejects.toMatchObject({code:'REVERSALS_DISABLED'}); }
+   finally { config.appEnvironment = original; }
+ });

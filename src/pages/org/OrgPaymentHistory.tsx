@@ -102,7 +102,7 @@ const OrgPaymentHistory = () => {
                       <span className="text-muted-foreground">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="font-mono text-sm">{formatPKR(payment.amount)}</TableCell>
+                  <TableCell className="font-mono text-sm">{formatPKR(payment.paidAmount ?? payment.amount)}</TableCell>
                   <TableCell><StatusBadge status={payment.status} /></TableCell>
                   <TableCell className="text-xs text-muted-foreground">{payment.createdAt}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{payment.paidAt || '—'}</TableCell>

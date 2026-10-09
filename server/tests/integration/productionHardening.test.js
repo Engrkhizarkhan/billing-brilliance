@@ -475,3 +475,20 @@ test('1BILL fails closed when a supplied full number also identifies another sho
   expect((await providerRequest('BillPayment',providerPayment())).body.response_Code).toBe('04');
   const [[r]]=await pool.query('SELECT COUNT(*) n FROM payments WHERE tenant_id=?',[tenantId]);expect(r.n).toBe(0);
 });
+
+test('a consumer cannot accumulate more debt than 1BILL can collect', async () => {
+  await charge(9999999999.99);
+  await expect(charge(0.01)).rejects.toMatchObject({code:'INVALID_AMOUNT'});
+  const [[row]]=await pool.query('SELECT COUNT(*) AS n FROM invoices WHERE tenant_id = ?',[tenantId]);
+  expect(row.n).toBe(1);
+});
+
+test('one-time plan assignment preserves its configured late fee', async () => {
+  const plan=await tenantRequest('post','/api/fee-plans').send({name:'Admission',amount:2000,frequency:'one-time',lateFee:75.5,planType:'additional'});
+  expect(plan.status).toBe(201);
+  const assignment=await tenantRequest('post','/api/payment-plan-assignments').send({studentId,feePlanId:plan.body.data.id,assignedDate:'2020-01-01'});
+  expect(assignment.status).toBe(201);
+  const [[invoice]]=await pool.query('SELECT amount,late_fee FROM invoices WHERE tenant_id = ?',[tenantId]);
+  expect(Number(invoice.amount)).toBe(2000);
+  expect(Number(invoice.late_fee)).toBe(75.5);
+});

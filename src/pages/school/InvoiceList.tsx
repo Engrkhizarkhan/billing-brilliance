@@ -34,6 +34,7 @@ const InvoiceList = () => {
   const [createForm, setCreateForm] = useState({
     studentId: '',
     amount: '',
+    lateFee: '',
     month: new Date().toISOString().slice(0, 7),
     dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
   });
@@ -101,12 +102,13 @@ const InvoiceList = () => {
         consumerNumber: student.consumerNumber,
         month: createForm.month,
         amount: Number(createForm.amount),
+        lateFee: Number(createForm.lateFee || 0),
         dueDate: createForm.dueDate,
       });
       toast.success(`Invoice created for ${student.name}`);
       setCreateDialogOpen(false);
       setCreateForm({
-        studentId: '', amount: '', month: new Date().toISOString().slice(0, 7),
+        studentId: '', amount: '', lateFee: '', month: new Date().toISOString().slice(0, 7),
         dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
       });
       await refetchInvoices();
@@ -145,6 +147,7 @@ const InvoiceList = () => {
                 <div className="space-y-2"><Label>Billing Month</Label><Input type="month" value={createForm.month} onChange={(event) => setCreateForm({ ...createForm, month: event.target.value })} /></div>
               </div>
               <div className="space-y-2"><Label>Due Date</Label><Input type="date" value={createForm.dueDate} onChange={(event) => setCreateForm({ ...createForm, dueDate: event.target.value })} /></div>
+              <div className="space-y-2"><Label htmlFor="invoice-late-fee">Late Fee (PKR)</Label><Input id="invoice-late-fee" type="number" min="0" step="0.01" value={createForm.lateFee} onChange={(event) => setCreateForm({ ...createForm, lateFee: event.target.value })} /><p className="text-xs text-muted-foreground">Applied once after the due date ends in Pakistan. Leave blank for no late fee.</p></div>
               <Button className="w-full" onClick={() => void handleCreateInvoice()} disabled={creating}>{creating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}Create Invoice</Button>
             </div>
           </DialogContent>

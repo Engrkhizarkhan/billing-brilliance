@@ -6,6 +6,7 @@ const config = require('../config');
 const logger = require('../config/logger');
 const { allocateConsumerNumber } = require('../services/consumerNumberService');
 const { postPayment } = require('../services/paymentPostingService');
+const { assertMoney, payableQuote, money, dueDayEnd } = require('../services/billingRules');
 const { hashApiKey } = require('../services/apiKeyService');
 
 const { lockBillingTenant, createInvoiceCharges } = require('../services/invoiceAccountingService');
@@ -50,27 +51,41 @@ const findStudent = async (tenantId, consumerNumber) => {
   return rows[0] || null;
 };
 
+// Read the complete balance using the same calculation as 1BILL inquiry.
+const schoolBilling = async (tenantId, studentId) => {
+  const [invoices] = await pool.query(
+    `SELECT invoice_number, amount, status, due_date, late_fee, late_fee_applied FROM invoices
+     WHERE tenant_id = ? AND student_id = ? AND deleted_at IS NULL ORDER BY due_date ASC, created_at ASC`, [tenantId, studentId]);
+  const [[ledger]] = await pool.query(
+    `SELECT COALESCE(SUM(debit),0) AS debit, COALESCE(SUM(credit),0) AS credit
+     FROM ledger_entries WHERE tenant_id = ? AND student_id = ?`, [tenantId, studentId]);
+  const pending = invoices.filter(row => row.status !== 'paid');
+  const quote = payableQuote(pending, ledger);
+  const overdue = pending.filter(row => dueDayEnd(row.due_date) < new Date());
+  return { invoices, pending, quote, overdueAmount: money(payableQuote(overdue, {}, new Date(), true).amount) };
+};
+
 router.post('/check-payment', async (req, res, next) => {
   try {
     const consumerNumber = String(req.body.consumerNumber || '').trim();
     if (!/^\d{1,24}$/.test(consumerNumber)) return res.status(400).json({ error: 'Valid consumerNumber is required', code: 'INVALID_PARAM' });
     const student = await findStudent(req.saasTenantId, consumerNumber);
     if (!student) return res.json({ paid: false, status: 'not_found', consumerNumber });
-    const [invoices] = await pool.query(
-      `SELECT invoice_number, amount, status, due_date FROM invoices
-       WHERE tenant_id = ? AND student_id = ? AND deleted_at IS NULL
-       ORDER BY due_date DESC, created_at DESC LIMIT 1`, [req.saasTenantId, student.id]
-    );
-    const invoice = invoices[0];
-    if (!invoice) return res.json({ paid: true, status: 'no_invoices', consumerNumber, name: student.name });
+    const { invoices, pending, quote } = await schoolBilling(req.saasTenantId, student.id);
+    const invoice = pending[0] || invoices[invoices.length - 1];
+    if (!invoice && quote.amount === 0) return res.json({ paid: false, status: 'no_invoices', consumerNumber, name: student.name });
     const [payments] = await pool.query(
       `SELECT amount, received_at AS paidAt, reference AS transactionId FROM payments
-       WHERE tenant_id = ? AND student_id = ? AND status = 'posted'
+       WHERE tenant_id = ? AND student_id = ? AND status = 'posted' AND reversal_of_payment_id IS NULL
        ORDER BY received_at DESC, created_at DESC LIMIT 1`, [req.saasTenantId, student.id]
     );
-    res.json({ paid: invoice.status === 'paid', status: invoice.status, consumerNumber,
-      name: student.name, invoiceNumber: invoice.invoice_number, amount: Number(invoice.amount),
-      dueDate: invoice.due_date, lastPayment: payments[0] || null });
+    const reconciled = quote.ledgerDue >= quote.invoiceDue;
+    const paid = quote.amount === 0 && pending.length === 0;
+    const status = !reconciled ? 'reconciliation_required' : paid ? 'paid'
+      : pending.some(row => dueDayEnd(row.due_date) < new Date()) ? 'overdue' : 'pending';
+    res.json({ paid: reconciled && paid, status, consumerNumber,
+      name: student.name, invoiceNumber: invoice?.invoice_number || null, amount: quote.amount,
+      dueDate: invoice?.due_date || null, lastPayment: payments[0] || null });
   } catch (err) { next(err); }
 });
 
@@ -79,18 +94,11 @@ router.get('/bill-status/:consumerNumber', async (req, res, next) => {
     const consumerNumber = String(req.params.consumerNumber || '').trim();
     const student = await findStudent(req.saasTenantId, consumerNumber);
     if (!student) return res.status(404).json({ error: 'Consumer not found', code: 'NOT_FOUND' });
-    const [[summary]] = await pool.query(
-      `SELECT COUNT(*) AS totalInvoices, SUM(status = 'paid') AS paidInvoices,
-              SUM(status != 'paid') AS pendingInvoices,
-              COALESCE(SUM(CASE WHEN status != 'paid' THEN amount ELSE 0 END),0) AS outstandingAmount,
-              COALESCE(SUM(CASE WHEN status != 'paid' AND due_date < CURDATE() THEN amount ELSE 0 END),0) AS overdueAmount
-       FROM invoices WHERE tenant_id = ? AND student_id = ? AND deleted_at IS NULL`,
-      [req.saasTenantId, student.id]
-    );
+    const { invoices, pending, quote, overdueAmount } = await schoolBilling(req.saasTenantId, student.id);
     res.json({ consumerNumber, name: student.name, class: student.class,
-      totalInvoices: Number(summary.totalInvoices), paidInvoices: Number(summary.paidInvoices),
-      pendingInvoices: Number(summary.pendingInvoices), outstandingAmount: Number(summary.outstandingAmount),
-      overdueAmount: Number(summary.overdueAmount) });
+      totalInvoices: invoices.length, paidInvoices: invoices.length - pending.length,
+      pendingInvoices: pending.length, outstandingAmount: quote.amount, overdueAmount,
+      reconciled: quote.ledgerDue >= quote.invoiceDue });
   } catch (err) { next(err); }
 });
 
@@ -102,13 +110,13 @@ router.get('/payment-history/:consumerNumber', async (req, res, next) => {
     const student = await findStudent(req.saasTenantId, consumerNumber);
     if (!student) return res.status(404).json({ error: 'Consumer not found', code: 'NOT_FOUND' });
     const [[count]] = await pool.query(
-      "SELECT COUNT(*) AS total FROM payments WHERE tenant_id = ? AND student_id = ? AND status = 'posted'",
+      "SELECT COUNT(*) AS total FROM payments WHERE tenant_id = ? AND student_id = ? AND status = 'posted' AND reversal_of_payment_id IS NULL",
       [req.saasTenantId, student.id]
     );
     const [rows] = await pool.query(
       `SELECT receipt_number AS receiptNumber, amount, currency, received_at AS paidAt,
               reference AS transactionId, channel, source
-       FROM payments WHERE tenant_id = ? AND student_id = ? AND status = 'posted'
+       FROM payments WHERE tenant_id = ? AND student_id = ? AND status = 'posted' AND reversal_of_payment_id IS NULL
        ORDER BY received_at DESC, created_at DESC LIMIT ? OFFSET ?`,
       [req.saasTenantId, student.id, pageSize, (page - 1) * pageSize]
     );
@@ -171,14 +179,14 @@ router.post('/register-consumer', async (req, res, next) => {
     );
     let invoiceResult = null;
     if (invoice) {
-      const amount = Number(invoice.amount);
+      const amount = assertMoney(invoice.amount);
       if (!Number.isFinite(amount) || amount <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(String(invoice.dueDate || ''))) {
         const invalid = new Error('invoice.amount and invoice.dueDate (YYYY-MM-DD) are required');
         invalid.statusCode = 400; invalid.code = 'INVALID_INVOICE'; throw invalid;
       }
       const [created] = await createInvoiceCharges(connection, req.saasTenantId, [{
         studentId: consumerId, month: String(invoice.dueDate).slice(0, 7), amount,
-        dueDate: invoice.dueDate, description: invoice.description || 'Registration invoice',
+        dueDate: invoice.dueDate, lateFee: invoice.lateFee ?? 0, description: invoice.description || 'Registration invoice',
       }]);
       invoiceResult = { invoiceNumber: created.invoiceNumber, amount, dueDate: invoice.dueDate };
     }

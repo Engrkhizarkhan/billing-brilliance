@@ -8,6 +8,8 @@ const { AppError } = require('../middleware/errorHandler');
 const { auditLog } = require('../middleware/auditLog');
 const { allocateConsumerNumber } = require('../services/consumerNumberService');
 const { postPayment } = require('../services/paymentPostingService');
+const { assertMoney, money, orgPayableQuote } = require('../services/billingRules');
+const { orgBillingTerms } = require('../services/orgBillingTerms');
 
 const CALLBACK_URL = config.org.callbackUrl;
 const WEBHOOK_SECRET = config.org.webhookSecret;
@@ -22,24 +24,24 @@ const generateWebhookSignature = (callback) => {
   return crypto.createHmac('sha256', WEBHOOK_SECRET).update(payload).digest('hex');
 };
 
-const addHours = (date, hours) => {
-  const d = new Date(date);
-  d.setHours(d.getHours() + hours);
-  return d.toISOString();
-};
-
 const parseBoolean = (value) => value === true || value === 1 || String(value).toLowerCase() === 'true';
 
+const textInput = (value, maxLength) => {
+  if (value == null) return '';
+  if (typeof value !== 'string' || value.length > maxLength) throw new AppError('Invalid payment request text field', 400, 'INVALID_PARAM');
+  return value.trim();
+};
 const normalizeCreateRequest = (body) => ({
-  applicantId: (body.applicantId || body.applicant_id || '').trim(),
-  applicationId: (body.applicationId || body.application_id || '').trim(),
-  postingId: (body.postingId || body.posting_id || '').trim(),
-  dueDate: (body.dueDate || body.due_date || '').trim(),
+  applicantId: textInput(body.applicantId || body.applicant_id, 36),
+  applicationId: textInput(body.applicationId || body.application_id, 100),
+  postingId: textInput(body.postingId || body.posting_id, 36),
+  dueDate: textInput(body.dueDate || body.due_date, 10),
   expireAt: body.expireAt || body.expire_at || null,
   neverExpires: parseBoolean(body.neverExpires ?? body.never_expires),
-  description: body.description?.trim(),
-  customerName: (body.customerName || body.customer_name || '').trim(),
+  description: textInput(body.description, 4000),
+  customerName: textInput(body.customerName || body.customer_name, 255),
   amount: body.amount,
+  lateFee: body.lateFee ?? body.late_fee ?? 0,
 });
 
 // ---- Assert security context ----
@@ -101,7 +103,9 @@ const createPayment = async (req, res, next) => {
     if (!normalized.applicationId) throw new AppError('application_id is required', 400);
     if (!normalized.postingId) throw new AppError('posting_id is required', 400);
     if (!normalized.customerName) throw new AppError('customer_name is required', 400, 'CUSTOMER_NAME_REQUIRED');
-    if (!normalized.amount || normalized.amount <= 0) throw new AppError('Amount must be > 0', 400);
+    normalized.amount = assertMoney(normalized.amount);
+    normalized.lateFee = assertMoney(normalized.lateFee, { allowZero: true, label: 'Late fee' });
+    assertMoney(money(normalized.amount + normalized.lateFee));
 
     connection = await pool.getConnection();
     await connection.beginTransaction();
@@ -132,49 +136,31 @@ const createPayment = async (req, res, next) => {
           consumerNumber: existing.consumer_number || null,
           status: existing.status,
           payment: existing,
-          oneBillRequest: buildOneBillPayload(existing, normalized.customerName),
+          oneBillRequest: buildOneBillPayload(existing),
         },
       });
     }
 
-    // Resolve posting
-    let description = normalized.description;
-    if (!description) {
-      const [postingRows] = await connection.query(
-        'SELECT title FROM org_postings WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL',
-        [normalized.postingId, tenantId]
-      );
-      if (!postingRows.length) throw new AppError('Posting not found', 404, 'POSTING_NOT_FOUND');
-      description = postingRows.length > 0
-        ? `${postingRows[0].title} application fee`
-        : `Payment for application ${normalized.applicationId}`;
-    }
-
+    // Validate the relationship even when the caller supplies a description.
+    const [[posting]] = await connection.query(
+      "SELECT title FROM org_postings WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL AND status = 'active' FOR UPDATE",
+      [normalized.postingId, tenantId]
+    );
+    if (!posting) throw new AppError('An active posting belonging to this organization is required', 404, 'POSTING_NOT_FOUND');
+    const description = normalized.description || `${posting.title} application fee`;
     const id = uuidv4();
-    const createdAt = new Date().toISOString();
+    const createdAt = new Date();
     const createdAtDb = toMySQLDatetime(createdAt);
-    // due_date: derive from expireAt date portion if provided, otherwise default to today+2
-    const dueDate = normalized.dueDate
-      ? new Date(normalized.dueDate).toISOString().slice(0, 10)
-      : normalized.expireAt
-        ? new Date(normalized.expireAt).toISOString().slice(0, 10)
-        : new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    // never_expires = store a far-future date (year 9999) so expiry queries never trigger
-    const expiryDate = normalized.neverExpires
-      ? '9999-12-31 23:59:59'
-      : normalized.expireAt
-        ? toMySQLDatetime(normalized.expireAt)
-        : toMySQLDatetime(addHours(createdAt, DEFAULT_EXPIRY_HOURS));
-    if (!expiryDate || !createdAtDb) throw new AppError('Invalid expiry date', 400, 'INVALID_EXPIRY_DATE');
+    const { dueDate, expiryDate } = orgBillingTerms({ ...normalized, defaultHours: DEFAULT_EXPIRY_HOURS }, createdAt);
     const billId = `ORG-${id.split('-')[0].toUpperCase()}`;
 
     const { consumerNumber } = await allocateConsumerNumber(connection, tenantId);
 
     await connection.query(
-      `INSERT INTO org_payment_records (id, tenant_id, application_id, applicant_id, customer_name, posting_id, bill_id, consumer_number, amount, status, due_date, expiry_date, created_at, description, callback_url)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
+      `INSERT INTO org_payment_records (id, tenant_id, application_id, applicant_id, customer_name, posting_id, bill_id, consumer_number, amount, late_fee, status, due_date, expiry_date, created_at, description, callback_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
       [id, tenantId, normalized.applicationId, normalized.applicantId, normalized.customerName, normalized.postingId, billId, consumerNumber,
-        normalized.amount, dueDate, expiryDate, createdAtDb, description, CALLBACK_URL]
+        normalized.amount, normalized.lateFee, dueDate, expiryDate, createdAtDb, description, CALLBACK_URL]
     );
 
     await connection.query(
@@ -289,7 +275,7 @@ const getStats = async (req, res, next) => {
 
     // Status counts + totals in one query
     const [statusRows] = await pool.query(
-      `SELECT status, COUNT(*) AS cnt, COALESCE(SUM(amount), 0) AS total
+      `SELECT status, COUNT(*) AS cnt, COALESCE(SUM(CASE WHEN status = 'paid' THEN COALESCE(paid_amount,amount) ELSE amount END), 0) AS total
        FROM org_payment_records ${where}
        GROUP BY status`,
       params
@@ -316,7 +302,7 @@ const getStats = async (req, res, next) => {
     const [trendRows] = await pool.query(
       `SELECT DATE_FORMAT(COALESCE(paid_at, created_at), '%Y-%m') AS month,
               COUNT(*) AS requests,
-              COALESCE(SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END), 0) AS revenue,
+              COALESCE(SUM(CASE WHEN status = 'paid' THEN COALESCE(paid_amount,amount) ELSE 0 END), 0) AS revenue,
               SUM(status IN ('failed','expired')) AS failed
        FROM org_payment_records
        ${where} AND COALESCE(paid_at, created_at) >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 12 MONTH)
@@ -336,7 +322,7 @@ const getStats = async (req, res, next) => {
               SUM(opr.status = 'paid') AS paid_requests,
               SUM(opr.status = 'pending') AS pending_requests,
               SUM(opr.status IN ('failed','expired')) AS failed_requests,
-              COALESCE(SUM(CASE WHEN opr.status = 'paid' THEN opr.amount ELSE 0 END), 0) AS collected
+              COALESCE(SUM(CASE WHEN opr.status = 'paid' THEN COALESCE(opr.paid_amount,opr.amount) ELSE 0 END), 0) AS collected
        FROM org_payment_records opr
        LEFT JOIN org_postings op ON op.id = opr.posting_id AND op.tenant_id = opr.tenant_id
        ${where.replaceAll('tenant_id', 'opr.tenant_id')}
@@ -356,7 +342,7 @@ const getStats = async (req, res, next) => {
     }));
 
     const [[today]] = await pool.query(
-      `SELECT COUNT(*) AS paid_count, COALESCE(SUM(amount), 0) AS collected
+      `SELECT COUNT(*) AS paid_count, COALESCE(SUM(COALESCE(paid_amount,amount)), 0) AS collected
        FROM org_payment_records ${where}
        AND status = 'paid' AND paid_at >= UTC_DATE() AND paid_at < UTC_DATE() + INTERVAL 1 DAY`,
       params
@@ -412,7 +398,7 @@ const listPayments = async (req, res, next) => {
 
     const [rows] = await pool.query(
       `SELECT opr.id, opr.application_id, opr.applicant_id, opr.customer_name, opr.posting_id, opr.bill_id,
-              opr.consumer_number, opr.amount, opr.status, opr.due_date, opr.expiry_date,
+              opr.consumer_number, opr.amount, opr.late_fee, opr.paid_amount, opr.status, opr.due_date, opr.expiry_date,
               opr.created_at, opr.paid_at, opr.transaction_id, opr.description, opr.callback_url,
               p.id AS posted_payment_id, p.source AS payment_source,
               p.receipt_number AS payment_receipt_number
@@ -429,7 +415,7 @@ const listPayments = async (req, res, next) => {
     );
 
     res.json({
-      data: rows,
+      data: rows.map(row => ({ ...row, payable_amount: orgPayableQuote(row).amount })),
       meta: { total: Number(total), page, pageSize: limit, pages: Math.ceil(Number(total) / limit) },
     });
   } catch (err) {
@@ -479,7 +465,10 @@ const buildOneBillPayload = (payment, customerName = payment.customer_name || 'A
   return {
     applicationId: payment.application_id,
     consumerNumber: payment.consumer_number || null,
-    amount: parseFloat(payment.amount),
+    amount: orgPayableQuote(payment).amount,
+    baseAmount: Number(payment.amount),
+    lateFee: Number(payment.late_fee || 0),
+    dueDate: payment.due_date,
     expires: neverExpires ? 'never' : expiryIso,
     neverExpires,
     customerName,
@@ -503,7 +492,7 @@ const processPaymentCallbackCanonical = async (req, res, next) => {
       }
       const result = await postPayment({
         tenantId: req.tenantId, targetType: 'org_payment', orgPaymentId: record.id,
-        consumerNumber: record.consumer_number, amount: Number(record.amount),
+        consumerNumber: record.consumer_number, amount: orgPayableQuote(record, callback.paidAt || new Date()).amount,
         receivedAt: callback.paidAt || new Date(), channel: 'org_callback',
         externalReference: callback.transactionId, transactionId: callback.transactionId,
         idempotencyKey: req.headers['x-idempotency-key'] || callback.transactionId,
