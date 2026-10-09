@@ -1,4 +1,4 @@
-const { payableQuote } = require('../services/billingRules');
+const { payableQuote, orgPayableQuote } = require('../services/billingRules');
 const { pool } = require('../config/database');
 const config = require('../config');
 const { postPayment, reverseManualPayment } = require('../services/paymentPostingService');
@@ -87,6 +87,7 @@ const inquirePayment = async (req, res, next) => {
       let oneBillResponse;
       if (!allowed) oneBillResponse = unavailableResponse('01');
       else if (student.status !== 'active') oneBillResponse = unavailableResponse('02');
+      else if (!reconciled) oneBillResponse = unavailableResponse('01');
       else if (amount === 0) {
         const [payments] = await pool.query(
           `SELECT amount, received_at, date, voucher_number AS transaction_id
@@ -94,7 +95,8 @@ const inquirePayment = async (req, res, next) => {
            ORDER BY received_at DESC, created_at DESC LIMIT 1`,
           [student.tenant_id, consumerNumber]
         );
-        oneBillResponse = paidResponse(student.name, null, payments[0]);
+        const [paidInvoices] = await pool.query("SELECT due_date FROM invoices WHERE tenant_id = ? AND student_id = ? AND status = 'paid' AND deleted_at IS NULL ORDER BY due_date DESC LIMIT 1", [student.tenant_id, student.id]);
+        oneBillResponse = payments.length || paidInvoices.length ? paidResponse(student.name, paidInvoices[0]?.due_date, payments[0]) : unavailableResponse('01');
       } else {
         oneBillResponse = {
           response_Code: '00', consumer_Detail: detail(student.name), bill_status: 'U',
@@ -115,7 +117,7 @@ const inquirePayment = async (req, res, next) => {
           invoiceNumber: oldest?.invoice_number || null, dueDate: oldest?.due_date || null,
           pendingCount: invoices.length, baseAmount: baseDue, lateFee: lateFees, amount,
           currency: 'PKR', payable,
-          reason: payable ? null : !reconciled ? 'Invoice charges require ledger reconciliation before collection' : amount === 0 ? 'This bill is already paid'
+          reason: payable ? null : !reconciled ? 'Invoice charges require ledger reconciliation before collection' : amount === 0 ? 'No outstanding bill; see payment history for payment evidence'
             : student.status !== 'active' ? 'Consumer is blocked'
               : 'The biller is not enabled for collection',
           oneBillResponse,
@@ -143,14 +145,14 @@ const inquirePayment = async (req, res, next) => {
     let oneBillResponse;
     if (!allowed) oneBillResponse = unavailableResponse('01');
     else if (record.status === 'paid') oneBillResponse = paidResponse(
-      record.description || record.application_id, record.due_date,
-      { amount: record.amount, received_at: record.paid_at, transaction_id: record.transaction_id }
+      record.customer_name || record.description || record.application_id, record.due_date,
+      { amount: record.paid_amount ?? record.amount, received_at: record.paid_at, transaction_id: record.transaction_id }
     );
     else if (!payable) oneBillResponse = unavailableResponse(record.status === 'failed' ? '02' : '01');
     else oneBillResponse = {
-      response_Code: '00', consumer_Detail: detail(record.description || record.application_id),
+      response_Code: '00', consumer_Detail: detail(record.customer_name || record.description || record.application_id),
       bill_status: 'U', due_date: record.due_date ? formatDate(record.due_date) : ' '.repeat(8),
-      amount_within_dueDate: inquiryAmount(record.amount), amount_after_dueDate: inquiryAmount(record.amount),
+      amount_within_dueDate: inquiryAmount(record.amount), amount_after_dueDate: inquiryAmount(orgPayableQuote(record).amount),
       billing_month: record.due_date ? formatMonth(record.due_date) : formatMonth(new Date()),
       date_paid: ' '.repeat(8), amount_paid: ' '.repeat(12), tran_auth_Id: ' '.repeat(6), reserved: '',
     };
@@ -160,11 +162,11 @@ const inquirePayment = async (req, res, next) => {
         tenantId: record.tenant_id, tenantName: record.tenant_name,
         billerCode: record.biller_code, tenantStatus: record.tenant_status,
         lifecycleStage: record.lifecycle_stage, consumerStatus: record.status,
-        consumerNumber, payerName: record.description || record.application_id,
+        consumerNumber, payerName: record.customer_name || record.description || record.application_id,
         applicationId: record.application_id, billId: record.bill_id,
         dueDate: record.due_date, expiryDate: record.expiry_date,
         pendingCount: record.status === 'pending' ? 1 : 0, baseAmount: Number(record.amount),
-        lateFee: 0, amount: Number(record.amount), currency: 'PKR', payable,
+        lateFee: orgPayableQuote(record).lateFees, amount: orgPayableQuote(record).amount, currency: 'PKR', payable,
         reason: payable ? null : record.status === 'paid' ? 'This bill is already paid'
           : expired ? 'This bill has expired' : record.status === 'failed' ? 'This bill is blocked'
             : 'The biller is not enabled for collection',

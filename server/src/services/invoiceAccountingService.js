@@ -1,7 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const config = require('../config');
 const { AppError } = require('../middleware/errorHandler');
-const { money, assertDate } = require('./billingRules');
+const { money, assertDate, assertMoney } = require('./billingRules');
 
 // All financial writers take the tenant lock first, then student/target locks.
 // The caller owns the transaction so related assignment/registration writes join it.
@@ -25,6 +25,10 @@ const createInvoiceCharges = async (connection, tenantId, charges) => {
   const [totals] = await connection.query(
     'SELECT student_id, COALESCE(SUM(debit-credit), 0) AS balance FROM ledger_entries WHERE tenant_id = ? AND student_id IN (?) GROUP BY student_id', [tenantId, ids]);
   const balances = new Map(totals.map((row) => [row.student_id, money(row.balance)]));
+  const [pendingTotals] = await connection.query(
+    `SELECT student_id, SUM(amount) AS amount, SUM(CASE WHEN late_fee_applied = 0 THEN late_fee ELSE 0 END) AS fees
+     FROM invoices WHERE tenant_id = ? AND student_id IN (?) AND status != 'paid' AND deleted_at IS NULL GROUP BY student_id`, [tenantId, ids]);
+  const potential = new Map(pendingTotals.map(row => [row.student_id, money(Math.max(Number(row.amount), balances.get(row.student_id) || 0) + Number(row.fees || 0))]));
   const [[sequence]] = await connection.query(
     "SELECT COALESCE(MAX(CAST(SUBSTRING_INDEX(invoice_number, '-', -1) AS UNSIGNED)), 10000) AS max_seq FROM invoices WHERE tenant_id = ?", [tenantId]);
   let counter = Number(sequence.max_seq);
@@ -33,12 +37,17 @@ const createInvoiceCharges = async (connection, tenantId, charges) => {
     assertDate(charge.dueDate);
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(charge.month)) throw new AppError('Invalid billing month', 400, 'INVALID_BILLING_MONTH');
     const components = charge.components || [{ description: charge.description || 'Invoice charge', amount: charge.amount }];
-    if (components.some((part) => !Number.isFinite(Number(part.amount)) || Number(part.amount) < 0)) throw new AppError('Invalid charge amount', 400, 'INVALID_AMOUNT');
+    components.forEach((part) => assertMoney(part.amount, { allowZero: true }));
     const amount = money(components.reduce((sum, part) => sum + money(part.amount), 0));
+    const lateFee = assertMoney(charge.lateFee ?? 0, { allowZero: true, label: 'Late fee' });
+    assertMoney(money(amount + lateFee), { allowZero: true });
     const student = byId.get(charge.studentId);
+    const maximumDue = money((potential.get(student.id) ?? Math.max(0, balances.get(student.id) || 0)) + amount + (amount > 0 ? lateFee : 0));
+    assertMoney(maximumDue, { allowZero: true, label: 'Total consumer balance including late fees' });
+    potential.set(student.id, maximumDue);
     const id = uuidv4(), invoiceNumber = `INV-${++counter}`;
     invoices.push([id, tenantId, invoiceNumber, student.id, charge.feePlanId || null, student.name, student.consumer_number,
-      charge.month, amount, money(charge.lateFee || 0), amount === 0 ? 'paid' : 'pending', charge.dueDate]);
+      charge.month, amount, lateFee, amount === 0 ? 'paid' : 'pending', charge.dueDate]);
     for (const part of components) {
       const balance = money((balances.get(student.id) || 0) + money(part.amount));
       balances.set(student.id, balance);

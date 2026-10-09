@@ -131,7 +131,7 @@ jobs:
             if curl -fsS http://127.0.0.1:53317/api/health >/dev/null && curl -fsS http://127.0.0.1:5177/login >/dev/null; then break; fi
             sleep 1
           done
-          npx playwright test e2e/production-hardening.spec.ts --project=chromium
+          npx playwright test e2e/production-hardening.spec.ts e2e/organization-billing.spec.ts --project=chromium
 
   deploy:
     name: Deploy production

@@ -1,8 +1,6 @@
-const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const { auditLog } = require('../middleware/auditLog');
-const { allocateConsumerNumber } = require('../services/consumerNumberService');
 
 const fetchApplicants = async (req, res, next) => {
   try {
@@ -50,65 +48,10 @@ const getApplicant = async (req, res, next) => {
   }
 };
 
-const createApplicant = async (req, res, next) => {
-  try {
-    const tenantId = req.tenantId || req.body.tenantId;
-    if (!tenantId) throw new AppError('Tenant ID is required', 400);
-    const { serviceId } = req.body;
-
-    // Get sequence — use MAX()+1 inside a transaction to avoid race conditions
-    const conn = await pool.getConnection();
-    let seq, id, consumerNumber, billId;
-    try {
-      await conn.beginTransaction();
-      const allocated = await allocateConsumerNumber(conn, tenantId);
-      seq = allocated.sequence;
-      consumerNumber = allocated.consumerNumber;
-
-      // Derive bill ID prefix from service title or fall back to biller code
-      let billPrefix = `ORG-${allocated.billerCode}`;
-      if (serviceId) {
-        const [[svc]] = await conn.query('SELECT title FROM org_postings WHERE id = ? LIMIT 1', [serviceId]);
-        if (svc && svc.title) {
-          billPrefix = svc.title.replace(/\s+/g, '-').toUpperCase().slice(0, 12);
-        }
-      }
-      billId = `${billPrefix}-${String(seq).padStart(5, '0')}`;
-
-      id = uuidv4();
-      const {
-        name, fatherName, cnic, phone, email, district, gender,
-        dateOfBirth, qualification,
-      } = req.body;
-
-      await conn.query(
-        `INSERT INTO applicants (id, tenant_id, name, father_name, cnic, phone, email, district, gender,
-          date_of_birth, qualification, consumer_number, bill_id, seq_number, payment_status, application_status,
-          service_id, applied_date)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'submitted', ?, CURDATE())`,
-        [id, tenantId, name, fatherName, cnic, phone || null, email || null, district || null, gender,
-          dateOfBirth || null, qualification || null, consumerNumber, billId, seq, serviceId || null]
-      );
-
-      await conn.commit();
-    } catch (txErr) {
-      await conn.rollback();
-      conn.release();
-      throw txErr;
-    }
-    conn.release();
-
-    await auditLog(req, 'create', 'applicant', id, 'Applicant created');
-    const [rows] = await pool.query(
-      'SELECT * FROM applicants WHERE id = ? AND tenant_id = ?',
-      [id, tenantId]
-    );
-
-    res.status(201).json({ data: rows[0], message: 'Applicant created' });
-  } catch (err) {
-    next(err);
-  }
-};
+const createApplicant = (_req, res) => res.status(410).json({
+  error: 'Applicant-only consumer creation is retired. Create a collectible payment request using /api/payments/create.',
+  code: 'APPLICANT_CREATION_RETIRED',
+});
 
 const assignRoll = async (req, res, next) => {
   try {

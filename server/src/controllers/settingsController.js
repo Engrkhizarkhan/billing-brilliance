@@ -1,3 +1,4 @@
+const { assertMoney } = require('../services/billingRules');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const net = require('net');
@@ -60,6 +61,8 @@ const createFeePlan = async (req, res, next) => {
       throw new AppError('planType must be "tuition" or "additional"', 400);
     }
 
+    assertMoney(amount);
+    assertMoney(lateFee, {allowZero:true, label:'Late fee'});
     const id = uuidv4();
     await pool.query(
       `INSERT INTO fee_plans (id, tenant_id, name, amount, frequency, due_day, late_fee, plan_type)
@@ -93,6 +96,8 @@ const updateFeePlan = async (req, res, next) => {
     if (!existing.length) return res.status(404).json({ message: 'Fee plan not found' });
 
     const { name, amount, frequency, dueDay, lateFee, planType } = req.body;
+    if (amount !== undefined) assertMoney(amount);
+    if (lateFee !== undefined) assertMoney(lateFee, {allowZero:true, label:'Late fee'});
     if (planType !== undefined && !['tuition', 'additional'].includes(planType)) {
       throw new AppError('planType must be "tuition" or "additional"', 400);
     }
@@ -439,7 +444,7 @@ const createPaymentPlanAssignment = async (req, res, next) => {
     if (students.length === 0) throw new AppError('Student not found', 404);
 
     const [plans] = await connection.query(
-      'SELECT id, name, amount, due_day, frequency, plan_type FROM fee_plans WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL',
+      'SELECT id, name, amount, late_fee, due_day, frequency, plan_type FROM fee_plans WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL',
       [feePlanId, tenantId]
     );
     if (plans.length === 0) throw new AppError('Fee plan not found', 404);
@@ -497,7 +502,7 @@ const createPaymentPlanAssignment = async (req, res, next) => {
     if (planType === 'additional' || isOneTime) {
       await createInvoiceCharges(connection, tenantId, [{ studentId, feePlanId,
         month: resolvedAssignedDate.slice(0, 7), dueDate: resolvedAssignedDate,
-        amount: plans[0].amount, description: plans[0].name }]);
+        amount: plans[0].amount, lateFee: plans[0].late_fee, description: plans[0].name }]);
     }
     await connection.commit();
 
@@ -611,7 +616,7 @@ const bulkCreatePaymentPlanAssignments = async (req, res, next) => {
     await connection.query('SELECT id FROM tenants WHERE id = ? FOR UPDATE', [tenantId]);
 
     const [plans] = await connection.query(
-      `SELECT id, name, amount, due_day, frequency, COALESCE(plan_type, 'tuition') AS plan_type
+      `SELECT id, name, amount, late_fee, due_day, frequency, COALESCE(plan_type, 'tuition') AS plan_type
        FROM fee_plans WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`,
       [feePlanId, tenantId]
     );
@@ -664,7 +669,7 @@ const bulkCreatePaymentPlanAssignments = async (req, res, next) => {
       await lockBillingTenant(connection, tenantId);
       await createInvoiceCharges(connection, tenantId, eligible.map(student => ({
         studentId: student.id, feePlanId, month: assignedDate.slice(0, 7), dueDate: assignedDate,
-        amount: plan.amount, description: plan.name,
+        amount: plan.amount, lateFee: plan.late_fee, description: plan.name,
       })));
     }
 
@@ -720,7 +725,7 @@ const updatePaymentPlanAssignment = async (req, res, next) => {
     if (immediateCharge) {
       await lockBillingTenant(connection, tenantId);
       await createInvoiceCharges(connection, tenantId, [{studentId: existing.student_id, feePlanId: planId,
-        month: assigned.slice(0,7), dueDate: assigned, amount: plan.amount, description: plan.name}]);
+        month: assigned.slice(0,7), dueDate: assigned, amount: plan.amount, lateFee: plan.late_fee, description: plan.name}]);
     }
     await connection.query(`UPDATE payment_plan_assignments SET fee_plan_id = ?, status = ?, assigned_via = ?, assigned_date = ?, next_due_date = ? WHERE id = ? AND tenant_id = ?`,
       [planId, immediateCharge && plan.frequency === 'one-time' ? 'completed' : status, via, assigned, due, existing.id, tenantId]);

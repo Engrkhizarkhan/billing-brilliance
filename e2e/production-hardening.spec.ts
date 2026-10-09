@@ -18,7 +18,7 @@ test.beforeAll(async () => {
   await pool.query('INSERT INTO students (id,tenant_id,name,father_name,class,consumer_number,bill_id) VALUES ?',[rows]);
 });
 test.afterAll(async () => {
-  for (const table of ['audit_logs','notifications','students','users']) await pool.query(`DELETE FROM ${table} WHERE tenant_id = ?`,[tenantId]);
+  for (const table of ['audit_logs','notifications','ledger_entries','invoices','students','users']) await pool.query(`DELETE FROM ${table} WHERE tenant_id = ?`,[tenantId]);
   await pool.query('DELETE FROM tenants WHERE id = ?',[tenantId]);
   await pool.end();
 });
@@ -78,4 +78,21 @@ test('a failed data request shows an error instead of an empty student list',asy
   await expect(page.getByRole('alert')).toBeVisible();
   await expect(page.getByText('Student service unavailable')).toBeVisible();
   await expect(page.getByRole('button',{name:'Retry'})).toBeVisible();
+});
+
+test('school invoice form saves the entered late fee',async({page})=>{
+  await pool.query("UPDATE tenants SET lifecycle_stage = 'live' WHERE id = ?",[tenantId]);
+  await page.goto('/school/invoices');
+  await page.getByRole('button',{name:'Create Invoice',exact:true}).click();
+  const dialog=page.getByRole('dialog');
+  await dialog.locator('select').selectOption({index:1});
+  await dialog.locator('input[type="number"]').first().fill('2500');
+  await dialog.getByLabel('Late Fee (PKR)',{exact:true}).fill('75.50');
+  const result=page.waitForResponse(r=>r.url().endsWith('/api/invoices') && r.request().method()==='POST');
+  await dialog.getByRole('button',{name:'Create Invoice',exact:true}).click();
+  expect((await result).status()).toBe(201);
+  await expect(dialog).not.toBeVisible();
+  const [[invoice]]=await pool.query('SELECT amount,late_fee FROM invoices WHERE tenant_id = ?',[tenantId]);
+  expect(Number(invoice.amount)).toBe(2500);
+  expect(Number(invoice.late_fee)).toBe(75.50);
 });

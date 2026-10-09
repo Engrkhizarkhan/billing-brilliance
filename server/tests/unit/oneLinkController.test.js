@@ -65,7 +65,7 @@ describe('1LINK invoice contract', () => {
     });
   });
 
-  test('paid inquiry pads unavailable metadata without inventing payment details', async () => {
+  test('unbilled consumer is unavailable, never falsely reported as paid', async () => {
     pool.query
       .mockResolvedValueOnce([[{id:'student-1',tenant_id:'tenant-1',name:'Test',status:'active'}]])
       .mockResolvedValueOnce([[]])
@@ -74,7 +74,7 @@ describe('1LINK invoice contract', () => {
       .mockResolvedValueOnce([[]]);
     const res=response();
     await billInquiry1Link({body:{consumer_number:'10517210010001',bank_mnemonic:'MDL'}},res);
-    expect(res.body).toMatchObject({response_Code:'06',bill_status:'P',due_date:' '.repeat(8),date_paid:' '.repeat(8),amount_paid:' '.repeat(12),tran_auth_Id:' '.repeat(6)});
+    expect(res.body).toMatchObject({response_Code:'01',bill_status:' ',due_date:' '.repeat(8),date_paid:' '.repeat(8),amount_paid:' '.repeat(12),tran_auth_Id:' '.repeat(6)});
   });
 
   test.each(['10517210010001', '10010001'])('posts %s using the full number and the same duplicate key', async (suppliedConsumer) => {
