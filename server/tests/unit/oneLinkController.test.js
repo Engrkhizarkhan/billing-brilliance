@@ -137,6 +137,29 @@ describe('1LINK invoice contract', () => {
     expect(res.body).toEqual({ response_Code: expected, reserved: '', identification_parameter: '' });
   });
 
+  test.each(['', '            ', null, undefined, 0, '0', '000000000000'])('declines blank/zero amount %p with 02 without database access', async (transaction_amount) => {
+    const res = response();
+    await billPayment1Link({ body: {
+      consumer_number: '10010034', tran_auth_id: '123456', transaction_amount,
+      tran_date: '20261009', tran_time: '101112', bank_mnemonic: 'UBL', reserved: '',
+    } }, res);
+    expect(res.body).toEqual({ response_Code: '02', reserved: '', identification_parameter: '' });
+    expect(resolveOneBillConsumer).not.toHaveBeenCalled();
+    expect(pool.query).not.toHaveBeenCalled();
+    expect(postPayment).not.toHaveBeenCalled();
+  });
+
+  test.each(['bad-amount', '-00000000001', '1.00', false])('keeps malformed amount %p as 04', async (transaction_amount) => {
+    const res = response();
+    await billPayment1Link({ body: {
+      consumer_number: '10010034', tran_auth_id: '123456', transaction_amount,
+      tran_date: '20261009', tran_time: '101112', bank_mnemonic: 'UBL',
+    } }, res);
+    expect(res.body.response_Code).toBe('04');
+    expect(pool.query).not.toHaveBeenCalled();
+    expect(postPayment).not.toHaveBeenCalled();
+  });
+
   test('maps a duplicate payment to response code 03', async () => {
     pool.query.mockResolvedValueOnce([[{ id: 'existing-payment' }]]);
     const res = response();

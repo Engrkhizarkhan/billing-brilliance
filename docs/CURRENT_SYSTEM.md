@@ -29,7 +29,7 @@ Per the latest UAT instruction, blocked/inactive consumer inquiries return `resp
 
 The same day's payment clarification requires BillPayment to return `{"response_Code":"02","reserved":"","identification_parameter":""}` for blocked consumers. Inactive students now reach the existing locked blocked-consumer check instead of being excluded as not found. Failed organization requests (already represented as blocked in inquiry) receive the same blocked error under the transaction lock. Both remain unpayable; missing, expired and other unavailable bills keep their existing codes.
 
-For BillPayment, a valid positive amount below or above the payable amount returns `02` (including the applicable overdue late fee in the comparison), per the subsequent 7 October UAT clarification. Malformed/zero amounts and other request validation errors remain `04`. Exact payment, blocked-consumer rejection, replay protection and transaction rollback rules are unchanged.
+For BillPayment, a valid positive amount below or above the payable amount returns `02` (including the applicable overdue late fee in the comparison), per the subsequent 7 October UAT clarification. Per the 9 October UAT clarification relayed by the user, blank, whitespace-only, missing/null, and zero payment amounts also return `02`, with no payment posting. Other malformed amounts and request validation errors remain `04`. Authentication still runs first; other request fields and calendar dates must be valid before the blank/zero amount response applies. Exact payment, blocked-consumer rejection, replay protection and transaction rollback rules are unchanged.
 
 ## Sessions and live updates
 
