@@ -21,7 +21,11 @@ describe('API key storage', () => {
 
   test('rejects tampered encrypted API-key material', () => {
     const key = generateApiKey();
-    expect(() => decryptApiKey(`${key.encrypted.slice(0, -1)}x`)).toThrow();
+    const parts = key.encrypted.split('.');
+    const ciphertext = Buffer.from(parts[3], 'base64url');
+    ciphertext[0] ^= 1; // Guarantee a changed authenticated byte, not equivalent base64 padding.
+    parts[3] = ciphertext.toString('base64url');
+    expect(() => decryptApiKey(parts.join('.'))).toThrow();
   });
 
   test('validates the configured encryption key length before startup', () => {

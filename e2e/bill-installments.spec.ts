@@ -29,6 +29,6 @@ test('institution issues a bill, enables installments and shares the new bill-sp
   await expect(page.getByText('10517282990000001',{exact:true})).not.toBeVisible();
   await expect(page.getByText('10517282990000002',{exact:true})).toBeVisible();await expect(page.getByText('10517282990000003',{exact:true})).toBeVisible();
   await page.getByRole('row').filter({hasText:'10517282990000002'}).getByRole('button',{name:'Fee slip',exact:true}).click();
-  await expect(page.getByRole('dialog').getByText('10517282990000002',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Copy consumer number',exact:true})).toBeVisible();await page.screenshot({path:'test-results/bill-installment-fee-slip.png',fullPage:true});
+  await expect(page.getByRole('dialog').getByText('10517282990000002',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Copy consumer number',exact:true})).toBeVisible();await expect(page.getByRole('dialog')).toHaveCSS('opacity','1');await page.screenshot({path:'test-results/bill-installment-fee-slip.png',fullPage:true,animations:'disabled'});
   const [[ledger]]=await pool.query('SELECT SUM(debit-credit) AS balance FROM ledger_entries WHERE tenant_id=?',[tenant]);expect(Number(ledger.balance)).toBe(12000);
 });
