@@ -277,7 +277,7 @@ const Scholarships = () => {
         !query ||
         row.student.name.toLowerCase().includes(query) ||
         row.student.rollNumber.toLowerCase().includes(query) ||
-        row.student.consumerNumber.includes(assignmentSearchTerm);
+        (row.student.consumerNumber || '').includes(assignmentSearchTerm);
 
       const matchesClass = assignmentClassFilter === 'all' || row.student.class === assignmentClassFilter;
 

@@ -17,7 +17,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 const sourceLabels: Record<ConsumerRegistryRecord['sourceType'], string> = {
-  school_student: 'School student',
+  school_student: 'School student (legacy)',
+  school_invoice: 'School / university bill',
   organization_applicant: 'Organization applicant',
   payment_request: 'Payment request',
 };
@@ -110,6 +111,7 @@ const ConsumerRegistry = () => {
             <SelectTrigger aria-label="Filter by source"><SelectValue placeholder="All sources" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All sources</SelectItem>
+              <SelectItem value="school_invoice">School / university bills</SelectItem>
               <SelectItem value="school_student">School students</SelectItem>
               <SelectItem value="organization_applicant">Organization applicants</SelectItem>
               <SelectItem value="payment_request">Payment requests</SelectItem>
@@ -142,7 +144,7 @@ const ConsumerRegistry = () => {
 
           <Select value={consumerLength} onValueChange={updateFilter(setConsumerLength)}>
             <SelectTrigger aria-label="Filter by number length"><SelectValue placeholder="All lengths" /></SelectTrigger>
-            <SelectContent><SelectItem value="all">All lengths</SelectItem><SelectItem value="14">14 digits</SelectItem><SelectItem value="20">20 digits (legacy)</SelectItem><SelectItem value="24">24 digits</SelectItem></SelectContent>
+            <SelectContent><SelectItem value="all">All lengths</SelectItem><SelectItem value="14">14 digits</SelectItem><SelectItem value="17">17 digits</SelectItem><SelectItem value="20">20 digits (legacy)</SelectItem><SelectItem value="24">24 digits</SelectItem></SelectContent>
           </Select>
 
           <Select value={archiveState} onValueChange={updateFilter(setArchiveState)}>

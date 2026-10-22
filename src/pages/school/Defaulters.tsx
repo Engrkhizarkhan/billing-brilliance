@@ -108,7 +108,7 @@ const Defaulters = () => {
               {defaulters.map((student) => (
                 <TableRow key={student.id} className="hover:bg-muted/30">
                   <TableCell className="font-medium text-sm">{student.name}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">{student.consumerNumber}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">{student.consumerNumber || 'See invoices'}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{student.fatherName}</TableCell>
                   <TableCell><span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md">{student.class} {student.section}</span></TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">{student.cnic}</TableCell>

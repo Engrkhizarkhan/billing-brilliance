@@ -1,12 +1,21 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 
-const SOURCE_TYPES = ['school_student', 'organization_applicant', 'payment_request'];
+const SOURCE_TYPES = ['school_student', 'organization_applicant', 'payment_request', 'school_invoice'];
 const TENANT_TYPES = ['school', 'org', 'private_agency'];
 const TENANT_STATUSES = ['active', 'suspended', 'banned'];
 const LIFECYCLE_STAGES = ['testing', 'ready_for_live', 'live', 'offboarding'];
 
 const registryUnion = `
+  SELECT i.consumer_number,'school_invoice' AS source_type,i.id AS source_id,i.tenant_id,
+    t.name AS tenant_name,t.type AS tenant_type,t.biller_code,t.status AS tenant_status,t.lifecycle_stage,
+    i.student_name AS owner_name,i.invoice_number AS bill_id,s.roll_number AS external_reference,
+    i.status AS record_status,NULL AS secondary_status,i.amount,i.created_at,
+    IF(i.deleted_at IS NULL,0,1) AS record_archived,IF(t.deleted_at IS NULL,0,1) AS tenant_archived
+  FROM invoices i JOIN tenants t ON t.id=i.tenant_id JOIN students s ON s.id=i.student_id
+  WHERE i.bill_specific=1
+  UNION ALL
+
   SELECT
     s.consumer_number,
     'school_student' AS source_type,
@@ -98,8 +107,8 @@ const fetchConsumerRegistry = async (req, res, next) => {
     const lifecycleStage = readEnum(req.query.lifecycleStage, LIFECYCLE_STAGES, 'lifecycle stage');
     const archiveState = readEnum(req.query.archiveState, ['current', 'archived'], 'archive state');
     const consumerLength = req.query.consumerLength ? Number(req.query.consumerLength) : null;
-    if (consumerLength && ![14, 20, 24].includes(consumerLength)) {
-      throw new AppError('Consumer length must be 14, 20, or 24', 400, 'INVALID_FILTER');
+    if (consumerLength && ![14, 17, 20, 24].includes(consumerLength)) {
+      throw new AppError('Consumer length must be 14, 17, 20, or 24', 400, 'INVALID_FILTER');
     }
 
     const conditions = ['1=1'];
@@ -132,8 +141,9 @@ const fetchConsumerRegistry = async (req, res, next) => {
        GROUP BY registry.source_type`,
       params
     );
-    const bySource = { schoolStudent: 0, organizationApplicant: 0, paymentRequest: 0 };
+    const bySource = { schoolStudent: 0, organizationApplicant: 0, paymentRequest: 0, schoolInvoice:0 };
     for (const row of countRows) {
+      if (row.source_type === 'school_invoice') bySource.schoolInvoice = Number(row.count);
       if (row.source_type === 'school_student') bySource.schoolStudent = Number(row.count);
       if (row.source_type === 'organization_applicant') bySource.organizationApplicant = Number(row.count);
       if (row.source_type === 'payment_request') bySource.paymentRequest = Number(row.count);

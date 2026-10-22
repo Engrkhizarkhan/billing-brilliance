@@ -1,0 +1,10 @@
+[Unit]
+Description=Restrict FinTap 1BILL private endpoint to authenticated VPN HTTPS traffic
+After=network-pre.target
+Before=strongswan.service
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/fintap-onebill-firewall
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target

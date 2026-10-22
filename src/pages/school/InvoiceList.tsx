@@ -1,3 +1,5 @@
+import { FeeSlip } from '@/components/FeeSlip';
+import { InstallmentPanel } from '@/components/InstallmentPanel';
 import { QueryError } from '@/components/QueryError';
 import { useState } from 'react';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
@@ -29,6 +31,11 @@ const InvoiceList = () => {
   const [genDialogOpen, setGenDialogOpen] = useState(false);
   const [genMonth, setGenMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [slip, setSlip] = useState<Invoice | null>(null);
+  const [studentSearch, setStudentSearch] = useState('');
+  const [studentPage, setStudentPage] = useState(1);
+  const debouncedStudentSearch = useDebouncedValue(studentSearch.trim());
+  const [splitInvoice, setSplitInvoice] = useState<Invoice | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -51,9 +58,9 @@ const InvoiceList = () => {
     [page, pageSize, deferredSearch, statusFilter, classFilter, paymentVersion]
   );
   const invoices = (data || []) as Invoice[];
-  const { data: studentsData, error: queryError1 } = useApiQuery(
-    () => api.fetchStudents({ page: 1, pageSize: 100, status: 'active' }),
-    [createDialogOpen]
+  const { data: studentsData, meta: studentMeta, error: queryError1 } = useApiQuery(
+    () => api.fetchStudents({ page: studentPage, pageSize: 100, status: 'active', search: debouncedStudentSearch || undefined }),
+    [createDialogOpen, studentPage, debouncedStudentSearch]
   );
   const students = (studentsData || []) as StudentDirectoryRecord[];
   const total = meta?.total ?? 0;
@@ -99,7 +106,7 @@ const InvoiceList = () => {
       await api.createInvoice({
         studentId: student.id,
         studentName: student.name,
-        consumerNumber: student.consumerNumber,
+
         month: createForm.month,
         amount: Number(createForm.amount),
         lateFee: Number(createForm.lateFee || 0),
@@ -125,6 +132,7 @@ const InvoiceList = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      <Dialog open={Boolean(slip)} onOpenChange={open=>{if(!open)setSlip(null);}}><DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Invoice fee slip</DialogTitle><DialogDescription>Each bill has its own consumer number. Share this slip for this invoice only.</DialogDescription></DialogHeader>{slip && <FeeSlip studentName={slip.studentName} className={slip.className} section={slip.section} consumerNumber={slip.consumerNumber} invoiceNumber={slip.invoiceNumber} amount={Number(slip.amount)} lateFee={slip.lateFeeApplied?0:Number(slip.lateFee||0)} dueDate={slip.dueDate} status={slip.status} qrPayload={slip.consumerNumber}/>}</DialogContent></Dialog>
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="page-header">Invoices</h1>
@@ -134,13 +142,15 @@ const InvoiceList = () => {
         <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
           <DialogTrigger asChild><Button variant="outline" className="gap-2"><Plus className="w-4 h-4" />Create Invoice</Button></DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Create Invoice</DialogTitle><DialogDescription>Select an active student. The server resolves the authoritative consumer number from the student record.</DialogDescription></DialogHeader>
+            <DialogHeader><DialogTitle>Create Invoice</DialogTitle><DialogDescription>Select an active student. A new consumer number is issued for this bill when the institution uses bill-specific numbering.</DialogDescription></DialogHeader>
             <div className="space-y-4 pt-2">
               <div className="space-y-2"><Label>Student</Label>
+                <Input aria-label="Find student" placeholder="Search students by name or roll number" value={studentSearch} onChange={event => {setStudentSearch(event.target.value);setStudentPage(1);}}/>
                 <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={createForm.studentId} onChange={(event) => setCreateForm({ ...createForm, studentId: event.target.value })}>
                   <option value="">Select student</option>
-                  {students.map((student) => <option key={student.id} value={student.id}>{student.name} — {student.consumerNumber}</option>)}
+                  {students.map((student) => <option key={student.id} value={student.id}>{student.name} — {student.rollNumber || student.class}</option>)}
                 </select>
+                <div className="flex items-center gap-2 text-xs"><Button variant="ghost" size="sm" disabled={studentPage<=1} onClick={()=>setStudentPage(studentPage-1)}>Previous students</Button><span>Page {studentPage}</span><Button variant="ghost" size="sm" disabled={studentPage*100>=(studentMeta?.total||0)} onClick={()=>setStudentPage(studentPage+1)}>Next students</Button></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2"><Label>Amount (PKR)</Label><Input type="number" min="0.01" step="0.01" value={createForm.amount} onChange={(event) => setCreateForm({ ...createForm, amount: event.target.value })} /></div>
@@ -176,6 +186,8 @@ const InvoiceList = () => {
         </div>
       </div>
 
+      <InstallmentPanel invoice={splitInvoice} onClose={() => setSplitInvoice(null)} onCreated={() => { void refetchInvoices(); }} />
+
       <FilterBar
         searchPlaceholder="Search by student, invoice #, or consumer #..."
         onSearch={(value) => { setSearch(value); setPage(1); }}
@@ -207,7 +219,7 @@ const InvoiceList = () => {
             <TableBody>
               {invoices.map((invoice) => (
                 <TableRow key={invoice.id} className="hover:bg-muted/30">
-                  <TableCell className="font-mono text-xs">{invoice.invoiceNumber}</TableCell>
+                  <TableCell className="font-mono text-xs">{invoice.invoiceNumber}{invoice.installmentPlanId && <span className="block text-xs text-muted-foreground">Installment {invoice.installmentNumber}/{invoice.installmentCount}</span>}</TableCell>
                   <TableCell className="font-medium text-sm">{invoice.studentName}</TableCell>
                   <TableCell><span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-md">{invoice.className || '-'} {invoice.section || ''}</span></TableCell>
                   <TableCell className="font-mono text-xs text-muted-foreground">{invoice.consumerNumber}</TableCell>
@@ -216,6 +228,8 @@ const InvoiceList = () => {
                   <TableCell><StatusBadge status={invoice.status} /></TableCell>
                   <TableCell className="text-xs text-muted-foreground">{invoice.dueDate}</TableCell>
                   <TableCell>
+                    <Button size="sm" variant="ghost" onClick={()=>setSlip(invoice)}>Fee slip</Button>
+                    {invoice.billSpecific && !invoice.installmentPlanId && invoice.status !== 'paid' && <Button size="sm" variant="outline" onClick={() => setSplitInvoice(invoice)}>Split into installments</Button>}
                     {invoice.status !== 'paid' && <button type="button" title="Delete invoice" disabled={deletingId === invoice.id} onClick={() => handleDeleteInvoice(invoice.id, invoice.invoiceNumber)} className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-50">{deletingId === invoice.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}</button>}
                   </TableCell>
                 </TableRow>

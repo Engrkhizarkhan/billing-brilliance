@@ -14,7 +14,7 @@ test.beforeAll(async () => {
   await pool.query("INSERT INTO org_postings (id,tenant_id,title,type,application_fee,status) VALUES (?,?,'Admission 2026','entry_test',2500,'active')",[postingId,tenantId]);
 });
 test.afterAll(async () => {
-  for(const table of ['audit_logs','notifications','org_payment_notifications','org_payment_records','org_postings','refresh_tokens','users']) {
+  for(const table of ['consumer_number_reservations','audit_logs','notifications','org_payment_notifications','org_payment_records','org_postings','refresh_tokens','users']) {
     if(table==='refresh_tokens') await pool.query('DELETE FROM refresh_tokens WHERE user_id = ?',[userId]);
     else await pool.query(`DELETE FROM ${table} WHERE tenant_id = ?`,[tenantId]);
   }

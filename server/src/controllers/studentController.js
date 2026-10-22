@@ -4,7 +4,7 @@ const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const { auditLog } = require('../middleware/auditLog');
 const { createRequestNotification } = require('../services/notificationService');
-const { allocateConsumerNumber } = require('../services/consumerNumberService');
+const { allocateStudentIdentity } = require('../services/consumerNumberService');
 
 const fetchStudents = async (req, res, next) => {
   try {
@@ -152,10 +152,10 @@ const createStudent = async (req, res, next) => {
     let seq, id, consumerNumber, billId;
     try {
       await conn.beginTransaction();
-      const allocated = await allocateConsumerNumber(conn, tenantId);
+      const allocated = await allocateStudentIdentity(conn, tenantId);
       seq = allocated.sequence;
       consumerNumber = allocated.consumerNumber;
-      billId = `SCH-${allocated.billerCode}-${String(seq).padStart(5, '0')}`;
+      billId = consumerNumber ? `SCH-${allocated.billerCode}-${String(seq).padStart(5, '0')}` : `STU-${uuidv4()}`;
 
       id = uuidv4();
       const {
@@ -343,16 +343,16 @@ const getStudentSnapshot = async (req, res, next) => {
     // Calculate overdue months (unpaid invoices whose due_date has passed)
     const [overdueRows] = await pool.query(
       `SELECT COUNT(DISTINCT month) as overdue_months
-       FROM invoices WHERE consumer_number = ? AND status != 'paid' AND due_date < NOW() AND deleted_at IS NULL`,
-      [studentRows[0].consumer_number]
+       FROM invoices WHERE student_id = ? AND tenant_id = ? AND status != 'paid' AND due_date < NOW() AND deleted_at IS NULL`,
+      [studentId, studentRows[0].tenant_id]
     );
     const overdueMonths = overdueRows[0].overdue_months || 0;
 
     // Total due
     const [dueRows] = await pool.query(
       `SELECT COALESCE(SUM(amount), 0) as total_due
-       FROM invoices WHERE consumer_number = ? AND status != 'paid' AND deleted_at IS NULL`,
-      [studentRows[0].consumer_number]
+       FROM invoices WHERE student_id = ? AND tenant_id = ? AND status != 'paid' AND deleted_at IS NULL`,
+      [studentId, studentRows[0].tenant_id]
     );
     const totalDue = parseFloat(dueRows[0].total_due) || 0;
 

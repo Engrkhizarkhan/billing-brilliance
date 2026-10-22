@@ -1,7 +1,7 @@
 const config = require('../config');
 const { AppError } = require('../middleware/errorHandler');
 
-const SUPPORTED_LENGTHS = new Set([14, 20, 24]);
+const SUPPORTED_LENGTHS = new Set([14, 17, 20, 24]);
 
 const getCapacity = (length, billerCode) => {
   const sequenceWidth = Number(length) - String(config.fintechPrefix).length - String(billerCode).length;
@@ -40,7 +40,19 @@ const allocateConsumerNumber = async (connection, tenantId) => {
   }
 
   await connection.query('UPDATE tenants SET next_consumer_sequence = ? WHERE id = ?', [sequence + 1, tenantId]);
+  try {
+    await connection.query('INSERT INTO consumer_number_reservations (consumer_number,tenant_id) VALUES (?,?)', [consumerNumber,tenantId]);
+  } catch (error) {
+    if(error.code === 'ER_DUP_ENTRY') throw new AppError('Consumer number was previously issued; sequence must be reviewed',409,'CONSUMER_NUMBER_RESERVED');
+    throw error;
+  }
   return { consumerNumber, sequence, length, billerCode: tenant.biller_code, maxSequence };
 };
 
-module.exports = { allocateConsumerNumber, getCapacity, SUPPORTED_LENGTHS };
+const allocateStudentIdentity = async (connection, tenantId) => {
+  const [[tenant]] = await connection.query('SELECT billing_mode,biller_code FROM tenants WHERE id = ? AND deleted_at IS NULL FOR UPDATE',[tenantId]);
+  if (!tenant) throw new AppError('Tenant not found',404,'TENANT_NOT_FOUND');
+  if (tenant.billing_mode === 'invoice') return {consumerNumber:null, sequence:0,billerCode:tenant.biller_code};
+  return allocateConsumerNumber(connection,tenantId);
+};
+module.exports = { allocateStudentIdentity, allocateConsumerNumber, getCapacity, SUPPORTED_LENGTHS };

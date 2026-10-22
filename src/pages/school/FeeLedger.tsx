@@ -317,7 +317,7 @@ const FeeLedger = () => {
                         <p className="text-[11px] text-muted-foreground">Roll {s.rollNumber || '—'}</p>
                       </TableCell>
                       <TableCell className="text-sm">{s.class} {s.section}</TableCell>
-                      <TableCell className="font-mono text-sm text-primary">{s.consumerNumber}</TableCell>
+                      <TableCell className="font-mono text-sm text-primary">{s.consumerNumber || 'See invoices'}</TableCell>
                       <TableCell>
                         <p className="text-sm">
                           <span className="text-muted-foreground">Charged: </span>
@@ -481,7 +481,7 @@ const FeeLedger = () => {
 
           {student && (
             <div className="flex flex-wrap gap-6 text-sm mt-4">
-              <div><span className="text-xs text-muted-foreground block">Consumer #</span><span className="font-mono font-semibold text-primary">{student.consumerNumber}</span></div>
+              <div><span className="text-xs text-muted-foreground block">Consumer #</span><span className="font-mono font-semibold text-primary">{student.consumerNumber || 'See invoices'}</span></div>
               <div><span className="text-xs text-muted-foreground block">Bill ID</span><span className="font-mono font-semibold">{student.billId}</span></div>
               <div><span className="text-xs text-muted-foreground block">Father</span><span className="font-medium">{student.fatherName}</span></div>
               <div><span className="text-xs text-muted-foreground block">CNIC</span><span className="font-mono text-xs">{student.cnic}</span></div>

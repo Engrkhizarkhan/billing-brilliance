@@ -1,3 +1,4 @@
+const {readInvoiceConsumer,invoiceWireResponse}=require('../services/invoiceConsumerService');
 const { payableQuote, orgPayableQuote } = require('../services/billingRules');
 const { pool } = require('../config/database');
 const config = require('../config');
@@ -53,10 +54,21 @@ const tenantCanCollect = (tenant) => tenant.status === 'active'
 const inquirePayment = async (req, res, next) => {
   try {
     const consumerNumber = String(req.body.consumerNumber || '').trim();
+    if(consumerNumber.length===17){
+      const specific=await readInvoiceConsumer(consumerNumber);
+      if(specific.record){
+        const {record,quote,code}=specific;
+        return res.json({data:{found:true,targetType:'invoice',invoiceId:record.id,studentId:record.student_id,tenantId:record.tenant_id,
+          tenantName:record.tenant_name,billerCode:record.biller_code,consumerNumber,payerName:record.student_name,invoiceNumber:record.invoice_number,
+          dueDate:record.due_date,baseAmount:Number(record.amount),lateFee:quote?.lateFees||0,amount:quote?.amount||0,currency:'PKR',payable:code==='00',
+          reason:code==='00'?null:code==='06'?'This bill is paid':code==='02'?'Consumer is blocked':'Bill is unavailable',oneBillResponse:invoiceWireResponse(specific)}});
+      }
+    }
+
     const [students] = await pool.query(
       `SELECT s.id, s.tenant_id, s.name, s.class, s.section, s.bill_id,
               s.consumer_number, s.status, t.name AS tenant_name, t.biller_code,
-              t.status AS tenant_status, t.lifecycle_stage
+              t.status AS tenant_status, t.lifecycle_stage, t.billing_mode
        FROM students s JOIN tenants t ON t.id = s.tenant_id
        WHERE s.consumer_number = ? AND s.deleted_at IS NULL AND t.deleted_at IS NULL
        LIMIT 1`,
@@ -83,9 +95,9 @@ const inquirePayment = async (req, res, next) => {
       const oldest = invoices[0] || null;
       const allowed = tenantCanCollect({ status: student.tenant_status, lifecycle_stage: student.lifecycle_stage });
       const reconciled = ledgerDue >= invoiceDue;
-      const payable = allowed && reconciled && student.status === 'active' && amount > 0;
+      const payable = student.billing_mode !== 'invoice' && allowed && reconciled && student.status === 'active' && amount > 0;
       let oneBillResponse;
-      if (!allowed) oneBillResponse = unavailableResponse('01');
+      if (!allowed || student.billing_mode === 'invoice') oneBillResponse = unavailableResponse('01');
       else if (student.status !== 'active') oneBillResponse = unavailableResponse('02');
       else if (!reconciled) oneBillResponse = unavailableResponse('01');
       else if (amount === 0) {

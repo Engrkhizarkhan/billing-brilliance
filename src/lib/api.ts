@@ -225,6 +225,13 @@ export const api = {
     return get<ApiResponse<Invoice>>(`/invoices/${id}`);
   },
 
+  async fetchBillingPolicy(): Promise<ApiResponse<{ billingMode: string; installmentsEnabled: boolean; consumerNumberLength: number; capacity: number; remaining: number; capacityWarning: boolean }>> {
+    return get('/invoices/billing-policy');
+  },
+  async setInstallmentsEnabled(enabled: boolean) { return put('/invoices/billing-policy', { installmentsEnabled: enabled }); },
+  async splitInvoice(id: string, installments: Array<{ amount: number; dueDate: string; lateFee: number }>): Promise<ApiResponse<{planId: string; invoices: Invoice[]}>> {
+    return post(`/invoices/${id}/installments`, {installments});
+  },
   async createInvoice(payload: Partial<Invoice>): Promise<ApiResponse<Invoice>> {
     return post<ApiResponse<Invoice>>('/invoices', payload);
   },

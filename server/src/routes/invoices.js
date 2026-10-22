@@ -4,6 +4,7 @@ const { authenticate, authorize, authorizeSchoolRole } = require('../middleware/
 const { handleValidation } = require('../middleware/handleValidation');
 const { paginationValidation, idParam } = require('../middleware/validate');
 const { tenantScope, requireLiveTenant } = require('../middleware/auth');
+const installmentController=require('../controllers/installmentController');
 const invoiceController = require('../controllers/invoiceController');
 
 router.use(authenticate);
@@ -12,6 +13,9 @@ router.use(tenantScope);
 
 router.get('/', paginationValidation, handleValidation, invoiceController.fetchInvoices);
 router.post('/generate', authorizeSchoolRole('admin', 'finance'), requireLiveTenant, invoiceController.generateInvoicesFromAssignments);
+router.get('/billing-policy', installmentController.getPolicy);
+router.put('/billing-policy', authorizeSchoolRole('admin'), installmentController.updatePolicy);
+router.post('/:id/installments', authorizeSchoolRole('admin','finance'), requireLiveTenant, idParam, handleValidation, installmentController.createInstallments);
 router.get('/:id', idParam, handleValidation, invoiceController.getInvoice);
 router.post('/', authorizeSchoolRole('admin', 'finance'), requireLiveTenant, invoiceController.createInvoice);
 router.put('/:id/status', authorizeSchoolRole('admin', 'finance'), idParam, handleValidation, invoiceController.updateInvoiceStatus);

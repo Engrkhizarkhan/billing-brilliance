@@ -49,6 +49,7 @@ afterEach(async () => {
   await pool.query('DELETE FROM audit_logs WHERE user_id = ?',[userId]);
   await pool.query('DELETE FROM refresh_tokens WHERE user_id = ?',[userId]);
   await pool.query('DELETE FROM users WHERE id = ?',[userId]);
+  await pool.query('DELETE FROM consumer_number_reservations WHERE tenant_id = ?',[tenantId]);
   await pool.query('DELETE FROM tenants WHERE id = ?',[tenantId]);
 });
 afterAll(() => pool.end());

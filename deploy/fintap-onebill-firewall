@@ -1,0 +1,13 @@
+#!/bin/sh
+# Protect only the 1BILL private endpoint. Public website and SSH rules are untouched.
+set -eu
+IPTABLES=/usr/sbin/iptables
+CHAIN=FINTAP_ONEBILL
+$IPTABLES -w -N "$CHAIN" 2>/dev/null || true
+$IPTABLES -w -F "$CHAIN"
+$IPTABLES -w -A "$CHAIN" -i lo -j ACCEPT
+for source in 10.95.8.92 10.95.8.94 10.95.4.224 10.95.4.225; do
+  $IPTABLES -w -A "$CHAIN" -s "$source/32" -p tcp --dport 443 -m policy --dir in --pol ipsec --mode tunnel -j ACCEPT
+done
+$IPTABLES -w -A "$CHAIN" -j DROP
+$IPTABLES -w -C INPUT -d 172.31.254.10/32 -j "$CHAIN" 2>/dev/null || $IPTABLES -w -I INPUT 1 -d 172.31.254.10/32 -j "$CHAIN"

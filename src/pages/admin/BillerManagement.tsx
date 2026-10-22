@@ -32,7 +32,7 @@ const emptyBillerForm = {
   type: 'school' as Biller['type'],
   email: '',
   phone: '',
-  consumerNumberLength: 24 as 14 | 24,
+  consumerNumberLength: 17 as 14 | 17 | 24,
 };
 
 const activationCheckLabels = {
@@ -187,7 +187,7 @@ const BillerManagement = () => {
       type: biller.type,
       email: biller.email,
       phone: biller.phone,
-      consumerNumberLength: biller.consumerNumberLength === 14 ? 14 : 24,
+      consumerNumberLength: biller.consumerNumberLength === 14 ? 14 : biller.consumerNumberLength === 17 ? 17 : 24,
     });
   };
 
@@ -297,10 +297,11 @@ const BillerManagement = () => {
               <div><Label htmlFor="create-biller-phone">Phone</Label><Input id="create-biller-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
               <div className="space-y-2">
                 <Label htmlFor="create-biller-consumer-length">Consumer number length</Label>
-                <Select value={String(form.consumerNumberLength)} onValueChange={(value) => setForm({ ...form, consumerNumberLength: Number(value) as 14 | 24 })}>
+                <Select value={String(form.consumerNumberLength)} onValueChange={(value) => setForm({ ...form, consumerNumberLength: Number(value) as 14 | 17 | 24 })}>
                   <SelectTrigger id="create-biller-consumer-length"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="24">24 digits (recommended)</SelectItem>
+                    <SelectItem value="17">17 digits (recommended — 9,999,999 bills per institution)</SelectItem>
+                    <SelectItem value="24">24 digits (legacy integrations)</SelectItem>
                     <SelectItem value="14">14 digits (maximum 9,999 for a 4-digit biller code)</SelectItem>
                   </SelectContent>
                 </Select>

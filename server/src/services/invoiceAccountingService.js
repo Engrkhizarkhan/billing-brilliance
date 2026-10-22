@@ -1,3 +1,4 @@
+const { allocateConsumerNumber } = require('./consumerNumberService');
 const { v4: uuidv4 } = require('uuid');
 const config = require('../config');
 const { AppError } = require('../middleware/errorHandler');
@@ -17,6 +18,9 @@ const lockBillingTenant = async (connection, tenantId) => {
 
 const createInvoiceCharges = async (connection, tenantId, charges) => {
   if (!charges.length) return [];
+  const [[policy]] = await connection.query('SELECT billing_mode,consumer_number_length FROM tenants WHERE id = ? FOR UPDATE',[tenantId]);
+  const billSpecific = policy?.billing_mode === 'invoice';
+  if (billSpecific && Number(policy.consumer_number_length) !== 17) throw new AppError('Bill numbering requires the 17-digit policy',409,'INVALID_CONSUMER_POLICY');
   const ids = [...new Set(charges.map((charge) => charge.studentId))];
   const [students] = await connection.query(
     "SELECT id, name, consumer_number FROM students WHERE tenant_id = ? AND id IN (?) AND status = 'active' AND deleted_at IS NULL FOR UPDATE", [tenantId, ids]);
@@ -43,21 +47,22 @@ const createInvoiceCharges = async (connection, tenantId, charges) => {
     assertMoney(money(amount + lateFee), { allowZero: true });
     const student = byId.get(charge.studentId);
     const maximumDue = money((potential.get(student.id) ?? Math.max(0, balances.get(student.id) || 0)) + amount + (amount > 0 ? lateFee : 0));
-    assertMoney(maximumDue, { allowZero: true, label: 'Total consumer balance including late fees' });
+    if (!billSpecific) assertMoney(maximumDue, { allowZero: true, label: 'Total consumer balance including late fees' });
     potential.set(student.id, maximumDue);
     const id = uuidv4(), invoiceNumber = `INV-${++counter}`;
-    invoices.push([id, tenantId, invoiceNumber, student.id, charge.feePlanId || null, student.name, student.consumer_number,
-      charge.month, amount, lateFee, amount === 0 ? 'paid' : 'pending', charge.dueDate]);
+    const consumerNumber = billSpecific ? (await allocateConsumerNumber(connection,tenantId)).consumerNumber : student.consumer_number;
+    invoices.push([id, tenantId, invoiceNumber, student.id, charge.feePlanId || null, student.name, consumerNumber,
+      charge.month, amount, lateFee, amount === 0 ? 'paid' : 'pending', charge.dueDate, billSpecific ? 1 : 0, charge.installmentPlanId || null, charge.installmentNumber || null, charge.installmentCount || null]);
     for (const part of components) {
       const balance = money((balances.get(student.id) || 0) + money(part.amount));
       balances.set(student.id, balance);
       ledger.push([uuidv4(), tenantId, student.id, charge.dueDate, part.description, money(part.amount), 0, balance,
         invoiceNumber, invoiceNumber, 'charge', part.grossTuition ?? null, part.scholarshipDiscount ?? null, part.netTuition ?? null]);
     }
-    result.push({ id, invoiceNumber, amount, dueDate: charge.dueDate, studentId: student.id });
+    result.push({ id, invoiceNumber, consumerNumber, amount, dueDate: charge.dueDate, studentId: student.id });
   }
   await connection.query(`INSERT INTO invoices
-    (id, tenant_id, invoice_number, student_id, fee_plan_id, student_name, consumer_number, month, amount, late_fee, status, due_date) VALUES ?`, [invoices]);
+    (id, tenant_id, invoice_number, student_id, fee_plan_id, student_name, consumer_number, month, amount, late_fee, status, due_date, bill_specific, installment_plan_id, installment_number, installment_count) VALUES ?`, [invoices]);
   await connection.query(`INSERT INTO ledger_entries
     (id, tenant_id, student_id, date, description, debit, credit, balance, bill_id, reference, entry_type, gross_tuition, scholarship_discount, net_tuition) VALUES ?`, [ledger]);
   await connection.query(`UPDATE students s JOIN

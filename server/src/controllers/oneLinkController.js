@@ -1,3 +1,4 @@
+const {readInvoiceConsumer,invoiceWireResponse}=require('../services/invoiceConsumerService');
 const { payableQuote, orgPayableQuote } = require('../services/billingRules');
 /** 1LINK / 1BILL Generic REST invoice endpoints. */
 const { pool } = require('../config/database');
@@ -73,9 +74,13 @@ const billInquiry1Link = async (req, res) => {
     }
     const consumerNumber = await resolveOneBillConsumer(suppliedConsumer);
     if (!consumerNumber) return res.json(inquiryError('01'));
+    if (consumerNumber.length === 17) {
+      const specific = await readInvoiceConsumer(consumerNumber);
+      if (specific.record) return res.json(invoiceWireResponse(specific));
+    }
 
     const [students] = await pool.query(
-      `SELECT s.id, s.tenant_id, s.name, s.status
+      `SELECT s.id, s.tenant_id, s.name, s.status, t.billing_mode
        FROM students s JOIN tenants t ON t.id = s.tenant_id
        WHERE s.consumer_number = ? AND s.deleted_at IS NULL
          AND t.deleted_at IS NULL AND t.status = 'active' AND t.lifecycle_stage = 'live'
@@ -84,6 +89,7 @@ const billInquiry1Link = async (req, res) => {
     );
     if (students.length) {
       const student = students[0];
+      if (student.billing_mode === 'invoice') return res.json(inquiryError('01'));
       if (student.status !== 'active') return res.json(inquiryError('02'));
       const [invoices] = await pool.query(
         `SELECT id, invoice_number, amount, due_date, month, late_fee, late_fee_applied
@@ -218,20 +224,25 @@ const billPayment1Link = async (req, res) => {
        WHERE s.consumer_number = ? AND s.deleted_at IS NULL
          AND t.deleted_at IS NULL AND t.status = 'active' AND t.lifecycle_stage = 'live'
        UNION ALL
+       SELECT i.tenant_id,i.id AS target_id,'invoice' AS target_type,i.student_name AS detail
+       FROM invoices i JOIN tenants t ON t.id=i.tenant_id
+       WHERE i.payment_consumer_number=? AND i.deleted_at IS NULL AND t.deleted_at IS NULL AND t.status='active' AND t.lifecycle_stage='live'
+       UNION ALL
        SELECT o.tenant_id, o.id AS target_id, 'org_payment' AS target_type,
               COALESCE(o.customer_name, o.description, o.application_id) AS detail
        FROM org_payment_records o JOIN tenants t ON t.id = o.tenant_id
        WHERE o.consumer_number = ?
          AND t.deleted_at IS NULL AND t.status = 'active' AND t.lifecycle_stage = 'live'
        LIMIT 1`,
-      [consumerNumber, consumerNumber]
+      [consumerNumber, consumerNumber, consumerNumber]
     );
     if (!targets.length) return res.json(paymentError('01'));
     const target = targets[0];
     const result = await postPayment({
       tenantId: target.tenant_id,
       targetType: target.target_type,
-      orgPaymentId: target.target_id,
+      orgPaymentId: target.target_type === 'org_payment' ? target.target_id : null,
+      invoiceId: target.target_type === 'invoice' ? target.target_id : null,
       consumerNumber,
       amount,
       receivedAt,
