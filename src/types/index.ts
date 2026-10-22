@@ -18,7 +18,7 @@ export interface User {
   tenantApiKeyPrefix?: string | null;
   tenantStatus?: 'active' | 'suspended' | 'banned';
   tenantLifecycleStage?: 'testing' | 'ready_for_live' | 'live' | 'offboarding';
-  consumerNumberLength?: 14 | 20 | 24;
+  consumerNumberLength?: 14 | 17 | 20 | 24;
 }
 
 export interface Biller {
@@ -30,7 +30,7 @@ export interface Biller {
   phone: string;
   status: 'active' | 'suspended' | 'banned';
   lifecycleStage: 'testing' | 'ready_for_live' | 'live' | 'offboarding';
-  consumerNumberLength: 14 | 20 | 24;
+  consumerNumberLength: 14 | 17 | 20 | 24;
   suspensionReason?: string | null;
   suspendedAt?: string | null;
   restoredAt?: string | null;
@@ -144,6 +144,11 @@ export interface StudentDirectoryFacets {
 }
 
 export interface Invoice {
+  lateFeeApplied?: boolean;
+  billSpecific?: boolean;
+  installmentPlanId?: string;
+  installmentNumber?: number;
+  installmentCount?: number;
   id: string;
   invoiceNumber: string;
   studentId?: string;
@@ -372,7 +377,7 @@ export interface BillingPolicySetting {
 
 export type BillStatus = 'paid' | 'unpaid' | 'partial' | 'overdue';
 
-export type ConsumerRegistrySource = 'school_student' | 'organization_applicant' | 'payment_request';
+export type ConsumerRegistrySource = 'school_student' | 'organization_applicant' | 'payment_request' | 'school_invoice';
 
 export interface ConsumerRegistryRecord {
   consumerNumber: string;
@@ -408,7 +413,7 @@ export interface ConsumerRegistryMeta {
   pageSize: number;
   total: number;
   pages: number;
-  bySource: { schoolStudent: number; organizationApplicant: number; paymentRequest: number };
+  bySource: { schoolStudent: number; organizationApplicant: number; paymentRequest: number; schoolInvoice?: number };
   tenants: ConsumerRegistryTenantOption[];
 }
 

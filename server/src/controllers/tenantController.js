@@ -60,11 +60,11 @@ const getTenant = async (req, res, next) => {
 
 const createTenant = async (req, res, next) => {
   try {
-    const { name, type, email, phone, billerCode, consumerNumberLength = 24 } = req.body;
+    const { name, type, email, phone, billerCode, consumerNumberLength = 17 } = req.body;
     if (!name?.trim() || !email?.trim()) throw new AppError('Name and email are required', 400, 'VALIDATION_ERROR');
     if (!['school', 'org', 'private_agency'].includes(type)) throw new AppError('Invalid biller type', 400, 'VALIDATION_ERROR');
-    if (![14, 24].includes(Number(consumerNumberLength))) {
-      throw new AppError('Consumer-number length must be 14 or 24 digits', 400, 'INVALID_CONSUMER_LENGTH');
+    if (![14, 17, 24].includes(Number(consumerNumberLength))) {
+      throw new AppError('Consumer-number length must be 14, 17 or 24 digits', 400, 'INVALID_CONSUMER_LENGTH');
     }
 
     // Auto-generate biller code if not provided
@@ -74,7 +74,7 @@ const createTenant = async (req, res, next) => {
       const maxCode = maxRows[0].max_code || 1000;
       code = String(maxCode + 1);
     }
-    if (!/^\d+$/.test(String(code))) throw new AppError('Biller code must contain digits only', 400, 'INVALID_BILLER_CODE');
+    if (!/^\d{4}$/.test(String(code))) throw new AppError('Biller code must contain exactly four digits', 400, 'INVALID_BILLER_CODE');
     const capacity = getCapacity(Number(consumerNumberLength), code);
     if (capacity.maxSequence < 1) throw new AppError('Biller code is too long for the selected consumer-number length', 400, 'INVALID_BILLER_CODE');
 
@@ -82,10 +82,10 @@ const createTenant = async (req, res, next) => {
     const apiKey = generateApiKey();
     await pool.query(
       `INSERT INTO tenants
-       (id, name, type, biller_code, email, phone, status, lifecycle_stage, consumer_number_length,
+       (id, name, type, biller_code, email, phone, status, lifecycle_stage, consumer_number_length, billing_mode,
         api_key, api_key_hash, api_key_encrypted, api_key_prefix, api_key_scope, api_key_rotated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'active', 'testing', ?, NULL, ?, ?, ?, ?, UTC_TIMESTAMP())`,
-      [id, name.trim(), type, code, email.trim(), phone || null, Number(consumerNumberLength),
+       VALUES (?, ?, ?, ?, ?, ?, 'active', 'testing', ?, ?, NULL, ?, ?, ?, ?, UTC_TIMESTAMP())`,
+      [id, name.trim(), type, code, email.trim(), phone || null, Number(consumerNumberLength), type === 'school' && Number(consumerNumberLength) === 17 ? 'invoice' : 'legacy',
         apiKey.hash, apiKey.encrypted, apiKey.prefix, apiKey.scope]
     );
 

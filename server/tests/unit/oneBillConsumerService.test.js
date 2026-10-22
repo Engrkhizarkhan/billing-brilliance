@@ -19,7 +19,7 @@ test.each(['10517210010000000001', '105172100200000000000001'])('keeps the compl
 test('preserves a full 14-digit consumer without adding the prefix twice', async () => {
   pool.query.mockResolvedValueOnce([[{ consumer_number: '10517210010001' }]]);
   expect(await resolveOneBillConsumer('10517210010001')).toBe('10517210010001');
-  expect(pool.query.mock.calls[0][1]).toEqual(['10517210010001', '10517210517210010001', '10517210010001', '10517210517210010001']);
+  expect(pool.query.mock.calls[0][1]).toEqual(['10517210010001', '10517210517210010001', '10517210010001', '10517210517210010001', '10517210010001', '10517210517210010001']);
 });
 
 test('restores a shortened number that happens to start with the prefix', async () => {

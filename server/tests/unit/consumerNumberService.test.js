@@ -6,6 +6,7 @@ const { allocateConsumerNumber, getCapacity } = require('../../src/services/cons
 describe('deterministic consumer-number allocation', () => {
   test.each([
     [14, '1001', 42],
+    [17, '1001', 9999999],
     [24, '2001', 42],
   ])('creates an exact %i digit numeric identifier', async (length, billerCode, sequence) => {
     const query = jest.fn()
@@ -35,3 +36,5 @@ describe('deterministic consumer-number allocation', () => {
     await expect(allocateConsumerNumber({ query }, 'tenant-1')).rejects.toMatchObject({ code: 'CONSUMER_NUMBER_EXHAUSTED' });
   });
 });
+
+test('17 digit namespace holds 9,999,999 bills per institution', () => expect(getCapacity(17,'1001')).toEqual({sequenceWidth:7,maxSequence:9999999}));

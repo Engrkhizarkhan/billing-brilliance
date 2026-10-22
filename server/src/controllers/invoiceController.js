@@ -166,7 +166,7 @@ const generateInvoicesFromAssignments = async (req, res, next) => {
       AND (s.is_lifetime = 1 OR (s.start_date <= ? AND (s.end_date IS NULL OR s.end_date >= ?)))`, [tenantId, `${month}-01`, `${month}-01`, `${month}-01`]);
     const description = `Transport Fee — ${month}`;
     const [busRows] = await connection.query(`SELECT DISTINCT l.student_id FROM ledger_entries l JOIN invoices i
-      ON i.tenant_id = l.tenant_id AND i.invoice_number = l.bill_id AND i.deleted_at IS NULL
+      ON i.tenant_id = l.tenant_id AND i.invoice_number = l.bill_id AND (i.deleted_at IS NULL OR EXISTS (SELECT 1 FROM invoice_installment_plans ip WHERE ip.original_invoice_id=i.id AND ip.tenant_id=i.tenant_id))
       WHERE l.tenant_id = ? AND l.description = ?`, [tenantId, description]);
     const busCharged = new Set(busRows.map(row => row.student_id));
     const charges = [], completed = [];

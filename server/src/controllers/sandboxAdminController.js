@@ -30,11 +30,11 @@ const provision = async (req, res, next) => {
     const key = generateApiKey();
     await pool.query(
       `INSERT INTO tenants
-       (id, name, type, biller_code, email, phone, status, lifecycle_stage, consumer_number_length,
+       (id, name, type, biller_code, email, phone, status, lifecycle_stage, consumer_number_length, billing_mode,
         api_key_hash, api_key_encrypted, api_key_prefix, api_key_scope, api_key_rotated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'active', 'testing', ?, ?, ?, ?, 'test', UTC_TIMESTAMP())`,
+       VALUES (?, ?, ?, ?, ?, ?, 'active', 'testing', ?, ?, ?, ?, ?, 'test', UTC_TIMESTAMP())`,
       [tenant.id, tenant.name, tenant.type, tenant.billerCode, tenant.email, tenant.phone || null,
-        Number(tenant.consumerNumberLength) || 24, key.hash, key.encrypted, key.prefix]
+        Number(tenant.consumerNumberLength) || 17, tenant.type==='school' && (Number(tenant.consumerNumberLength)||17)===17 ? 'invoice':'legacy', key.hash, key.encrypted, key.prefix]
     );
     res.set('Cache-Control', 'no-store');
     res.status(201).json({ data: { tenantId: tenant.id, apiKey: key.secret, alreadyProvisioned: false } });

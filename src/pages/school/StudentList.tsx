@@ -481,7 +481,7 @@ const StudentList = () => {
               <Button size="sm" className="rounded-lg"><Plus className="w-4 h-4 mr-1.5" />Add Student</Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg">
-              <DialogHeader><DialogTitle>Add Student</DialogTitle><DialogDescription>Create a student profile and allocate the next tenant consumer number.</DialogDescription></DialogHeader>
+              <DialogHeader><DialogTitle>Add Student</DialogTitle><DialogDescription>Create a student profile. For bill-specific institutions, a consumer number is issued when you create a fee invoice.</DialogDescription></DialogHeader>
               <div className="space-y-4 pt-2 max-h-[70vh] overflow-y-auto">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2"><Label className="text-xs font-semibold">Full Name *</Label><Input className="h-10 rounded-xl" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ahmed Khan" /></div>
@@ -564,7 +564,7 @@ const StudentList = () => {
             }}
           >
             <DialogContent className="max-w-lg">
-              <DialogHeader><DialogTitle>Edit Student</DialogTitle><DialogDescription>Update student details without changing the issued consumer number.</DialogDescription></DialogHeader>
+              <DialogHeader><DialogTitle>Edit Student</DialogTitle><DialogDescription>Update student details. Existing invoice numbers remain unchanged.</DialogDescription></DialogHeader>
               <div className="space-y-4 pt-2 max-h-[70vh] overflow-y-auto">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2"><Label className="text-xs font-semibold">Full Name *</Label><Input className="h-10 rounded-xl" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} placeholder="Ahmed Khan" /></div>

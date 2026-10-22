@@ -14,6 +14,7 @@ interface FeeSlipProps {
   consumerNumber: string;
   billId?: string;
   amount: number;
+  lateFee?: number;
   dueDate: string;
   status: string;
   invoiceNumber?: string;
@@ -28,6 +29,7 @@ export const FeeSlip = ({
   consumerNumber,
   billId,
   amount,
+  lateFee = 0,
   dueDate,
   status,
   invoiceNumber,
@@ -43,7 +45,7 @@ export const FeeSlip = ({
   }, [qrPayload]);
 
   const copyPayload = () => {
-    navigator.clipboard.writeText(qrPayload).catch(() => {});
+    navigator.clipboard.writeText(consumerNumber).catch(() => {});
   };
 
   const printSlip = () => {
@@ -74,7 +76,7 @@ export const FeeSlip = ({
             <h3 className="text-lg font-semibold">Fee Slip</h3>
             <Badge variant="secondary" className="capitalize">{status}</Badge>
           </div>
-          <p className="text-sm text-muted-foreground">Present this QR in JazzCash / Easypaisa / bank app to pay via 1BILL.</p>
+          <p className="text-sm text-muted-foreground">Choose 1BILL Invoice in a participating bank or wallet and enter this bill’s consumer number.</p>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
             <div><p className="text-xs text-muted-foreground">Student</p><p className="font-medium">{studentName}</p></div>
             <div><p className="text-xs text-muted-foreground">Father</p><p className="font-medium">{fatherName || '-'}</p></div>
@@ -83,11 +85,12 @@ export const FeeSlip = ({
             <div><p className="text-xs text-muted-foreground">Bill ID</p><p className="font-mono text-xs">{billId || '-'}</p></div>
             <div><p className="text-xs text-muted-foreground">Invoice #</p><p className="font-mono text-xs">{invoiceNumber || '-'}</p></div>
             <div><p className="text-xs text-muted-foreground">Amount</p><p className="font-semibold">{formatPKR(amount)}</p></div>
+            <div><p className="text-xs text-muted-foreground">After due date</p><p className="font-semibold">{formatPKR(Number(amount) + Number(lateFee))}</p></div>
             <div><p className="text-xs text-muted-foreground">Due Date</p><p className="font-medium">{dueDate}</p></div>
           </div>
           <div className="flex gap-2 print-hidden">
             <Button size="sm" variant="outline" onClick={copyPayload} className="rounded-lg">
-              <Copy className="w-4 h-4 mr-2" /> Copy payload
+              <Copy className="w-4 h-4 mr-2" /> Copy consumer number
             </Button>
             <Button size="sm" onClick={printSlip} className="rounded-lg">
               <Printer className="w-4 h-4 mr-2" /> Print / Save PDF
@@ -96,7 +99,7 @@ export const FeeSlip = ({
         </div>
         <div className="flex items-center justify-center">
           {qrDataUrl ? (
-            <img src={qrDataUrl} alt="Fee slip QR" className="w-48 h-48 rounded-xl border border-border bg-white p-2" />
+            <img src={qrDataUrl} alt="Consumer number reference QR" className="w-48 h-48 rounded-xl border border-border bg-white p-2" />
           ) : (
             <div className="w-48 h-48 rounded-xl border border-dashed border-border flex items-center justify-center text-xs text-muted-foreground">
               QR unavailable

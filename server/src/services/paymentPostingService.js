@@ -130,29 +130,40 @@ const postOrgPayment = async (connection, input, tenant, paidAt) => {
 };
 
 const postStudentPayment = async (connection, input, tenant, paidAt) => {
+  // Bill-specific numbers select one invoice, while historical numbers retain their old behavior.
+  let bill;
+  if (input.consumerNumber?.length === 17) {
+    const [[row]] = await connection.query('SELECT * FROM invoices WHERE tenant_id=? AND payment_consumer_number=? AND deleted_at IS NULL FOR UPDATE',[input.tenantId,input.consumerNumber]);
+    if(!row) throw new AppError('Bill not found',404,'BILL_NOT_FOUND');
+    bill=row;
+    if(input.invoiceId && input.invoiceId!==bill.id) throw new AppError('Invoice does not match consumer number',400,'INVALID_INVOICE');
+  }
   const [students] = await connection.query(
-    `SELECT * FROM students WHERE tenant_id = ? AND consumer_number = ?
-     AND deleted_at IS NULL FOR UPDATE`, [input.tenantId, input.consumerNumber]
-  );
-  if (!students.length) throw new AppError('Consumer number not found', 404, 'BILL_NOT_FOUND');
-  const student = students[0];
-  if (student.status !== 'active') throw new AppError('Consumer is blocked', 409, 'CONSUMER_BLOCKED');
-
-  const invoiceParams = [input.tenantId, student.consumer_number];
-  let invoiceFilter = '';
-  if (input.invoiceId) { invoiceFilter = ' AND id = ?'; invoiceParams.push(input.invoiceId); }
-  const [invoices] = await connection.query(
-    `SELECT * FROM invoices WHERE tenant_id = ? AND consumer_number = ?
-     AND status != 'paid' AND deleted_at IS NULL${invoiceFilter}
-     ORDER BY due_date ASC FOR UPDATE`, invoiceParams
-  );
-  if (input.invoiceId && !invoices.length) throw new AppError('Invoice is already paid or not found', 409, 'ALREADY_PAID');
-
+    `SELECT * FROM students WHERE tenant_id = ? AND ${bill ? 'id' : 'consumer_number'} = ? AND deleted_at IS NULL FOR UPDATE`,
+    [input.tenantId,bill ? bill.student_id : input.consumerNumber]);
+  if (!students.length) throw new AppError('Consumer number not found',404,'BILL_NOT_FOUND');
+  const student=students[0];
+  if(student.status !== 'active') throw new AppError('Consumer is blocked',409,'CONSUMER_BLOCKED');
+  if(bill?.status === 'paid') throw new AppError('Bill is already paid',409,'ALREADY_PAID');
+  const invoiceId=bill?.id || input.invoiceId;
+  const invoiceParams=[input.tenantId,student.id];
+  const invoiceFilter=invoiceId ? ' AND id = ?' : ' AND bill_specific = 0';
+  if(invoiceId) invoiceParams.push(invoiceId);
+  const [invoices]=await connection.query(`SELECT * FROM invoices WHERE tenant_id=? AND student_id=?
+    AND status!='paid' AND deleted_at IS NULL${invoiceFilter} ORDER BY due_date ASC FOR UPDATE`,invoiceParams);
+  if(invoiceId && !invoices.length) throw new AppError('Invoice is already paid or not found',409,'ALREADY_PAID');
+  if(!invoiceId) {
+    const [[specific]]=await connection.query("SELECT COUNT(*) AS n FROM invoices WHERE tenant_id=? AND student_id=? AND bill_specific=1 AND status!='paid' AND deleted_at IS NULL",[input.tenantId,student.id]);
+    if(Number(specific.n)) throw new AppError('Use the consumer number printed on the invoice',409,'BILL_NOT_PAYABLE');
+  }
+  if (!bill && invoices.some(invoice => invoice.bill_specific)) throw new AppError('Use the consumer number printed on this invoice',409,'BILL_NOT_PAYABLE');
+  const paymentConsumer=bill ? bill.consumer_number : student.consumer_number;
   const paidDate = new Date(`${paidAt.replace(' ', 'T')}Z`);
   const [[prePaymentTotals]] = await connection.query(
     `SELECT COALESCE(SUM(debit),0) AS debit, COALESCE(SUM(credit),0) AS credit
      FROM ledger_entries WHERE tenant_id = ? AND student_id = ?`, [input.tenantId, student.id]
   );
+  const [[allPending]]=await connection.query("SELECT COALESCE(SUM(amount),0) AS amount FROM invoices WHERE tenant_id=? AND student_id=? AND status!='paid' AND deleted_at IS NULL",[input.tenantId,student.id]);
   const ledgerOutstanding = Math.max(0, money(Number(prePaymentTotals.debit) - Number(prePaymentTotals.credit)));
   if (!invoices.length && ledgerOutstanding === 0) {
     const [[history]] = await connection.query(
@@ -162,15 +173,15 @@ const postStudentPayment = async (connection, input, tenant, paidAt) => {
     if (!Number(history.paid)) throw new AppError('No bill has been issued for this consumer', 404, 'BILL_NOT_FOUND');
     throw new AppError('Bill is already paid', 409, 'ALREADY_PAID');
   }
-  const { invoiceDue: baseDue, baseDue: payableBase, amount: expected } = payableQuote(invoices, prePaymentTotals, paidDate, Boolean(input.invoiceId));
-  if (ledgerOutstanding < baseDue) throw new AppError('Invoice charges do not reconcile with the ledger; financial review is required before collection', 409, 'LEDGER_RECONCILIATION_REQUIRED');
+  const { invoiceDue: baseDue, baseDue: payableBase, amount: expected } = payableQuote(invoices, prePaymentTotals, paidDate, Boolean(invoiceId));
+  if (ledgerOutstanding + 0.005 < Number(allPending.amount) || ledgerOutstanding < baseDue) throw new AppError('Invoice charges do not reconcile with the ledger; financial review is required before collection', 409, 'LEDGER_RECONCILIATION_REQUIRED');
   const received = money(input.amount);
   if (received !== expected) throw new AppError(`Exact payment of PKR ${expected.toFixed(2)} is required`, 422, 'AMOUNT_MISMATCH');
 
   const paymentId = uuidv4();
   const receiptNumber = `RCPT-${Date.now()}-${paymentId.slice(0, 6).toUpperCase()}`;
   await insertEvidence(connection, { ...input, studentId: student.id }, tenant, paymentId, receiptNumber,
-    student.consumer_number, received, paidAt, tenant.name);
+    paymentConsumer, received, paidAt, tenant.name);
 
   let runningBalance = ledgerOutstanding;
   for (const invoice of invoices) {
@@ -228,8 +239,8 @@ const postStudentPayment = async (connection, input, tenant, paidAt) => {
      VALUES (?, ?, NULL, 'Payment received', ?, 'payment')`,
     [uuidv4(), input.tenantId, `PKR ${received.toFixed(2)} received for ${student.name}`]
   );
-  await insertTransactionalAudit(connection, { ...input, receivedAt: paidAt, targetId: student.id }, paymentId, received, student.consumer_number);
-  return { paymentId, receiptNumber, consumerNumber: student.consumer_number, amount: received,
+  await insertTransactionalAudit(connection, { ...input, receivedAt: paidAt, targetId: student.id }, paymentId, received, paymentConsumer);
+  return { paymentId, receiptNumber, consumerNumber: paymentConsumer, amount: received,
     remainingBalance: runningBalance, status: runningBalance === 0 ? 'paid' : 'partial', paidAt,
     reference: input.externalReference, invoiceNumber: invoices[0]?.invoice_number || null,
     studentId: student.id, billId: student.bill_id, targetType: 'invoice' };

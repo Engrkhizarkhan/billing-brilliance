@@ -1,10 +1,11 @@
+const {readInvoiceConsumer}=require('../services/invoiceConsumerService');
 /** Tenant-scoped external billing APIs. FetchBundle/PCID coupling is retired. */
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { pool } = require('../config/database');
 const config = require('../config');
 const logger = require('../config/logger');
-const { allocateConsumerNumber } = require('../services/consumerNumberService');
+const { allocateStudentIdentity } = require('../services/consumerNumberService');
 const { postPayment } = require('../services/paymentPostingService');
 const { assertMoney, payableQuote, money, dueDayEnd } = require('../services/billingRules');
 const { hashApiKey } = require('../services/apiKeyService');
@@ -44,7 +45,7 @@ router.use(apiKeyAuth);
 const findStudent = async (tenantId, consumerNumber) => {
   const [rows] = await pool.query(
     `SELECT id, name, class, consumer_number FROM students
-     WHERE tenant_id = ? AND consumer_number = ? AND status = 'active'
+     WHERE NOT EXISTS (SELECT 1 FROM tenants t WHERE t.id=students.tenant_id AND t.billing_mode='invoice') AND tenant_id = ? AND consumer_number = ? AND status = 'active'
        AND deleted_at IS NULL LIMIT 1`,
     [tenantId, consumerNumber]
   );
@@ -69,6 +70,11 @@ router.post('/check-payment', async (req, res, next) => {
   try {
     const consumerNumber = String(req.body.consumerNumber || '').trim();
     if (!/^\d{1,24}$/.test(consumerNumber)) return res.status(400).json({ error: 'Valid consumerNumber is required', code: 'INVALID_PARAM' });
+    if(consumerNumber.length===17){
+      const bill=await readInvoiceConsumer(consumerNumber,req.saasTenantId);
+      if(bill.record) return res.json({consumerNumber,studentId:bill.record.student_id,name:bill.record.student_name,invoiceNumber:bill.record.invoice_number,
+        paid:bill.code==='06',status:bill.code==='06'?'paid':bill.code==='02'?'blocked':bill.code==='00'?'pending':'unavailable',amount:bill.quote?.amount||0,dueDate:bill.record.due_date});
+    }
     const student = await findStudent(req.saasTenantId, consumerNumber);
     if (!student) return res.json({ paid: false, status: 'not_found', consumerNumber });
     const { invoices, pending, quote } = await schoolBilling(req.saasTenantId, student.id);
@@ -92,6 +98,12 @@ router.post('/check-payment', async (req, res, next) => {
 router.get('/bill-status/:consumerNumber', async (req, res, next) => {
   try {
     const consumerNumber = String(req.params.consumerNumber || '').trim();
+    if(consumerNumber.length===17){
+      const bill=await readInvoiceConsumer(consumerNumber,req.saasTenantId);
+      if(bill.record) return res.json({consumerNumber,name:bill.record.student_name,studentId:bill.record.student_id,invoiceNumber:bill.record.invoice_number,
+        totalInvoices:1,paidInvoices:bill.code==='06'?1:0,pendingInvoices:bill.code==='00'?1:0,outstandingAmount:bill.quote?.amount||0,
+        overdueAmount:dueDayEnd(bill.record.due_date)<new Date()?(bill.quote?.amount||0):0,payable:bill.code==='00'});
+    }
     const student = await findStudent(req.saasTenantId, consumerNumber);
     if (!student) return res.status(404).json({ error: 'Consumer not found', code: 'NOT_FOUND' });
     const { invoices, pending, quote, overdueAmount } = await schoolBilling(req.saasTenantId, student.id);
@@ -107,6 +119,13 @@ router.get('/payment-history/:consumerNumber', async (req, res, next) => {
     const consumerNumber = String(req.params.consumerNumber || '').trim();
     const page = Math.max(Number(req.query.page) || 1, 1);
     const pageSize = Math.min(Math.max(Number(req.query.pageSize) || 25, 1), 100);
+    if(consumerNumber.length===17){
+      const bill=await readInvoiceConsumer(consumerNumber,req.saasTenantId);
+      if(bill.record){
+        const [payments]=await pool.query("SELECT receipt_number AS receiptNumber,amount,currency,received_at AS paidAt,reference AS transactionId,channel,source FROM payments WHERE tenant_id=? AND consumer_number=? AND status='posted' AND reversal_of_payment_id IS NULL ORDER BY received_at DESC",[req.saasTenantId,consumerNumber]);
+        return res.json({consumerNumber,name:bill.record.student_name,payments,pagination:{page:1,pageSize:payments.length,total:payments.length,pages:payments.length?1:0}});
+      }
+    }
     const student = await findStudent(req.saasTenantId, consumerNumber);
     if (!student) return res.status(404).json({ error: 'Consumer not found', code: 'NOT_FOUND' });
     const [[count]] = await pool.query(
@@ -143,6 +162,35 @@ router.post('/make-payment', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// External systems issue each new fee using a stable request key. Retries never create a second bill.
+router.post('/bills', async (req, res, next) => {
+  let connection;
+  try {
+    const {AppError}=require('../middleware/errorHandler');
+    const key=String(req.headers['x-idempotency-key'] || '').trim();
+    if (!key || key.length>100) throw new AppError('X-Idempotency-Key is required (up to 100 characters)',400,'IDEMPOTENCY_KEY_REQUIRED');
+    const charge={studentId:req.body.studentId,amount:assertMoney(req.body.amount),dueDate:req.body.dueDate,
+      month:req.body.month || String(req.body.dueDate||'').slice(0,7),lateFee:assertMoney(req.body.lateFee??0,{allowZero:true})};
+    if(typeof charge.studentId!=='string' || !charge.studentId) throw new AppError('studentId is required',400,'INVALID_STUDENT');
+    const hash=require('crypto').createHash('sha256').update(JSON.stringify(charge)).digest('hex');
+    connection=await pool.getConnection();await connection.beginTransaction();await lockBillingTenant(connection,req.saasTenantId);
+    const [[prior]]=await connection.query('SELECT * FROM invoice_requests WHERE tenant_id=? AND request_key=?',[req.saasTenantId,key]);
+    if(prior && prior.request_hash!==hash) throw new AppError('This request key was used for another bill',409,'IDEMPOTENCY_CONFLICT');
+    const created=prior?{id:prior.invoice_id}:(await createInvoiceCharges(connection,req.saasTenantId,[charge]))[0];
+    if(!prior) await connection.query('INSERT INTO invoice_requests (tenant_id,request_key,request_hash,invoice_id) VALUES (?,?,?,?)',[req.saasTenantId,key,hash,created.id]);
+    const [[row]]=await connection.query('SELECT * FROM invoices WHERE id=? AND tenant_id=?',[created.id,req.saasTenantId]);
+    await connection.commit();res.status(prior?200:201).json({data:row,idempotent:Boolean(prior)});
+  } catch(err){if(connection)await connection.rollback();next(err);}finally{connection?.release();}
+});
+router.post('/bills/:id/installments', async (req,res,next)=>{
+  let connection;
+  try{
+    connection=await pool.getConnection();await connection.beginTransaction();
+    const result=await require('../services/installmentService').splitInvoice(connection,{tenantId:req.saasTenantId,invoiceId:req.params.id,installments:req.body.installments,actor:{name:'Tenant API'}});
+    await connection.commit();res.status(result.idempotent?200:201).json({data:result});
+  }catch(err){if(connection)await connection.rollback();next(err);}finally{connection?.release();}
+});
+
 router.post('/register-consumer', async (req, res, next) => {
   let connection;
   try {
@@ -163,13 +211,14 @@ router.post('/register-consumer', async (req, res, next) => {
       );
       if (existing.length) {
         await connection.commit();
-        return res.json({ consumerNumber: existing[0].consumer_number, consumerId: existing[0].id,
+        const [bills]=await connection.query('SELECT id,invoice_number,consumer_number,amount,status,due_date FROM invoices WHERE tenant_id=? AND student_id=? AND deleted_at IS NULL ORDER BY created_at',[req.saasTenantId,existing[0].id]);
+        return res.json({ bills, consumerNumber: existing[0].consumer_number || (bills.length===1?bills[0].consumer_number:null), consumerId: existing[0].id,
           name: existing[0].name, externalRef: existing[0].bill_id, tenantId: req.saasTenantId, idempotent: true });
       }
     }
-    const allocated = await allocateConsumerNumber(connection, req.saasTenantId);
+    const allocated = await allocateStudentIdentity(connection, req.saasTenantId);
     const consumerId = uuidv4();
-    const billId = externalRef ? String(externalRef).slice(0, 50) : `GW-${allocated.billerCode}-${String(allocated.sequence).padStart(5, '0')}`;
+    const billId = externalRef ? String(externalRef).slice(0, 50) : `GW-${uuidv4()}`;
     await connection.query(
       `INSERT INTO students
        (id, tenant_id, name, father_name, class, gender, phone, consumer_number, bill_id, seq_number, status, balance)
@@ -188,10 +237,10 @@ router.post('/register-consumer', async (req, res, next) => {
         studentId: consumerId, month: String(invoice.dueDate).slice(0, 7), amount,
         dueDate: invoice.dueDate, lateFee: invoice.lateFee ?? 0, description: invoice.description || 'Registration invoice',
       }]);
-      invoiceResult = { invoiceNumber: created.invoiceNumber, amount, dueDate: invoice.dueDate };
+      invoiceResult = { id: created.id, invoiceNumber: created.invoiceNumber, consumerNumber: created.consumerNumber, amount, dueDate: invoice.dueDate };
     }
     await connection.commit();
-    res.status(201).json({ consumerNumber: allocated.consumerNumber, consumerId, name: name.trim(),
+    res.status(201).json({ consumerNumber: invoiceResult?.consumerNumber || allocated.consumerNumber, consumerId, name: name.trim(),
       externalRef: billId, tenantId: req.saasTenantId, ...(invoiceResult ? { invoice: invoiceResult } : {}) });
   } catch (err) {
     if (connection) await connection.rollback();

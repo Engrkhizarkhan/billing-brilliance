@@ -19,8 +19,9 @@ const resolveOneBillConsumer = async (number) => {
   const [rows] = await pool.query(
     `SELECT consumer_number FROM students WHERE consumer_number IN (?, ?)
      UNION
-     SELECT consumer_number FROM org_payment_records WHERE consumer_number IN (?, ?)`,
-    [...candidates, ...candidates]
+     SELECT consumer_number FROM org_payment_records WHERE consumer_number IN (?, ?)
+     UNION SELECT consumer_number FROM invoices WHERE payment_consumer_number IN (?, ?)`,
+    [...candidates, ...candidates, ...candidates]
   );
   if (rows.length > 1) {
     throw new AppError('Ambiguous 1BILL consumer number', 400, 'AMBIGUOUS_CONSUMER_NUMBER');

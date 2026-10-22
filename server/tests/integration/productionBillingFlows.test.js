@@ -39,7 +39,7 @@ beforeAll(async()=>{
 });
 afterAll(async()=>{
   for (const {tenant,user} of fixtures) {
-    for (const table of ['notifications','outbox_events','audit_logs','org_payment_notifications','payment_allocations','ledger_entries','transactions','payments','invoices','applicants','org_payment_records','org_postings','students']) {
+    for (const table of ['consumer_number_reservations','notifications','outbox_events','audit_logs','org_payment_notifications','payment_allocations','ledger_entries','transactions','payments','invoices','applicants','org_payment_records','org_postings','students']) {
       await pool.query(`DELETE FROM ${table} WHERE tenant_id = ?`,[tenant]);
     }
     await pool.query('DELETE FROM users WHERE id = ?',[user]);
